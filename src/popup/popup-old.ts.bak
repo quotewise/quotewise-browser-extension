@@ -1,0 +1,1307 @@
+/**
+ * Popup interface for Quotewise Chrome extension
+ * Implements state-managed UI with component architecture
+ */
+
+import { 
+  MessageType, 
+  TwitterData, 
+  ExtensionMessage,
+  QuoteSubmissionRequest,
+  AttributionType
+} from '../types/index';
+
+// State Management Interfaces
+interface AuthenticationState {
+  isAuthenticated: boolean;
+  userInfo?: {
+    username: string;
+    isAdmin: boolean;
+  };
+  sessionExpiry?: Date;
+  checkInProgress: boolean;
+}
+
+interface TweetDataState {
+  data: TwitterData | null;
+  isLoading: boolean;
+  error?: string;
+  validationErrors: string[];
+}
+
+interface UIState {
+  currentView: 'loading' | 'auth-required' | 'quote-capture' | 'error' | 'success';
+  isFormValid: boolean;
+  isDuplicateChecked: boolean;
+  showOriginatorResults: boolean;
+  loadingMessage?: string;
+}
+
+interface OriginatorState {
+  searchQuery: string;
+  searchResults: any[];
+  selectedOriginator: any | null;
+  isSearching: boolean;
+  searchHistory: any[];
+}
+
+interface SubmissionState {
+  isSubmitting: boolean;
+  duplicateCheckResults: any[];
+  lastSubmissionResult?: {
+    success: boolean;
+    message: string;
+    quoteId?: string;
+  };
+  progress?: {
+    step: string;
+    percentage: number;
+  };
+}
+
+interface PopupState {
+  auth: AuthenticationState;
+  tweet: TweetDataState;
+  ui: UIState;
+  originator: OriginatorState;
+  submission: SubmissionState;
+}
+
+type PartialPopupState = {
+  [K in keyof PopupState]?: Partial<PopupState[K]>;
+};
+
+type StateListener = (state: PopupState) => void;
+
+// State Manager
+class PopupStateManager {
+  private state: PopupState;
+  private listeners: StateListener[] = [];
+
+  constructor() {
+    this.state = this.getInitialState();
+  }
+
+  private getInitialState(): PopupState {
+    return {
+      auth: {
+        isAuthenticated: false,
+        checkInProgress: false
+      },
+      tweet: {
+        data: null,
+        isLoading: false,
+        validationErrors: []
+      },
+      ui: {
+        currentView: 'loading',
+        isFormValid: false,
+        isDuplicateChecked: false,
+        showOriginatorResults: false
+      },
+      originator: {
+        searchQuery: '',
+        searchResults: [],
+        selectedOriginator: null,
+        isSearching: false,
+        searchHistory: []
+      },
+      submission: {
+        isSubmitting: false,
+        duplicateCheckResults: []
+      }
+    };
+  }
+
+  setState(newState: PartialPopupState): void {
+    this.state = this.mergeState(this.state, newState);
+    this.notifyListeners();
+  }
+
+  getState(): PopupState {
+    return { ...this.state };
+  }
+
+  subscribe(listener: StateListener): () => void {
+    this.listeners.push(listener);
+    return () => {
+      const index = this.listeners.indexOf(listener);
+      if (index > -1) {
+        this.listeners.splice(index, 1);
+      }
+    };
+  }
+
+  private mergeState(current: PopupState, updates: PartialPopupState): PopupState {
+    const merged = { ...current };
+    
+    Object.keys(updates).forEach(key => {
+      const section = key as keyof PopupState;
+      if (updates[section]) {
+        merged[section] = { ...current[section], ...updates[section] } as any;
+      }
+    });
+    
+    return merged;
+  }
+
+  updateState<K extends keyof PopupState>(
+    section: K, 
+    updates: Partial<PopupState[K]>
+  ): void {
+    this.state[section] = { ...this.state[section], ...updates } as PopupState[K];
+    this.notifyListeners();
+  }
+
+  private notifyListeners(): void {
+    this.listeners.forEach(listener => {
+      try {
+        listener(this.state);
+      } catch (error) {
+        console.error('Error in state listener:', error);
+      }
+    });
+  }
+}
+
+// Base UI Component
+abstract class UIComponent {
+  protected element: HTMLElement;
+  protected stateManager: PopupStateManager;
+  private unsubscribe?: () => void;
+
+  constructor(elementId: string, stateManager: PopupStateManager) {
+    const element = document.getElementById(elementId);
+    if (!element) {
+      throw new Error(`Element with id '${elementId}' not found`);
+    }
+    this.element = element;
+    this.stateManager = stateManager;
+    
+    this.unsubscribe = this.stateManager.subscribe(this.onStateChange.bind(this));
+    this.init();
+  }
+
+  protected init(): void {
+    this.render();
+    this.handleEvents();
+    this.onStateChange(this.stateManager.getState());
+  }
+
+  abstract render(): void;
+  abstract handleEvents(): void;
+  
+  protected onStateChange(state: PopupState): void {
+    this.updateFromState(state);
+  }
+
+  protected abstract updateFromState(state: PopupState): void;
+
+  destroy(): void {
+    if (this.unsubscribe) {
+      this.unsubscribe();
+    }
+  }
+}
+
+// Tweet Display Component
+class TweetDisplayComponent extends UIComponent {
+  render(): void {
+    // Initial render handled by updateFromState
+  }
+
+  handleEvents(): void {
+    const quoteTextArea = this.element.querySelector('#quote-text') as HTMLTextAreaElement;
+    if (quoteTextArea) {
+      quoteTextArea.addEventListener('input', this.handleQuoteTextChange.bind(this));
+    }
+  }
+
+  private handleQuoteTextChange(event: Event): void {
+    const textarea = event.target as HTMLTextAreaElement;
+    const text = textarea.value.trim();
+    
+    // Reset duplicate check when text changes
+    this.stateManager.setState({
+      ui: { isDuplicateChecked: false },
+      submission: { duplicateCheckResults: [] }
+    });
+    
+    this.validateQuoteText(text);
+  }
+
+  private validateQuoteText(text: string): void {
+    const errors: string[] = [];
+    
+    if (!text) {
+      errors.push('Quote text is required');
+    } else if (text.length < 10) {
+      errors.push('Quote text is too short (minimum 10 characters)');
+    } else if (text.length > 1000) {
+      errors.push('Quote text is too long (maximum 1000 characters)');
+    }
+    
+    this.stateManager.setState({
+      tweet: { validationErrors: errors },
+      ui: { isFormValid: errors.length === 0 }
+    });
+  }
+
+  protected updateFromState(state: PopupState): void {
+    const { tweet, ui } = state;
+    
+    if (tweet.data) {
+      this.populateTweetData(tweet.data);
+    }
+    
+    this.updateValidationDisplay(tweet.validationErrors);
+    this.updateCharacterCount();
+  }
+
+  private populateTweetData(data: TwitterData): void {
+    const quoteTextArea = this.element.querySelector('#quote-text') as HTMLTextAreaElement;
+    const tweetInfo = this.element.querySelector('#tweet-info');
+    const authorInfo = this.element.querySelector('#author-info');
+    const metricsInfo = this.element.querySelector('#metrics-info');
+    
+    if (quoteTextArea && !quoteTextArea.value) {
+      quoteTextArea.value = data.text;
+    }
+    
+    if (tweetInfo) {
+      tweetInfo.innerHTML = `
+        <div class="tweet-metadata">
+          <span class="tweet-type">${data.tweetType}</span>
+          ${data.date ? `<span class="tweet-date">${new Date(data.date).toLocaleDateString()}</span>` : ''}
+          ${data.language ? `<span class="tweet-language">${data.language.toUpperCase()}</span>` : ''}
+        </div>
+      `;
+    }
+    
+    if (authorInfo) {
+      authorInfo.innerHTML = `
+        <div class="author-details">
+          <span class="author-name">${data.author.displayName || 'Unknown'}</span>
+          <span class="author-username">@${data.author.username || 'unknown'}</span>
+          ${data.author.verified ? '<span class="verified-badge">✓</span>' : ''}
+        </div>
+      `;
+    }
+    
+    if (metricsInfo) {
+      metricsInfo.innerHTML = `
+        <div class="tweet-metrics">
+          <span class="metric">❤️ ${this.formatNumber(data.likes)}</span>
+          <span class="metric">🔄 ${this.formatNumber(data.retweets)}</span>
+          <span class="metric">💬 ${this.formatNumber(data.replies)}</span>
+          ${data.views ? `<span class="metric">👁️ ${this.formatNumber(data.views)}</span>` : ''}
+        </div>
+      `;
+    }
+  }
+
+  private updateValidationDisplay(errors: string[]): void {
+    const errorContainer = this.element.querySelector('#quote-validation-errors');
+    if (errorContainer) {
+      if (errors.length > 0) {
+        errorContainer.innerHTML = errors.map(error => 
+          `<div class="validation-error">${error}</div>`
+        ).join('');
+        errorContainer.classList.remove('hidden');
+      } else {
+        errorContainer.classList.add('hidden');
+      }
+    }
+  }
+
+  private updateCharacterCount(): void {
+    const quoteTextArea = this.element.querySelector('#quote-text') as HTMLTextAreaElement;
+    const charCount = this.element.querySelector('#character-count');
+    
+    if (quoteTextArea && charCount) {
+      const count = quoteTextArea.value.length;
+      const maxLength = 1000;
+      charCount.textContent = `${count}/${maxLength}`;
+      
+      if (count > maxLength * 0.9) {
+        charCount.className = 'character-count warning';
+      } else {
+        charCount.className = 'character-count';
+      }
+    }
+  }
+
+  private formatNumber(num: number): string {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+  }
+}
+
+// Originator Search Component
+class OriginatorSearchComponent extends UIComponent {
+  private debounceTimer?: NodeJS.Timeout;
+
+  render(): void {
+    // Initial render handled by updateFromState
+  }
+
+  handleEvents(): void {
+    const searchInput = this.element.querySelector('#originator-search') as HTMLInputElement;
+    const resultsContainer = this.element.querySelector('#originator-results');
+    
+    if (searchInput) {
+      searchInput.addEventListener('input', this.handleSearchInput.bind(this));
+      searchInput.addEventListener('focus', this.handleSearchFocus.bind(this));
+      searchInput.addEventListener('blur', this.handleSearchBlur.bind(this));
+    }
+    
+    if (resultsContainer) {
+      resultsContainer.addEventListener('click', this.handleResultClick.bind(this));
+    }
+  }
+
+  private handleSearchInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const query = input.value.trim();
+    
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+    
+    this.debounceTimer = setTimeout(() => {
+      this.performSearch(query);
+    }, 300);
+  }
+
+  private handleSearchFocus(): void {
+    const state = this.stateManager.getState();
+    if (state.originator.searchResults.length > 0) {
+      this.stateManager.setState({
+        ui: { showOriginatorResults: true }
+      });
+    }
+  }
+
+  private handleSearchBlur(): void {
+    // Delay hiding to allow clicks on results
+    setTimeout(() => {
+      this.stateManager.setState({
+        ui: { showOriginatorResults: false }
+      });
+    }, 200);
+  }
+
+  private handleResultClick(event: Event): void {
+    const target = event.target as HTMLElement;
+    const resultElement = target.closest('.search-result') as HTMLElement;
+    
+    if (resultElement) {
+      const originatorId = resultElement.dataset.id;
+      const state = this.stateManager.getState();
+      const originator = state.originator.searchResults.find(o => o.id === originatorId);
+      
+      if (originator) {
+        this.selectOriginator(originator);
+      }
+    }
+  }
+
+  private async performSearch(query: string): Promise<void> {
+    this.stateManager.setState({
+      originator: { 
+        searchQuery: query,
+        isSearching: query.length >= 2
+      }
+    });
+    
+    if (query.length < 2) {
+      this.stateManager.setState({
+        originator: { 
+          searchResults: [],
+          isSearching: false
+        },
+        ui: { showOriginatorResults: false }
+      });
+      return;
+    }
+    
+    try {
+      // Mock search results for now - will be replaced with API call
+      const mockResults = [
+        {
+          id: '1',
+          full_name: 'Winston Churchill',
+          sort_name: 'Churchill, Winston',
+          birth_year: 1874,
+          death_year: 1965,
+          quote_count: 150,
+          relevance_score: 0.95
+        },
+        {
+          id: '2',
+          full_name: 'Albert Einstein',
+          sort_name: 'Einstein, Albert',
+          birth_year: 1879,
+          death_year: 1955,
+          quote_count: 89,
+          relevance_score: 0.87
+        }
+      ].filter(o => o.full_name.toLowerCase().includes(query.toLowerCase()));
+      
+      this.stateManager.setState({
+        originator: {
+          searchResults: mockResults,
+          isSearching: false
+        },
+        ui: { showOriginatorResults: mockResults.length > 0 }
+      });
+      
+    } catch (error) {
+      console.error('Search error:', error);
+      this.stateManager.setState({
+        originator: {
+          searchResults: [],
+          isSearching: false
+        },
+        ui: { showOriginatorResults: false }
+      });
+    }
+  }
+
+  private selectOriginator(originator: any): void {
+    const state = this.stateManager.getState();
+    
+    // Add to search history
+    const updatedHistory = [originator, ...state.originator.searchHistory.filter(o => o.id !== originator.id)].slice(0, 5);
+    
+    this.stateManager.setState({
+      originator: {
+        selectedOriginator: originator,
+        searchQuery: '',
+        searchResults: [],
+        searchHistory: updatedHistory
+      },
+      ui: { showOriginatorResults: false }
+    });
+    
+    // Clear search input
+    const searchInput = this.element.querySelector('#originator-search') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.value = '';
+    }
+  }
+
+  private clearSelectedOriginator(): void {
+    this.stateManager.setState({
+      originator: { selectedOriginator: null }
+    });
+  }
+
+  protected updateFromState(state: PopupState): void {
+    this.updateSearchResults(state.originator, state.ui.showOriginatorResults);
+    this.updateSelectedOriginator(state.originator.selectedOriginator);
+    this.updateSearchInput(state.originator);
+  }
+
+  private updateSearchResults(originatorState: OriginatorState, showResults: boolean): void {
+    const resultsContainer = this.element.querySelector('#originator-results');
+    if (!resultsContainer) return;
+    
+    if (!showResults || originatorState.searchResults.length === 0) {
+      resultsContainer.classList.add('hidden');
+      return;
+    }
+    
+    resultsContainer.innerHTML = originatorState.searchResults.map(originator => `
+      <div class="search-result" data-id="${originator.id}">
+        <div class="search-result-name">${originator.full_name}</div>
+        <div class="search-result-details">
+          ${originator.birth_year || '?'} - ${originator.death_year || 'present'}
+          ${originator.quote_count ? ` • ${originator.quote_count} quotes` : ''}
+          ${originator.relevance_score ? ` • ${Math.round(originator.relevance_score * 100)}% match` : ''}
+        </div>
+      </div>
+    `).join('');
+    
+    resultsContainer.classList.remove('hidden');
+  }
+
+  private updateSelectedOriginator(selected: any): void {
+    const selectedContainer = this.element.querySelector('#selected-originator');
+    if (!selectedContainer) return;
+    
+    if (!selected) {
+      selectedContainer.classList.add('hidden');
+      return;
+    }
+    
+    selectedContainer.innerHTML = `
+      <div class="selected-originator-content">
+        <div class="selected-name">${selected.full_name}</div>
+        <div class="selected-details">${selected.birth_year || '?'} - ${selected.death_year || 'present'}</div>
+        <button class="selected-remove" type="button" aria-label="Remove selected originator">&times;</button>
+      </div>
+    `;
+    
+    selectedContainer.classList.remove('hidden');
+    
+    // Add remove event listener
+    const removeButton = selectedContainer.querySelector('.selected-remove');
+    removeButton?.addEventListener('click', this.clearSelectedOriginator.bind(this));
+  }
+
+  private updateSearchInput(originatorState: OriginatorState): void {
+    const searchInput = this.element.querySelector('#originator-search') as HTMLInputElement;
+    const loadingIndicator = this.element.querySelector('#search-loading');
+    
+    if (loadingIndicator) {
+      if (originatorState.isSearching) {
+        loadingIndicator.classList.remove('hidden');
+      } else {
+        loadingIndicator.classList.add('hidden');
+      }
+    }
+    
+    if (searchInput && !originatorState.selectedOriginator) {
+      const state = this.stateManager.getState();
+      if (state.tweet.data?.author?.displayName && !searchInput.placeholder.includes(state.tweet.data.author.displayName)) {
+        searchInput.placeholder = `Try: ${state.tweet.data.author.displayName}`;
+      }
+    }
+  }
+}
+
+// Authentication Component
+class AuthenticationComponent extends UIComponent {
+  render(): void {
+    // Initial render handled by updateFromState
+  }
+
+  handleEvents(): void {
+    const loginButton = this.element.querySelector('#login-button');
+    if (loginButton) {
+      loginButton.addEventListener('click', this.handleLogin.bind(this));
+    }
+  }
+
+  private handleLogin(): void {
+    chrome.tabs.create({
+      url: 'https://quotosaurus.com/accounts/login/',
+      active: true
+    });
+    
+    // Optionally close popup after opening login
+    setTimeout(() => {
+      window.close();
+    }, 1000);
+  }
+
+  protected updateFromState(state: PopupState): void {
+    const { auth } = state;
+    
+    const authInfo = this.element.querySelector('#auth-info');
+    if (authInfo && auth.userInfo) {
+      authInfo.innerHTML = `
+        <div class="auth-user-info">
+          <span class="username">${auth.userInfo.username}</span>
+          ${auth.userInfo.isAdmin ? '<span class="admin-badge">Admin</span>' : ''}
+        </div>
+      `;
+    }
+  }
+}
+
+// Message Handler
+class MessageHandler {
+  constructor(private stateManager: PopupStateManager) {}
+
+  async sendMessage(message: ExtensionMessage): Promise<any> {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message || 'Runtime error'));
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
+
+  handleTweetData(data: TwitterData): void {
+    this.stateManager.setState({
+      tweet: { 
+        data,
+        isLoading: false,
+        error: undefined 
+      }
+    });
+  }
+
+  handleAuthStatus(status: any): void {
+    this.stateManager.setState({
+      auth: {
+        isAuthenticated: status.isAuthenticated,
+        userInfo: status.userInfo,
+        checkInProgress: false
+      }
+    });
+  }
+
+  handleOriginatorResults(results: any[]): void {
+    this.stateManager.setState({
+      originator: {
+        searchResults: results,
+        isSearching: false
+      }
+    });
+  }
+
+  handleSubmissionResult(result: any): void {
+    this.stateManager.setState({
+      submission: {
+        lastSubmissionResult: result,
+        isSubmitting: false
+      },
+      ui: {
+        currentView: result.success ? 'success' : 'error',
+        loadingMessage: result.message
+      }
+    });
+  }
+}
+
+// Main Popup Controller
+class QuotewisePopup {
+  private stateManager: PopupStateManager;
+  private components: UIComponent[] = [];
+  private messageHandler: MessageHandler;
+
+  constructor() {
+    this.stateManager = new PopupStateManager();
+    this.messageHandler = new MessageHandler(this.stateManager);
+    this.init();
+  }
+
+  /**
+   * Initialize the popup interface
+   */
+  private async init(): Promise<void> {
+    console.log('Initializing Quotewise popup');
+    
+    try {
+      this.setupComponents();
+      this.setupGlobalEventListeners();
+      this.stateManager.subscribe(this.onStateChange.bind(this));
+      
+      // Initial state setup
+      await this.checkAuthStatus();
+      await this.loadTweetData();
+      
+    } catch (error) {
+      console.error('Error initializing popup:', error);
+      this.stateManager.setState({
+        ui: { 
+          currentView: 'error',
+          loadingMessage: 'Failed to initialize popup'
+        }
+      });
+    }
+  }
+
+  private setupComponents(): void {
+    try {
+      this.components = [
+        new TweetDisplayComponent('tweet-display', this.stateManager),
+        new OriginatorSearchComponent('originator-search-container', this.stateManager),
+        new AuthenticationComponent('auth-container', this.stateManager)
+      ];
+    } catch (error) {
+      console.error('Error setting up components:', error);
+      // Continue with basic functionality even if components fail
+    }
+  }
+
+  private onStateChange(state: PopupState): void {
+    this.updateView(state.ui.currentView);
+    this.updateFormValidation(state);
+    this.updateLoadingState(state);
+  }
+
+  private updateView(currentView: string): void {
+    const sections = ['auth-required', 'quote-capture', 'error-state', 'success-state', 'loading-state'];
+    
+    sections.forEach(sectionId => {
+      const element = document.getElementById(sectionId);
+      if (element) {
+        const shouldShow = (
+          (currentView === 'auth-required' && sectionId === 'auth-required') ||
+          (currentView === 'quote-capture' && sectionId === 'quote-capture') ||
+          (currentView === 'error' && sectionId === 'error-state') ||
+          (currentView === 'success' && sectionId === 'success-state') ||
+          (currentView === 'loading' && sectionId === 'loading-state')
+        );
+        
+        if (shouldShow) {
+          element.classList.remove('hidden');
+        } else {
+          element.classList.add('hidden');
+        }
+      }
+    });
+  }
+
+  private updateFormValidation(state: PopupState): void {
+    const submitButton = document.getElementById('submit-quote') as HTMLButtonElement;
+    const checkDuplicateButton = document.getElementById('check-duplicate') as HTMLButtonElement;
+    
+    if (submitButton) {
+      const canSubmit = (
+        state.ui.isFormValid &&
+        state.ui.isDuplicateChecked &&
+        state.originator.selectedOriginator &&
+        !state.submission.isSubmitting
+      );
+      submitButton.disabled = !canSubmit;
+    }
+    
+    if (checkDuplicateButton) {
+      const canCheck = (
+        state.ui.isFormValid &&
+        !state.submission.isSubmitting
+      );
+      checkDuplicateButton.disabled = !canCheck;
+    }
+  }
+
+  private updateLoadingState(state: PopupState): void {
+    const loadingMessage = document.getElementById('loading-message');
+    if (loadingMessage && state.ui.loadingMessage) {
+      loadingMessage.textContent = state.ui.loadingMessage;
+    }
+    
+    // Update progress indicator if available
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    
+    if (state.submission.progress && progressBar && progressText) {
+      progressBar.style.width = `${state.submission.progress.percentage}%`;
+      progressText.textContent = state.submission.progress.step;
+    }
+  }
+
+  /**
+   * Set up global event listeners for UI interactions
+   */
+  private setupGlobalEventListeners(): void {
+    // Duplicate check
+    const checkDuplicateButton = document.getElementById('check-duplicate');
+    checkDuplicateButton?.addEventListener('click', this.handleDuplicateCheck.bind(this));
+
+    // Submit quote
+    const submitButton = document.getElementById('submit-quote');
+    submitButton?.addEventListener('click', this.handleSubmitQuote.bind(this));
+
+    // Retry button
+    const retryButton = document.getElementById('retry-button');
+    retryButton?.addEventListener('click', this.init.bind(this));
+
+    // Close button
+    const closeButton = document.getElementById('close-button');
+    closeButton?.addEventListener('click', () => window.close());
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', this.handleKeyboardShortcuts.bind(this));
+    
+    // Window focus events for session management
+    window.addEventListener('focus', this.handleWindowFocus.bind(this));
+  }
+
+  private handleKeyboardShortcuts(event: KeyboardEvent): void {
+    // Ctrl/Cmd + Enter to submit
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      const state = this.stateManager.getState();
+      if (state.ui.currentView === 'quote-capture') {
+        this.handleSubmitQuote();
+      }
+    }
+    
+    // Escape to close
+    if (event.key === 'Escape') {
+      window.close();
+    }
+  }
+
+  private handleWindowFocus(): void {
+    // Refresh auth status when window gains focus
+    // This helps detect if user logged in in another tab
+    const state = this.stateManager.getState();
+    if (!state.auth.isAuthenticated && !state.auth.checkInProgress) {
+      this.checkAuthStatus();
+    }
+  }
+
+  /**
+   * Check authentication status
+   */
+  private async checkAuthStatus(): Promise<void> {
+    this.stateManager.setState({
+      auth: { checkInProgress: true },
+      ui: { 
+        currentView: 'loading',
+        loadingMessage: 'Checking authentication...' 
+      }
+    });
+
+    try {
+      const response = await this.messageHandler.sendMessage({
+        type: MessageType.CHECK_AUTH_STATUS
+      });
+
+      this.stateManager.setState({
+        auth: {
+          isAuthenticated: response.isAuthenticated,
+          userInfo: response.userInfo,
+          sessionExpiry: response.sessionExpiry ? new Date(response.sessionExpiry) : undefined,
+          checkInProgress: false
+        },
+        ui: { 
+          currentView: response.isAuthenticated ? 'quote-capture' : 'auth-required'
+        }
+      });
+
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      this.stateManager.setState({
+        auth: { 
+          isAuthenticated: false,
+          checkInProgress: false 
+        },
+        ui: { 
+          currentView: 'error',
+          loadingMessage: 'Failed to check authentication status'
+        }
+      });
+    }
+  }
+
+  /**
+   * Load tweet data from current tab
+   */
+  private async loadTweetData(): Promise<void> {
+    this.stateManager.setState({
+      tweet: { isLoading: true }
+    });
+
+    try {
+      const response = await this.messageHandler.sendMessage({
+        type: MessageType.GET_TWEET_DATA
+      });
+
+      if (response.success && response.data) {
+        this.stateManager.setState({
+          tweet: {
+            data: response.data,
+            isLoading: false,
+            error: undefined
+          }
+        });
+      } else {
+        this.stateManager.setState({
+          tweet: {
+            data: null,
+            isLoading: false,
+            error: 'No tweet data found. Make sure you are on a tweet page.'
+          },
+          ui: { 
+            currentView: 'error',
+            loadingMessage: 'No tweet data found. Make sure you are on a tweet page.'
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error loading tweet data:', error);
+      this.stateManager.setState({
+        tweet: {
+          data: null,
+          isLoading: false,
+          error: 'Failed to load tweet data'
+        },
+        ui: { 
+          currentView: 'error',
+          loadingMessage: 'Failed to load tweet data'
+        }
+      });
+    }
+  }
+
+  // This method is now handled by the TweetDisplayComponent
+
+  /**
+   * Handle login button click
+   */
+  private handleLogin(): void {
+    // Open Quotewise login page in new tab
+    chrome.tabs.create({
+      url: 'https://quotosaurus.com/accounts/login/',
+      active: true
+    });
+  }
+
+  /**
+   * Handle originator search
+   */
+  private async handleOriginatorSearch(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const query = input.value.trim();
+
+    if (query.length < 2) {
+      this.hideOriginatorResults();
+      return;
+    }
+
+    try {
+      // This will be implemented when API client is ready
+      console.log('Searching for originator:', query);
+      
+      // Mock results for now
+      this.showOriginatorResults([
+        {
+          id: '1',
+          full_name: 'Winston Churchill',
+          sort_name: 'Churchill, Winston',
+          birth_year: 1874,
+          death_year: 1965,
+          quote_count: 150
+        }
+      ]);
+    } catch (error) {
+      console.error('Error searching originators:', error);
+    }
+  }
+
+  /**
+   * Show originator search results
+   */
+  private showOriginatorResults(results: any[]): void {
+    const resultsContainer = document.getElementById('originator-results');
+    if (!resultsContainer) return;
+
+    if (results.length === 0) {
+      resultsContainer.innerHTML = '<div class="search-result">No originators found</div>';
+      resultsContainer.classList.remove('hidden');
+      return;
+    }
+
+    resultsContainer.innerHTML = results.map(originator => `
+      <div class="search-result" data-id="${originator.id}">
+        <div class="search-result-name">${originator.full_name}</div>
+        <div class="search-result-details">
+          ${originator.birth_year || '?'} - ${originator.death_year || 'present'}
+          ${originator.quote_count ? ` • ${originator.quote_count} quotes` : ''}
+        </div>
+      </div>
+    `).join('');
+
+    // Add click listeners
+    resultsContainer.querySelectorAll('.search-result').forEach(result => {
+      result.addEventListener('click', () => {
+        const id = result.getAttribute('data-id');
+        const originator = results.find(o => o.id === id);
+        if (originator) {
+          this.selectOriginator(originator);
+        }
+      });
+    });
+
+    resultsContainer.classList.remove('hidden');
+  }
+
+  /**
+   * Hide originator search results
+   */
+  private hideOriginatorResults(): void {
+    const resultsContainer = document.getElementById('originator-results');
+    resultsContainer?.classList.add('hidden');
+  }
+
+  /**
+   * Select an originator
+   */
+  private selectOriginator(originator: any): void {
+    this.selectedOriginator = originator;
+    
+    // Hide search results
+    this.hideOriginatorResults();
+    
+    // Show selected originator
+    const selectedContainer = document.getElementById('selected-originator');
+    if (selectedContainer) {
+      selectedContainer.innerHTML = `
+        <div class="selected-name">${originator.full_name}</div>
+        <button class="selected-remove" type="button">&times;</button>
+      `;
+      
+      selectedContainer.classList.remove('hidden');
+      
+      // Add remove listener
+      const removeButton = selectedContainer.querySelector('.selected-remove');
+      removeButton?.addEventListener('click', this.clearSelectedOriginator.bind(this));
+    }
+    
+    // Clear search input
+    const searchInput = document.getElementById('originator-search') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.value = '';
+    }
+    
+    this.validateForm();
+  }
+
+  /**
+   * Clear selected originator
+   */
+  private clearSelectedOriginator(): void {
+    this.selectedOriginator = null;
+    
+    const selectedContainer = document.getElementById('selected-originator');
+    selectedContainer?.classList.add('hidden');
+    
+    this.validateForm();
+  }
+
+  /**
+   * Handle duplicate check
+   */
+  private async handleDuplicateCheck(): Promise<void> {
+    try {
+      const quoteText = (document.getElementById('quote-text') as HTMLTextAreaElement)?.value;
+      if (!quoteText) return;
+
+      this.setLoadingMessage('Checking for duplicates...');
+      this.showSection('loading-state');
+
+      // This will be implemented when API client is ready
+      console.log('Checking for duplicates:', {
+        text: quoteText,
+        originatorId: this.selectedOriginator?.id
+      });
+
+      // Mock response for now
+      setTimeout(() => {
+        this.isDuplicateChecked = true;
+        this.showSection('quote-capture');
+        this.validateForm();
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error checking duplicates:', error);
+      this.showError('Failed to check for duplicates');
+    }
+  }
+
+  /**
+   * Handle quote submission
+   */
+  private async handleSubmitQuote(): Promise<void> {
+    try {
+      if (!this.tweetData) {
+        this.showError('No tweet data available');
+        return;
+      }
+
+      const quoteText = (document.getElementById('quote-text') as HTMLTextAreaElement)?.value;
+      const attributionType = (document.getElementById('attribution-type') as HTMLSelectElement)?.value as AttributionType;
+
+      if (!quoteText) {
+        this.showError('Quote text is required');
+        return;
+      }
+
+      this.setLoadingMessage('Submitting quote...');
+      this.showSection('loading-state');
+
+      const submissionData: QuoteSubmissionRequest = {
+        quote_text: quoteText,
+        originator_id: this.selectedOriginator?.id,
+        sighting_url: this.tweetData.url,
+        platform_code: 'TX',
+        likes_count: this.tweetData.likes || 0,
+        post_date: this.tweetData.date || undefined,
+        attribution_type: attributionType,
+        platform_data: this.tweetData.platform_data
+      };
+
+      const response = await this.sendMessage({
+        type: MessageType.SUBMIT_QUOTE,
+        data: submissionData
+      });
+
+      if (response.success) {
+        this.showSuccess('Quote added successfully!');
+      } else {
+        this.showError(response.error || 'Failed to submit quote');
+      }
+
+    } catch (error) {
+      console.error('Error submitting quote:', error);
+      this.showError('Failed to submit quote');
+    }
+  }
+
+  /**
+   * Handle quote text changes
+   */
+  private handleQuoteTextChange(): void {
+    this.isDuplicateChecked = false;
+    this.validateForm();
+  }
+
+  /**
+   * Validate form and update UI state
+   */
+  private validateForm(): void {
+    const quoteText = (document.getElementById('quote-text') as HTMLTextAreaElement)?.value;
+    const submitButton = document.getElementById('submit-quote') as HTMLButtonElement;
+    const checkDuplicateButton = document.getElementById('check-duplicate') as HTMLButtonElement;
+
+    const hasQuoteText = !!quoteText?.trim();
+    const canSubmit = hasQuoteText && this.isDuplicateChecked;
+
+    if (submitButton) {
+      submitButton.disabled = !canSubmit;
+    }
+
+    if (checkDuplicateButton) {
+      checkDuplicateButton.disabled = !hasQuoteText;
+    }
+  }
+
+  /**
+   * Show a specific section and hide others
+   */
+  private showSection(sectionId: string): void {
+    const sections = ['auth-required', 'quote-capture', 'error-state', 'success-state', 'loading-state'];
+    
+    sections.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        if (id === sectionId) {
+          element.classList.remove('hidden');
+        } else {
+          element.classList.add('hidden');
+        }
+      }
+    });
+  }
+
+  /**
+   * Show error message
+   */
+  private showError(message: string): void {
+    const errorMessage = document.getElementById('error-message');
+    if (errorMessage) {
+      errorMessage.textContent = message;
+    }
+    this.showSection('error-state');
+    this.setStatus('Error', 'status-error');
+  }
+
+  /**
+   * Show success message
+   */
+  private showSuccess(message: string): void {
+    const successMessage = document.getElementById('success-message');
+    if (successMessage) {
+      successMessage.textContent = message;
+    }
+    this.showSection('success-state');
+    this.setStatus('Success', 'status-success');
+  }
+
+  /**
+   * Set loading message
+   */
+  private setLoadingMessage(message: string): void {
+    const loadingMessage = document.getElementById('loading-message');
+    if (loadingMessage) {
+      loadingMessage.textContent = message;
+    }
+  }
+
+  /**
+   * Set status indicator
+   */
+  private setStatus(text: string, className: string): void {
+    const statusText = document.getElementById('status-text');
+    const statusIndicator = document.getElementById('status-indicator');
+    
+    if (statusText) {
+      statusText.textContent = text;
+    }
+    
+    if (statusIndicator) {
+      statusIndicator.className = `status ${className}`;
+    }
+  }
+
+  /**
+   * Send message to background script
+   */
+  private sendMessage(message: ExtensionMessage): Promise<any> {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+          return;
+        }
+        resolve(response);
+      });
+    });
+  }
+
+  /**
+   * Debounce utility function
+   */
+  private debounce<T extends (...args: any[]) => any>(
+    func: T,
+    wait: number
+  ): (...args: Parameters<T>) => void {
+    let timeout: NodeJS.Timeout;
+    
+    return (...args: Parameters<T>) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func(...args), wait);
+    };
+  }
+}
+
+// Initialize popup when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const popup = new QuotewisePopup();
+    
+    // Cleanup on window unload
+    window.addEventListener('beforeunload', () => {
+      popup.destroy();
+    });
+    
+  } catch (error) {
+    console.error('Failed to initialize popup:', error);
+    
+    // Fallback error display
+    const errorElement = document.getElementById('error-message');
+    if (errorElement) {
+      errorElement.textContent = 'Failed to initialize popup. Please refresh and try again.';
+    }
+    
+    const errorSection = document.getElementById('error-state');
+    if (errorSection) {
+      errorSection.classList.remove('hidden');
+    }
+  }
+});

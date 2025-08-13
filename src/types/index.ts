@@ -2,10 +2,21 @@
  * Shared type definitions for the Quotewise Chrome Extension
  */
 
-// Export Chrome extension specific types
-export * from './chrome';
+// Export Chrome extension specific types (excluding conflicting ones)
+export {
+  MessageType,
+  ExtensionMessage,
+  TwitterData,
+  ExtensionStorage,
+  ExtensionError,
+  Platform,
+  PlatformDetection,
+  ContentScriptMessage,
+  PopupState,
+  PopupStateData
+} from './chrome';
 
-// Re-export API types
+// Re-export API types (these take precedence for conflicts)
 export * from './api';
 
 // Extension configuration

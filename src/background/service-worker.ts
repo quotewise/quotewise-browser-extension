@@ -4,10 +4,20 @@
  */
 
 import { MessageType, ExtensionMessage, TwitterData } from '../types/index';
+import { initializeApiHandler } from './api-handler';
+import { AuthenticationMonitor } from './auth-monitor';
+
+// Initialize API handler and auth monitor
+let apiHandler: ReturnType<typeof initializeApiHandler>;
+let authMonitor: AuthenticationMonitor;
 
 // Extension installation and startup
 chrome.runtime.onInstalled.addListener((details) => {
   console.log('Quotewise extension installed:', details.reason);
+  
+  // Initialize API handler and auth monitor
+  apiHandler = initializeApiHandler();
+  authMonitor = new AuthenticationMonitor();
   
   if (details.reason === 'install') {
     // Set default settings
@@ -21,7 +31,16 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
+// Initialize API handler and auth monitor on startup
+chrome.runtime.onStartup.addListener(() => {
+  console.log('Quotewise extension starting up');
+  apiHandler = initializeApiHandler();
+  authMonitor = new AuthenticationMonitor();
+});
+
 // Handle messages from content scripts and popup
+// NOTE: API-related messages are now handled by ApiHandler
+// This handles non-API messages like tweet data extraction
 chrome.runtime.onMessage.addListener((
   message: ExtensionMessage,
   sender,
@@ -38,13 +57,15 @@ chrome.runtime.onMessage.addListener((
       handleGetTweetData(sender.tab?.id, sendResponse);
       break;
       
+    // API-related messages are handled by ApiHandler
     case MessageType.CHECK_AUTH_STATUS:
-      handleCheckAuthStatus(sendResponse);
-      break;
-      
+    case MessageType.SEARCH_ORIGINATORS:
+    case MessageType.CHECK_DUPLICATE:
     case MessageType.SUBMIT_QUOTE:
-      handleSubmitQuote(message.data, sendResponse);
-      break;
+      // These are handled by ApiHandler, but we log here for debugging
+      console.log(`API message ${message.type} will be handled by ApiHandler`);
+      // Don't send response here - let ApiHandler handle it
+      return false;
       
     default:
       console.warn('Unknown message type:', message.type);
@@ -151,50 +172,7 @@ async function handleGetTweetData(
   }
 }
 
-/**
- * Handle authentication status check
- */
-async function handleCheckAuthStatus(sendResponse: (response: any) => void) {
-  try {
-    // This will be implemented when API client is ready
-    // For now, return a placeholder response
-    sendResponse({ 
-      success: true, 
-      isAuthenticated: false,
-      message: 'Authentication check not yet implemented'
-    });
-  } catch (error) {
-    console.error('Error checking auth status:', error);
-    sendResponse({ 
-      success: false, 
-      error: 'Failed to check authentication status' 
-    });
-  }
-}
-
-/**
- * Handle quote submission
- */
-async function handleSubmitQuote(
-  quoteData: any, 
-  sendResponse: (response: any) => void
-) {
-  try {
-    // This will be implemented when API client is ready
-    console.log('Quote submission requested:', quoteData);
-    
-    sendResponse({ 
-      success: true, 
-      message: 'Quote submission not yet implemented'
-    });
-  } catch (error) {
-    console.error('Error submitting quote:', error);
-    sendResponse({ 
-      success: false, 
-      error: 'Failed to submit quote' 
-    });
-  }
-}
+// Authentication and quote submission are now handled by ApiHandler
 
 // Handle extension icon click
 chrome.action.onClicked.addListener((tab) => {

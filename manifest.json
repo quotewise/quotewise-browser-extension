@@ -53,6 +53,10 @@
     {
       "resources": ["content/*"],
       "matches": ["https://twitter.com/*", "https://x.com/*"]
+    },
+    {
+      "resources": ["popup.html", "popup.css"],
+      "matches": ["<all_urls>"]
     }
   ]
 }

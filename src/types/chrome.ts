@@ -52,6 +52,9 @@ export interface TwitterData {
   author: {
     username: string;
     displayName: string;
+    verified?: boolean;
+    profileUrl?: string;
+    avatarUrl?: string;
   };
   url: string;
   date: string | null;
@@ -60,6 +63,9 @@ export interface TwitterData {
   replies: number;
   views: number;
   bookmarks: number;
+  tweetType: 'original' | 'reply' | 'retweet' | 'quote';
+  language?: string;
+  isProtected?: boolean;
   platform_data: {
     tweet_id: string | null;
     reply_count: number;
@@ -69,6 +75,9 @@ export interface TwitterData {
     view_count: number;
     is_protected?: boolean;
     thread_position?: number;
+    has_media?: boolean;
+    reply_to_tweet_id?: string;
+    quoted_tweet_id?: string;
   };
 }
 
