@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quotewise Quote Capture</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <h1 class="title">Quotewise</h1>
+            <div class="status" id="status-indicator">
+                <span class="status-text" id="status-text">Checking...</span>
+            </div>
+        </header>
+
+        <main class="main">
+            <!-- Authentication required state -->
+            <div id="auth-required" class="section hidden">
+                <div class="message">
+                    <p>Please log in to Quotewise to capture quotes.</p>
+                    <button id="login-button" class="button primary">
+                        Login to Quotewise
+                    </button>
+                </div>
+            </div>
+
+            <!-- Quote capture interface -->
+            <div id="quote-capture" class="section hidden">
+                <!-- Quote text -->
+                <div class="quote-section">
+                    <label for="quote-text" class="label">Quote Text:</label>
+                    <textarea 
+                        id="quote-text" 
+                        class="quote-input" 
+                        placeholder="Quote text will be extracted automatically..."
+                        rows="4">
+                    </textarea>
+                </div>
+
+                <!-- Originator search -->
+                <div class="originator-section">
+                    <label for="originator-search" class="label">Originator:</label>
+                    <input 
+                        type="text" 
+                        id="originator-search" 
+                        class="input" 
+                        placeholder="Search for originator..."
+                    >
+                    <div id="originator-results" class="search-results hidden"></div>
+                    <div id="selected-originator" class="selected-item hidden"></div>
+                </div>
+
+                <!-- Attribution confidence -->
+                <div class="attribution-section">
+                    <label for="attribution-type" class="label">Attribution:</label>
+                    <select id="attribution-type" class="select">
+                        <option value="DIRECT">Direct Quote</option>
+                        <option value="POPULARIZED">Popularized By</option>
+                        <option value="DISPUTED">Disputed</option>
+                        <option value="PARAPHRASED">Paraphrased</option>
+                    </select>
+                </div>
+
+                <!-- Duplicate check results -->
+                <div id="duplicate-warning" class="warning hidden">
+                    <p class="warning-text">Similar quote found in database</p>
+                    <div id="duplicate-details"></div>
+                </div>
+
+                <!-- Action buttons -->
+                <div class="actions">
+                    <button id="check-duplicate" class="button secondary">
+                        Check for Duplicates
+                    </button>
+                    <button id="submit-quote" class="button primary" disabled>
+                        Add Quote
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error state -->
+            <div id="error-state" class="section hidden">
+                <div class="message error">
+                    <p id="error-message">An error occurred</p>
+                    <button id="retry-button" class="button secondary">
+                        Retry
+                    </button>
+                </div>
+            </div>
+
+            <!-- Success state -->
+            <div id="success-state" class="section hidden">
+                <div class="message success">
+                    <p id="success-message">Quote added successfully!</p>
+                    <button id="close-button" class="button primary">
+                        Close
+                    </button>
+                </div>
+            </div>
+
+            <!-- Loading state -->
+            <div id="loading-state" class="section hidden">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p id="loading-message">Processing...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts will be injected by webpack -->
+</body>
+</html>
