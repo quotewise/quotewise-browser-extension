@@ -5,16 +5,20 @@
     box-sizing: border-box;
 }
 
-body {
+html, body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.4;
     color: #333;
     background: #fff;
+    min-width: 400px;
     width: 400px;
     min-height: 300px;
     max-height: 600px;
     overflow-y: auto;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
 }
 
 /* Utility classes */
@@ -27,6 +31,9 @@ body {
     display: flex;
     flex-direction: column;
     min-height: 300px;
+    min-width: 400px;
+    width: 400px;
+    box-sizing: border-box;
 }
 
 .header {
@@ -167,6 +174,40 @@ body {
 .auth-benefits li {
     margin-bottom: 8px;
     color: #5f6368;
+}
+
+/* Not on tweet page styles */
+.info-prompt h3 {
+    margin-bottom: 12px;
+    color: #1a73e8;
+}
+
+.info-guidance {
+    margin: 16px 0;
+    text-align: left;
+}
+
+.info-guidance ul {
+    margin-left: 16px;
+    margin-top: 8px;
+}
+
+.info-guidance li {
+    margin-bottom: 8px;
+    color: #5f6368;
+}
+
+.future-note {
+    margin-top: 16px;
+    color: #9aa0a6;
+    font-style: italic;
+    text-align: center;
+}
+
+.info-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 24px;
 }
 
 /* Form elements */
@@ -623,6 +664,62 @@ body {
 
 .character-count.error {
     color: #d93025;
+}
+
+/* Collections section */
+.collections-section {
+    margin: 16px 0;
+}
+
+.collections-header {
+    margin-bottom: 8px;
+}
+
+.collections-main-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+}
+
+.collections-main-label input[type="checkbox"] {
+    margin: 0;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.collections-label-text {
+    color: #333;
+    font-weight: 500;
+}
+
+.collections-main-label:hover .collections-label-text {
+    color: #1a73e8;
+}
+
+.collections-dropdown {
+    margin-left: 24px; /* Indent to align with checkbox content */
+    transition: opacity 0.2s ease;
+}
+
+/* Disabled state for collections */
+.collections-section.disabled .collections-label-text {
+    color: #9aa0a6;
+}
+
+.collections-section.disabled .collections-dropdown {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.collections-section.disabled .collections-dropdown .select {
+    background-color: #f8f9fa;
+    color: #9aa0a6;
+    cursor: not-allowed;
 }
 
 /* Enhanced duplicate checking display */
@@ -1243,6 +1340,35 @@ body {
     
     .warning-text {
         color: #fdd663;
+    }
+    
+    .info-prompt h3 {
+        color: #8ab4f8;
+    }
+    
+    .info-guidance li {
+        color: #9aa0a6;
+    }
+    
+    .future-note {
+        color: #5f6368;
+    }
+    
+    .collections-label-text {
+        color: #e8eaed;
+    }
+    
+    .collections-main-label:hover .collections-label-text {
+        color: #8ab4f8;
+    }
+    
+    .collections-section.disabled .collections-label-text {
+        color: #5f6368;
+    }
+    
+    .collections-section.disabled .collections-dropdown .select {
+        background-color: #2d3339;
+        color: #5f6368;
     }
 }
 

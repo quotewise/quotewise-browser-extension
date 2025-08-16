@@ -24,7 +24,7 @@ export class AuthChecker {
       // Call Django auth status endpoint
       const response = await this.apiClient.checkAuthStatus();
       
-      if (!response.isAuthenticated) {
+      if (!response.authenticated) {
         return {
           type: 'not_authenticated',
           message: 'Please log in to Quotewise',
@@ -34,9 +34,9 @@ export class AuthChecker {
 
       // Convert API response to AuthStatus
       const authStatus: AuthStatus = {
-        isAuthenticated: response.isAuthenticated,
-        isStaff: response.userInfo?.isAdmin || false, // Map isAdmin to isStaff
-        username: response.userInfo?.username,
+        isAuthenticated: response.authenticated,
+        isStaff: response.is_admin || false, // Map is_admin to isStaff
+        username: response.user?.username,
         sessionExpiry: response.sessionExpiry
       };
 

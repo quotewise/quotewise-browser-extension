@@ -26,34 +26,12 @@ export class ApiHandler {
         });
         
         this.apiClient = new QuotewiseApiClientImpl(config.apiBaseUrl);
-        
-        // Set up message listener
-        this.setupMessageListener();
     }
     
     /**
-     * Set up Chrome runtime message listener
+     * Handle incoming extension messages (called by service worker)
      */
-    private setupMessageListener(): void {
-        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-            // Handle async responses properly
-            this.handleMessage(message, sender, sendResponse).catch(error => {
-                console.error('Error handling message:', error);
-                sendResponse({
-                    success: false,
-                    error: error.message || 'Internal error occurred'
-                });
-            });
-            
-            // Return true to indicate async response
-            return true;
-        });
-    }
-    
-    /**
-     * Handle incoming extension messages
-     */
-    private async handleMessage(
+    public async handleMessage(
         message: ExtensionMessage,
         sender: chrome.runtime.MessageSender,
         sendResponse: (response: any) => void
@@ -76,10 +54,6 @@ export class ApiHandler {
                     
                 case 'SUBMIT_QUOTE':
                     await this.handleSubmitQuote(message, sendResponse);
-                    break;
-                    
-                case 'GET_TWEET_DATA':
-                    await this.handleGetTweetData(message, sendResponse);
                     break;
                     
                 default:
@@ -106,12 +80,22 @@ export class ApiHandler {
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
-            const authStatus = await this.apiClient.checkAuthStatus();
-            sendResponse(authStatus);
+            const authResult = await this.apiClient.checkAuthStatus();
+            
+            // Transform API response to match AuthChecker format (used by AuthenticationMonitor)
+            const transformedStatus = {
+                isAuthenticated: authResult.authenticated,
+                isStaff: authResult.is_admin || false,
+                username: authResult.user?.username
+            };
+            
+            console.log('Sending auth status to popup:', transformedStatus);
+            sendResponse(transformedStatus);
         } catch (error) {
             console.error('Error checking auth status:', error);
             sendResponse({
                 isAuthenticated: false,
+                isStaff: false,
                 error: error instanceof Error ? error.message : 'Auth check failed'
             });
         }
@@ -228,49 +212,6 @@ export class ApiHandler {
      * Handle tweet data request
      * Forwards to content script for data extraction
      */
-    private async handleGetTweetData(
-        message: ExtensionMessage,
-        sendResponse: (response: any) => void
-    ): Promise<void> {
-        try {
-            // Query active tab for tweet data
-            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-            
-            if (!tabs[0]?.id) {
-                sendResponse({
-                    success: false,
-                    error: 'No active tab found',
-                    data: null
-                });
-                return;
-            }
-            
-            // Send message to content script
-            const response = await chrome.tabs.sendMessage(tabs[0].id, {
-                type: 'GET_TWEET_DATA'
-            });
-            
-            if (response && response.success) {
-                sendResponse({
-                    success: true,
-                    data: response.data
-                });
-            } else {
-                sendResponse({
-                    success: false,
-                    error: response?.error || 'Failed to extract tweet data',
-                    data: null
-                });
-            }
-        } catch (error) {
-            console.error('Error getting tweet data:', error);
-            sendResponse({
-                success: false,
-                error: error instanceof Error ? error.message : 'Failed to get tweet data',
-                data: null
-            });
-        }
-    }
     
     /**
      * Get current environment info for debugging

@@ -24,6 +24,8 @@ class TwitterContentScript {
   private isInitialized = false;
   private currentUrl = '';
   private extractedData: TwitterData | null = null;
+  private mutationObserver: MutationObserver | null = null;
+  private urlCheckInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.init();
@@ -37,24 +39,23 @@ class TwitterContentScript {
     
     debugLog('Initializing Twitter content script');
     
-    // Check if we're on a tweet page
-    if (!this.isTweetPage()) {
-      debugLog('Not on a tweet page, skipping initialization');
-      return;
-    }
-    
     this.currentUrl = window.location.href;
     this.isInitialized = true;
     
-    // Set up message listener
+    // Always set up message listener
     this.setupMessageListener();
     
-    // Wait for page to load and extract data
-    await this.waitForPageLoad();
-    await this.extractTweetData();
+    // Set up navigation monitoring (both URL and DOM changes)
+    this.setupNavigationMonitoring();
     
-    // Set up URL change detection for SPA navigation
-    this.setupUrlChangeDetection();
+    // Try to extract tweet data if we're on a tweet page
+    if (this.isTweetPage()) {
+      debugLog('On a tweet page, attempting to extract data');
+      await this.waitForPageLoad();
+      await this.extractTweetData();
+    } else {
+      debugLog('Not on a tweet page, but monitoring for navigation');
+    }
     
     // Set up cleanup handlers
     this.setupCleanup();
@@ -136,12 +137,52 @@ class TwitterContentScript {
    */
   private detectRetweetInDOM(): boolean {
     const retweetIndicators = [
+      // New Twitter/X retweet indicators
+      '[data-testid="socialContext"]',
       '[data-testid="socialContext"] [data-testid="UserAvatar-Container-unknown"]',
       '[data-testid="retweetedBy"]',
-      '.retweet-header'
+      '[aria-label*="Retweeted"]',
+      // Look for retweet icon in social context
+      '[data-testid="socialContext"] svg[data-testid="icon-retweet"]',
+      '[data-testid="socialContext"] [aria-label*="retweeted"]',
+      // Text-based indicators
+      'span:contains("Retweeted")',
+      'div:contains("retweeted")',
+      // Legacy selectors
+      '.retweet-header',
+      '.retweet-context'
     ];
     
-    return retweetIndicators.some(selector => safeQuerySelector(selector));
+    // Check for retweet text patterns
+    const socialContext = safeQuerySelector('[data-testid="socialContext"]');
+    if (socialContext) {
+      const text = extractTextContent(socialContext).toLowerCase();
+      if (text.includes('retweeted') || text.includes('reposted')) {
+        debugLog('Retweet detected via social context text:', text);
+        return true;
+      }
+    }
+    
+    const detected = retweetIndicators.some(selector => {
+      if (selector.includes(':contains(')) {
+        // Handle text-based selectors manually
+        const textToFind = selector.match(/:contains\("([^"]+)"\)/)?.[1]?.toLowerCase();
+        if (textToFind) {
+          const elements = document.querySelectorAll(selector.replace(/:contains\("[^"]+"\)/, ''));
+          return Array.from(elements).some(el => 
+            extractTextContent(el).toLowerCase().includes(textToFind)
+          );
+        }
+        return false;
+      }
+      return safeQuerySelector(selector) !== null;
+    });
+    
+    if (detected) {
+      debugLog('Retweet detected using DOM indicators');
+    }
+    
+    return detected;
   }
 
   /**
@@ -323,6 +364,7 @@ class TwitterContentScript {
     return {
       text: tweetText || '',
       author: author || { username: '', displayName: '' },
+      retweeter: author?.retweeterInfo || undefined,
       url: cleanUrl(window.location.href),
       date: date || null,
       likes: metrics?.likes || 0,
@@ -343,7 +385,9 @@ class TwitterContentScript {
         is_protected: isProtected || false,
         has_media: this.safeExtract(() => this.detectMedia(article), 'media detection', errors, false) || false,
         reply_to_tweet_id: this.safeExtract(() => this.extractReplyToTweetId(article), 'reply-to ID', errors) || undefined,
-        quoted_tweet_id: this.safeExtract(() => this.extractQuotedTweetId(article), 'quoted tweet ID', errors) || undefined
+        quoted_tweet_id: this.safeExtract(() => this.extractQuotedTweetId(article), 'quoted tweet ID', errors) || undefined,
+        retweeter_username: author?.retweeterInfo?.username || undefined,
+        retweeter_display_name: author?.retweeterInfo?.displayName || undefined
       }
     };
   }
@@ -550,6 +594,7 @@ class TwitterContentScript {
 
   /**
    * Extract comprehensive author information
+   * For retweets, this extracts the ORIGINAL author, not the retweeter
    */
   private extractAuthorInfo(article: Element): {
     username: string;
@@ -557,17 +602,68 @@ class TwitterContentScript {
     verified?: boolean;
     profileUrl?: string;
     avatarUrl?: string;
+    isRetweeter?: boolean;
+    retweeterInfo?: {
+      username: string;
+      displayName: string;
+    };
   } {
     const author: any = { 
       username: '', 
       displayName: '',
       verified: false,
       profileUrl: '',
-      avatarUrl: ''
+      avatarUrl: '',
+      isRetweeter: false,
+      retweeterInfo: null
     };
     
+    // Check if this is a retweet first
+    const isRetweet = this.detectRetweetInDOM();
+    
+    if (isRetweet) {
+      debugLog('Extracting retweet author info - looking for original author');
+      
+      // For retweets, we want the original author, not the retweeter
+      // The retweeter info is usually in the social context
+      const socialContext = safeQuerySelector('[data-testid="socialContext"]');
+      if (socialContext) {
+        const retweeterLink = safeQuerySelector('a[href*="/"]', socialContext);
+        if (retweeterLink) {
+          const retweeterHref = retweeterLink.getAttribute('href');
+          const retweeterMatch = retweeterHref?.match(/\/([^\/]+)(?:\?|$)/);
+          if (retweeterMatch && retweeterMatch[1] !== 'status') {
+            author.retweeterInfo = {
+              username: retweeterMatch[1],
+              displayName: extractTextContent(retweeterLink) || retweeterMatch[1]
+            };
+            debugLog('Retweeter info extracted:', author.retweeterInfo);
+          }
+        }
+      }
+      
+      // For retweets, look for the original tweet's author info
+      // This is usually in the main tweet content area, not the social context
+      const usernameSelectors = [
+        // Look for author info in the main tweet area, skipping social context
+        'article [data-testid="User-Name"]:not([data-testid="socialContext"] [data-testid="User-Name"]) a[href*="/"]',
+        'article [data-testid="User-Names"]:not([data-testid="socialContext"] [data-testid="User-Names"]) a[href*="/"]',
+        // Fallback selectors for retweets
+        '[data-testid="tweet"] [data-testid="User-Name"] a[href*="/"]',
+        '[data-testid="tweet"] [data-testid="User-Names"] a[href*="/"]'
+      ];
+    } else {
+      debugLog('Extracting original tweet author info');
+    }
+    
     // Extract username (handle) with multiple strategies
-    const usernameSelectors = [
+    const usernameSelectors = isRetweet ? [
+      // For retweets, look in main tweet content, not social context
+      'article [data-testid="User-Name"]:not([data-testid="socialContext"] *) a[href*="/"]',
+      'article [data-testid="User-Names"]:not([data-testid="socialContext"] *) a[href*="/"]',
+      '[data-testid="tweet"] [data-testid="User-Name"] a[href*="/"]',
+      '[data-testid="tweet"] [data-testid="User-Names"] a[href*="/"]'
+    ] : [
       '[data-testid="User-Name"] a[href*="/"]',
       '[data-testid="User-Names"] a[href*="/"]',
       'a[href*="/"][role="link"][tabindex="-1"]',
@@ -591,7 +687,13 @@ class TwitterContentScript {
     }
     
     // Extract display name with improved selectors
-    const displayNameSelectors = [
+    const displayNameSelectors = isRetweet ? [
+      // For retweets, look in main tweet content, not social context
+      'article [data-testid="User-Name"]:not([data-testid="socialContext"] *) span:first-child span',
+      'article [data-testid="User-Names"]:not([data-testid="socialContext"] *) span:first-child',
+      '[data-testid="tweet"] [data-testid="User-Name"] span:first-child span',
+      '[data-testid="tweet"] [data-testid="User-Names"] span:first-child'
+    ] : [
       '[data-testid="User-Name"] span:first-child span',
       '[data-testid="User-Names"] span:first-child',
       '[data-testid="UserAvatar-Container-unknown"] + div span:first-child',
@@ -623,7 +725,12 @@ class TwitterContentScript {
     );
     
     // Extract avatar URL
-    const avatarSelectors = [
+    const avatarSelectors = isRetweet ? [
+      // For retweets, get the main tweet author's avatar, not the retweeter's
+      'article [data-testid="UserAvatar-Container-unknown"]:not([data-testid="socialContext"] *) img',
+      '[data-testid="tweet"] [data-testid="UserAvatar-Container-unknown"] img',
+      '[data-testid="Tweet-User-Avatar"] img'
+    ] : [
       '[data-testid="UserAvatar-Container-unknown"] img',
       '[data-testid="Tweet-User-Avatar"] img',
       '.avatar img',
@@ -633,13 +740,56 @@ class TwitterContentScript {
     for (const selector of avatarSelectors) {
       const element = safeQuerySelector(selector, article) as HTMLImageElement;
       if (element && element.src) {
-        author.avatarUrl = element.src;
-        break;
+        // Filter out blob URLs and other non-HTTP(S) URLs that could be video content
+        if (this.isValidAvatarUrl(element.src)) {
+          author.avatarUrl = element.src;
+          break;
+        }
       }
     }
     
     debugLog('Author info extracted:', author);
     return author;
+  }
+
+  /**
+   * Validate that a URL is a proper avatar URL and not a blob/data URL
+   */
+  private isValidAvatarUrl(url: string): boolean {
+    if (!url || typeof url !== 'string') {
+      return false;
+    }
+    
+    // Filter out blob URLs (video content)
+    if (url.startsWith('blob:')) {
+      debugLog('Filtered out blob URL:', url);
+      return false;
+    }
+    
+    // Filter out data URLs
+    if (url.startsWith('data:')) {
+      debugLog('Filtered out data URL:', url);
+      return false;
+    }
+    
+    // Only allow HTTP(S) URLs
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      debugLog('Filtered out non-HTTP URL:', url);
+      return false;
+    }
+    
+    // Additional validation: typical avatar URLs contain certain patterns
+    // Twitter avatars usually contain 'profile_images' or similar patterns
+    const isLikelyAvatar = url.includes('profile_images') || 
+                          url.includes('avatar') || 
+                          url.includes('abs.twimg.com') ||
+                          url.includes('pbs.twimg.com');
+    
+    if (!isLikelyAvatar) {
+      debugLog('URL does not appear to be an avatar:', url);
+    }
+    
+    return isLikelyAvatar;
   }
 
   /**
@@ -662,28 +812,202 @@ class TwitterContentScript {
       quotes: 0
     };
     
-    // Look for metric buttons
+    // Enhanced metric detection with multiple strategies
+    this.extractMetricsFromButtons(article, metrics);
+    this.extractMetricsFromTestIds(article, metrics);
+    this.extractMetricsFromAriaLabels(article, metrics);
+    this.extractMetricsFromSiblings(article, metrics);
+    
+    debugLog('Extracted metrics:', metrics);
+    return metrics;
+  }
+
+  /**
+   * Extract metrics from role="button" elements
+   */
+  private extractMetricsFromButtons(article: Element, metrics: any): void {
     const buttons = safeQuerySelectorAll('[role="button"]', article);
     
     buttons.forEach(button => {
-      const ariaLabel = button.getAttribute('aria-label') || '';
-      const text = extractTextContent(button);
+      const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+      const text = extractTextContent(button).trim();
       
-      // Parse metrics based on aria-labels and icons
-      if (ariaLabel.includes('like') || ariaLabel.includes('Like')) {
-        metrics.likes = this.parseMetricValue(text);
-      } else if (ariaLabel.includes('retweet') || ariaLabel.includes('Retweet')) {
-        metrics.retweets = this.parseMetricValue(text);
-      } else if (ariaLabel.includes('repl') || ariaLabel.includes('Repl')) {
-        metrics.replies = this.parseMetricValue(text);
-      } else if (ariaLabel.includes('view') || ariaLabel.includes('View')) {
-        metrics.views = this.parseMetricValue(text);
-      } else if (ariaLabel.includes('bookmark') || ariaLabel.includes('Bookmark')) {
-        metrics.bookmarks = this.parseMetricValue(text);
+      // More comprehensive matching patterns
+      if (this.isLikeButton(ariaLabel, button)) {
+        const value = this.parseMetricValue(text);
+        if (value > 0) metrics.likes = Math.max(metrics.likes, value);
+      } else if (this.isRetweetButton(ariaLabel, button)) {
+        const value = this.parseMetricValue(text);
+        if (value > 0) metrics.retweets = Math.max(metrics.retweets, value);
+      } else if (this.isReplyButton(ariaLabel, button)) {
+        const value = this.parseMetricValue(text);
+        if (value > 0) metrics.replies = Math.max(metrics.replies, value);
+      } else if (this.isViewButton(ariaLabel, button)) {
+        const value = this.parseMetricValue(text);
+        if (value > 0) metrics.views = Math.max(metrics.views, value);
+      } else if (this.isBookmarkButton(ariaLabel, button)) {
+        const value = this.parseMetricValue(text);
+        if (value > 0) metrics.bookmarks = Math.max(metrics.bookmarks, value);
       }
     });
+  }
+
+  /**
+   * Extract metrics from data-testid attributes
+   */
+  private extractMetricsFromTestIds(article: Element, metrics: any): void {
+    const testIdSelectors = [
+      { selector: '[data-testid="like"]', type: 'likes' },
+      { selector: '[data-testid="retweet"]', type: 'retweets' },
+      { selector: '[data-testid="reply"]', type: 'replies' },
+      { selector: '[data-testid="bookmark"]', type: 'bookmarks' },
+      { selector: '[data-testid="unretweet"]', type: 'retweets' } // Handles retweeted state
+    ];
+
+    testIdSelectors.forEach(({ selector, type }) => {
+      const element = safeQuerySelector(selector, article);
+      if (element) {
+        const text = extractTextContent(element).trim();
+        const value = this.parseMetricValue(text);
+        if (value > 0) {
+          metrics[type] = Math.max(metrics[type], value);
+        }
+      }
+    });
+  }
+
+  /**
+   * Extract metrics by scanning all elements with aria-label
+   */
+  private extractMetricsFromAriaLabels(article: Element, metrics: any): void {
+    const elementsWithLabels = safeQuerySelectorAll('[aria-label]', article);
     
-    return metrics;
+    elementsWithLabels.forEach(element => {
+      const ariaLabel = element.getAttribute('aria-label') || '';
+      const metric = this.extractMetricFromAriaLabel(element);
+      
+      if (metric && metric.value > 0) {
+        metrics[metric.type] = Math.max(metrics[metric.type], metric.value);
+      }
+    });
+  }
+
+  /**
+   * Enhanced button type detection
+   */
+  private isLikeButton(ariaLabel: string, button: Element): boolean {
+    return ariaLabel.includes('like') || 
+           ariaLabel.includes('heart') ||
+           safeQuerySelector('[data-testid="like"]', button) !== null ||
+           safeQuerySelector('svg[data-testid="icon-heart"]', button) !== null;
+  }
+
+  private isRetweetButton(ariaLabel: string, button: Element): boolean {
+    return ariaLabel.includes('retweet') || 
+           ariaLabel.includes('repost') ||
+           safeQuerySelector('[data-testid="retweet"]', button) !== null ||
+           safeQuerySelector('[data-testid="unretweet"]', button) !== null ||
+           safeQuerySelector('svg[data-testid="icon-retweet"]', button) !== null;
+  }
+
+  private isReplyButton(ariaLabel: string, button: Element): boolean {
+    return ariaLabel.includes('repl') || 
+           ariaLabel.includes('comment') ||
+           safeQuerySelector('[data-testid="reply"]', button) !== null ||
+           safeQuerySelector('svg[data-testid="icon-reply"]', button) !== null;
+  }
+
+  private isViewButton(ariaLabel: string, button: Element): boolean {
+    return ariaLabel.includes('view') ||
+           safeQuerySelector('svg[data-testid="icon-analytics"]', button) !== null;
+  }
+
+  private isBookmarkButton(ariaLabel: string, button: Element): boolean {
+    return ariaLabel.includes('bookmark') ||
+           safeQuerySelector('[data-testid="bookmark"]', button) !== null ||
+           safeQuerySelector('svg[data-testid="icon-bookmark"]', button) !== null;
+  }
+
+  /**
+   * Extract metrics from sibling elements and surrounding text
+   */
+  private extractMetricsFromSiblings(article: Element, metrics: any): void {
+    // Look for engagement metrics in common Twitter patterns
+    const engagementButtons = [
+      { testId: 'reply', type: 'replies' },
+      { testId: 'retweet', type: 'retweets' },
+      { testId: 'unretweet', type: 'retweets' },
+      { testId: 'like', type: 'likes' },
+      { testId: 'bookmark', type: 'bookmarks' }
+    ];
+
+    engagementButtons.forEach(({ testId, type }) => {
+      // Look for the button by test ID
+      const button = safeQuerySelector(`[data-testid="${testId}"]`, article);
+      if (button) {
+        // Check siblings and parent elements for metric text
+        const parent = button.parentElement;
+        const siblings = parent ? Array.from(parent.children) : [button];
+        
+        siblings.forEach(sibling => {
+          const text = extractTextContent(sibling).trim();
+          const value = this.parseMetricValue(text);
+          if (value > 0) {
+            metrics[type] = Math.max(metrics[type], value);
+            debugLog(`Found ${type} metric via sibling: ${value} from text: "${text}"`);
+          }
+        });
+
+        // Also check next sibling elements
+        let nextElement = button.nextElementSibling;
+        let attempts = 0;
+        while (nextElement && attempts < 3) {
+          const text = extractTextContent(nextElement).trim();
+          const value = this.parseMetricValue(text);
+          if (value > 0) {
+            metrics[type] = Math.max(metrics[type], value);
+            debugLog(`Found ${type} metric via next sibling: ${value} from text: "${text}"`);
+            break;
+          }
+          nextElement = nextElement.nextElementSibling;
+          attempts++;
+        }
+      }
+    });
+
+    // Fallback: scan all text elements for numeric patterns near action buttons
+    const allButtons = safeQuerySelectorAll('[role="button"]', article);
+    allButtons.forEach(button => {
+      const buttonText = extractTextContent(button);
+      const ariaLabel = button.getAttribute('aria-label') || '';
+      
+      // Look for nearby spans or divs with numbers
+      const nearbyElements = [
+        ...Array.from(button.querySelectorAll('span, div')),
+        ...Array.from(button.parentElement?.querySelectorAll('span, div') || [])
+      ];
+
+      nearbyElements.forEach(element => {
+        const text = extractTextContent(element).trim();
+        const numericValue = this.parseMetricValue(text);
+        
+        if (numericValue > 0) {
+          // Try to determine metric type from context
+          const context = (buttonText + ' ' + ariaLabel).toLowerCase();
+          
+          if (context.includes('retweet') || context.includes('repost')) {
+            metrics.retweets = Math.max(metrics.retweets, numericValue);
+            debugLog(`Found retweets via context: ${numericValue} from "${text}" (context: "${context}")`);
+          } else if (context.includes('like') || context.includes('heart')) {
+            metrics.likes = Math.max(metrics.likes, numericValue);
+            debugLog(`Found likes via context: ${numericValue} from "${text}" (context: "${context}")`);
+          } else if (context.includes('repl') || context.includes('comment')) {
+            metrics.replies = Math.max(metrics.replies, numericValue);
+            debugLog(`Found replies via context: ${numericValue} from "${text}" (context: "${context}")`);
+          }
+        }
+      });
+    });
   }
 
   /**
@@ -692,43 +1016,30 @@ class TwitterContentScript {
   private parseMetricValue(text: string): number {
     if (!text) return 0;
     
-    // Clean the text first
-    const cleanText = text.replace(/[^\d.,KMBkmb]/g, '').trim();
-    if (!cleanText) return 0;
+    // Handle different cleaning approaches
+    let cleanText = text.trim();
     
-    // Handle different number formats
-    const patterns = [
-      // Standard format: 1.2K, 5.3M, 2.1B
-      /^(\d+(?:\.\d+)?)\s*([KMBkmb])$/,
-      // Comma format: 1,234 or 1,234,567
-      /^(\d{1,3}(?:,\d{3})+)$/,
-      // Simple numbers: 123, 1234
-      /^(\d+)$/,
-      // Decimal numbers: 1.5, 2.3
-      /^(\d+\.\d+)$/
-    ];
+    // Remove common Twitter prefixes/suffixes but preserve numbers
+    cleanText = cleanText.replace(/^(Reply|Like|Retweet|Bookmark|Share|View)\s*/i, '');
+    cleanText = cleanText.replace(/\s*(times?|people|users?)$/i, '');
     
-    for (const pattern of patterns) {
-      const match = cleanText.match(pattern);
-      if (match) {
-        const value = parseFloat(match[1].replace(/,/g, ''));
-        const suffix = match[2]?.toUpperCase();
-        
-        if (suffix) {
-          switch (suffix) {
-            case 'K': return Math.round(value * 1000);
-            case 'M': return Math.round(value * 1000000);
-            case 'B': return Math.round(value * 1000000000);
-            default: return Math.round(value);
-          }
-        } else {
-          return Math.round(value);
-        }
+    // Extract just the numeric part with multipliers
+    const numericMatch = cleanText.match(/(\d+(?:[.,]\d+)?)\s*([KMBkmb])?/);
+    if (!numericMatch) return 0;
+    
+    const value = parseFloat(numericMatch[1].replace(/,/g, ''));
+    const suffix = numericMatch[2]?.toUpperCase();
+    
+    if (suffix) {
+      switch (suffix) {
+        case 'K': return Math.round(value * 1000);
+        case 'M': return Math.round(value * 1000000);
+        case 'B': return Math.round(value * 1000000000);
+        default: return Math.round(value);
       }
     }
     
-    // Fallback to parseNumber from common utilities
-    return parseNumber(cleanText);
+    return Math.round(value);
   }
 
   /**
@@ -888,6 +1199,110 @@ class TwitterContentScript {
   /**
    * Set up URL change detection for SPA navigation
    */
+  /**
+   * Set up comprehensive navigation monitoring
+   */
+  private setupNavigationMonitoring(): void {
+    // Set up URL change detection
+    this.setupUrlChangeDetection();
+    
+    // Set up DOM mutation monitoring for Twitter's SPA content changes
+    this.setupMutationObserver();
+    
+    // Set up periodic URL checking as fallback
+    this.setupPeriodicUrlCheck();
+  }
+
+  /**
+   * Set up MutationObserver to detect DOM changes that indicate navigation
+   */
+  private setupMutationObserver(): void {
+    // Target Twitter's main content container instead of entire body
+    const targetNode = document.querySelector('main[role="main"]') || 
+                      document.querySelector('#react-root main') || 
+                      document.body;
+    
+    const config: MutationObserverInit = {
+      childList: true,
+      subtree: false, // Only monitor direct children to reduce noise
+      attributes: false
+    };
+
+    const handleDOMChanges = debounce((mutations: MutationRecord[]) => {
+      // Only process if URL actually changed
+      if (window.location.href !== this.currentUrl) {
+        debugLog(`MutationObserver detected URL change: ${this.currentUrl} -> ${window.location.href}`);
+        this.handleUrlChange();
+        return;
+      }
+
+      // Only check for tweet content changes if we don't have extracted data yet
+      // or if we detect major content area changes
+      if (this.isTweetPage() && !this.extractedData) {
+        const hasSignificantChanges = mutations.some(mutation => {
+          return Array.from(mutation.addedNodes).some(node => {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              const element = node as Element;
+              // Only look for main content containers, not individual tweets
+              return element.querySelector && (
+                element.querySelector('article[data-testid="tweet"]') ||
+                element.matches('div[data-testid="primaryColumn"]') ||
+                element.matches('section[role="region"]')
+              );
+            }
+            return false;
+          });
+        });
+
+        if (hasSignificantChanges) {
+          debugLog('MutationObserver detected significant content changes, re-extracting...');
+          setTimeout(() => {
+            this.extractTweetData();
+          }, 1500); // Longer delay to ensure content is fully loaded
+        }
+      }
+    }, 1000); // Increased debounce time to reduce frequency
+
+    this.mutationObserver = new MutationObserver(handleDOMChanges);
+    this.mutationObserver.observe(targetNode, config);
+    
+    debugLog('MutationObserver set up for Twitter navigation detection');
+  }
+
+  /**
+   * Set up periodic URL checking as a fallback mechanism
+   */
+  private setupPeriodicUrlCheck(): void {
+    this.urlCheckInterval = setInterval(() => {
+      if (window.location.href !== this.currentUrl) {
+        debugLog(`Periodic check detected URL change: ${this.currentUrl} -> ${window.location.href}`);
+        this.handleUrlChange();
+      }
+    }, 5000); // Check every 5 seconds to reduce background activity
+    
+    debugLog('Periodic URL checking set up');
+  }
+
+  /**
+   * Handle URL change (extracted from the original setupUrlChangeDetection)
+   */
+  private handleUrlChange(): void {
+    debugLog(`URL changed from ${this.currentUrl} to ${window.location.href}`);
+    this.cleanup(); // Clean up previous state
+    this.currentUrl = window.location.href;
+    
+    if (this.isTweetPage()) {
+      // Re-extract data for new tweet with proper delay
+      setTimeout(() => {
+        this.waitForPageLoad().then(() => {
+          this.extractTweetData();
+        });
+      }, 1500); // Increased delay for Twitter's loading
+    } else {
+      debugLog('Not on tweet page after navigation');
+    }
+  }
+
   private setupUrlChangeDetection(): void {
     // Override pushState and replaceState to detect navigation
     const originalPushState = history.pushState;
@@ -895,20 +1310,7 @@ class TwitterContentScript {
     
     const handleUrlChange = debounce(() => {
       if (window.location.href !== this.currentUrl) {
-        debugLog(`URL changed from ${this.currentUrl} to ${window.location.href}`);
-        this.cleanup(); // Clean up previous state
-        this.currentUrl = window.location.href;
-        
-        if (this.isTweetPage()) {
-          // Re-extract data for new tweet with proper delay
-          setTimeout(() => {
-            this.waitForPageLoad().then(() => {
-              this.extractTweetData();
-            });
-          }, 1500); // Increased delay for Twitter's loading
-        } else {
-          debugLog('Not on tweet page after navigation');
-        }
+        this.handleUrlChange();
       }
     }, 300);
     
@@ -929,12 +1331,25 @@ class TwitterContentScript {
     // Also listen for popstate
     window.addEventListener('popstate', handleUrlChange);
     
-    // Store cleanup function
-    (window as any).__quotewise_cleanup = () => {
+    // Store cleanup function (bound to this instance)
+    const cleanupFunction = () => {
       history.pushState = originalPushState;
       history.replaceState = originalReplaceState;
       window.removeEventListener('popstate', handleUrlChange);
+      
+      // Clean up new observers
+      if (this.mutationObserver) {
+        this.mutationObserver.disconnect();
+        this.mutationObserver = null;
+      }
+      
+      if (this.urlCheckInterval) {
+        clearInterval(this.urlCheckInterval);
+        this.urlCheckInterval = null;
+      }
     };
+    
+    (window as any).__quotewise_cleanup = cleanupFunction;
   }
 
   /**
@@ -943,6 +1358,25 @@ class TwitterContentScript {
   private cleanup(): void {
     this.extractedData = null;
     debugLog('Cleaned up previous tweet data');
+  }
+  
+  /**
+   * Full cleanup including observers (called on navigation)
+   */
+  private fullCleanup(): void {
+    this.cleanup();
+    
+    if (this.mutationObserver) {
+      this.mutationObserver.disconnect();
+      this.mutationObserver = null;
+    }
+    
+    if (this.urlCheckInterval) {
+      clearInterval(this.urlCheckInterval);
+      this.urlCheckInterval = null;
+    }
+    
+    debugLog('Full cleanup completed');
   }
 
   /**
