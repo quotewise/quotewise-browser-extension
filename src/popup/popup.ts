@@ -10,6 +10,7 @@ import {
   QuoteSubmissionRequest,
   AttributionType
 } from '../types/index';
+import type { Collection } from '../types/api';
 import { AuthChecker } from '../auth/auth-checker';
 import { LoginHandler } from '../auth/login-handler';
 import type { AuthStatus, AuthError } from '../types/auth';
@@ -42,7 +43,7 @@ interface TweetDataState {
 }
 
 interface UIState {
-  currentView: 'loading' | 'auth-required' | 'insufficient-privileges' | 'quote-capture' | 'error' | 'success' | 'login-in-progress';
+  currentView: 'loading' | 'auth-required' | 'insufficient-privileges' | 'quote-capture' | 'not-tweet-page' | 'error' | 'success' | 'login-in-progress';
   isFormValid: boolean;
   isDuplicateChecked: boolean;
   showOriginatorResults: boolean;
@@ -70,6 +71,14 @@ interface SubmissionState {
   };
 }
 
+interface CollectionsState {
+  collections: Collection[];
+  selectedCollectionId?: string;
+  addToCollection: boolean;
+  isLoading: boolean;
+  error?: string;
+}
+
 interface PopupState {
   auth: AuthenticationState;
   tweet: TweetDataState;
@@ -77,6 +86,7 @@ interface PopupState {
   originator: OriginatorState;
   submission: SubmissionState;
   duplicate: DuplicateState;
+  collections: CollectionsState;
 }
 
 type PartialPopupState = {
@@ -127,6 +137,11 @@ class SimplePopupStateManager {
         lastCheckText: '',
         lastCheckOriginator: '',
         lastCheckUrl: ''
+      },
+      collections: {
+        collections: [],
+        addToCollection: true, // Default to checked
+        isLoading: false
       }
     };
   }
@@ -192,6 +207,7 @@ class SimpleQuotewisePopup {
   private originatorSearch: OriginatorSearch;
   private duplicateChecker: DuplicateChecker;
   private duplicateDisplay: DuplicateDisplay;
+  private navigationCheckInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     this.stateManager = new SimplePopupStateManager();
@@ -217,16 +233,34 @@ class SimpleQuotewisePopup {
   }
 
   private async init(): Promise<void> {
-    console.log('Initializing Quotewise popup');
+    console.log('Initializing Quotewise popup v1.0.1');
     
     try {
+      console.log('Setting up event listeners...');
       this.setupEventListeners();
+      
+      console.log('Initializing originator search...');
       this.initializeOriginatorSearch();
+      
+      console.log('Initializing duplicate checker...');
       this.initializeDuplicateChecker();
+      
+      console.log('Setting up state manager subscription...');
       this.stateManager.subscribe(this.onStateChange.bind(this));
       
+      console.log('About to check auth status...');
       await this.checkAuthStatus();
-      await this.loadTweetData();
+      
+      // Only load tweet data after auth check completes successfully
+      const currentState = this.stateManager.getState();
+      if (currentState.auth.isAuthenticated && currentState.ui.currentView !== 'error') {
+        console.log('About to load tweet data...');
+        await this.loadTweetData();
+      } else {
+        console.log('Skipping tweet data load - not authenticated or auth error occurred');
+      }
+      
+      console.log('Popup initialization completed successfully');
       
     } catch (error) {
       console.error('Error initializing popup:', error);
@@ -245,13 +279,17 @@ class SimpleQuotewisePopup {
     this.updateLoadingState(state);
     this.updateOriginatorState(state);
     this.updateDuplicateState(state);
+    this.updateCollectionsState(state);
   }
 
   private updateView(currentView: string): void {
+    // Handle navigation monitoring based on current view
+    this.handleNavigationMonitoring(currentView);
     const sections = [
       'auth-required', 
       'insufficient-privileges', 
       'quote-capture', 
+      'not-tweet-page',
       'error-state', 
       'success-state', 
       'loading-state',
@@ -265,6 +303,7 @@ class SimpleQuotewisePopup {
           (currentView === 'auth-required' && sectionId === 'auth-required') ||
           (currentView === 'insufficient-privileges' && sectionId === 'insufficient-privileges') ||
           (currentView === 'quote-capture' && sectionId === 'quote-capture') ||
+          (currentView === 'not-tweet-page' && sectionId === 'not-tweet-page') ||
           (currentView === 'error' && sectionId === 'error-state') ||
           (currentView === 'success' && sectionId === 'success-state') ||
           (currentView === 'loading' && sectionId === 'loading-state') ||
@@ -344,6 +383,23 @@ class SimpleQuotewisePopup {
     // Quote text changes
     const quoteTextArea = document.getElementById('quote-text') as HTMLTextAreaElement;
     quoteTextArea?.addEventListener('input', this.handleQuoteTextChange.bind(this));
+
+    // Collections dropdown
+    const collectionSelect = document.getElementById('collection-select') as HTMLSelectElement;
+    collectionSelect?.addEventListener('change', this.handleCollectionChange.bind(this));
+
+    // Add to collection checkbox
+    const addToCollectionCheckbox = document.getElementById('add-to-collection') as HTMLInputElement;
+    addToCollectionCheckbox?.addEventListener('change', this.handleAddToCollectionToggle.bind(this));
+
+    // Refresh page check button (for not-tweet-page state)
+    const refreshPageCheckButton = document.getElementById('refresh-page-check');
+    refreshPageCheckButton?.addEventListener('click', this.handleRefreshPageCheck.bind(this));
+
+    // Cleanup when popup closes
+    window.addEventListener('beforeunload', () => {
+      this.destroy();
+    });
   }
 
   private initializeOriginatorSearch(): void {
@@ -459,6 +515,25 @@ class SimpleQuotewisePopup {
   private updateAuthUI(currentView: string): void {
     const state = this.stateManager.getState();
     
+    // Update header status text
+    const statusTextElement = document.getElementById('status-text');
+    if (statusTextElement) {
+      if (state.auth.checkInProgress) {
+        statusTextElement.textContent = 'Checking...';
+      } else if (state.auth.isAuthenticated) {
+        if (state.auth.userInfo) {
+          const roleText = state.auth.userInfo.isAdmin ? 'Admin' : 'User';
+          statusTextElement.textContent = `${roleText}: ${state.auth.userInfo.username}`;
+        } else {
+          statusTextElement.textContent = 'Authenticated';
+        }
+      } else if (state.auth.authError) {
+        statusTextElement.textContent = 'Not authenticated';
+      } else {
+        statusTextElement.textContent = 'Ready';
+      }
+    }
+    
     // Update login button text and state
     const loginButton = document.getElementById('login-button') as HTMLButtonElement;
     if (loginButton) {
@@ -571,12 +646,14 @@ class SimpleQuotewisePopup {
     }
 
     const sourceUrl = state.tweet.data?.url || '';
+    const socialHandle = state.tweet.data?.author?.username;
     
     try {
       await this.duplicateChecker.checkForDuplicates(
         quoteText, 
         state.originator.selectedOriginator.id.toString(),
-        sourceUrl
+        sourceUrl,
+        socialHandle
       );
     } catch (error) {
       console.error('Error checking duplicates:', error);
@@ -607,6 +684,39 @@ class SimpleQuotewisePopup {
   private updateDuplicateState(state: PopupState): void {
     // Update duplicate display component
     this.duplicateDisplay.updateDisplay(state.duplicate);
+    
+    // Update collection badge based on duplicate check results
+    this.updateCollectionBadge(state);
+  }
+
+  private updateCollectionsState(state: PopupState): void {
+    // Update collections UI based on state
+    const collectionSelect = document.getElementById('collection-select') as HTMLSelectElement;
+    const addToCollectionCheckbox = document.getElementById('add-to-collection') as HTMLInputElement;
+    const collectionsSection = document.querySelector('.collections-section') as HTMLElement;
+
+    if (collectionSelect && state.collections.selectedCollectionId) {
+      collectionSelect.value = state.collections.selectedCollectionId;
+    }
+
+    if (addToCollectionCheckbox) {
+      addToCollectionCheckbox.checked = state.collections.addToCollection;
+    }
+
+    // Update disabled state based on checkbox
+    if (collectionsSection) {
+      if (state.collections.addToCollection) {
+        collectionsSection.classList.remove('disabled');
+        if (collectionSelect) {
+          collectionSelect.disabled = false;
+        }
+      } else {
+        collectionsSection.classList.add('disabled');
+        if (collectionSelect) {
+          collectionSelect.disabled = true;
+        }
+      }
+    }
   }
 
   private triggerAutomaticDuplicateCheck(): void {
@@ -614,16 +724,21 @@ class SimpleQuotewisePopup {
     const quoteTextArea = document.getElementById('quote-text') as HTMLTextAreaElement;
     const quoteText = quoteTextArea?.value?.trim();
     
-    if (!quoteText || !state.originator.selectedOriginator) {
+    if (!quoteText) {
       return;
     }
 
     const sourceUrl = state.tweet.data?.url || '';
+    const socialHandle = state.tweet.data?.author?.username;
+    
+    // If originator is selected, include it; otherwise check without originator for smart suggestions
+    const originatorId = state.originator.selectedOriginator?.id.toString();
     
     this.duplicateChecker.checkForDuplicatesDebounced(
       quoteText,
-      state.originator.selectedOriginator.id.toString(),
-      sourceUrl
+      originatorId,
+      sourceUrl,
+      socialHandle
     );
   }
 
@@ -749,6 +864,8 @@ class SimpleQuotewisePopup {
   }
 
   private async checkAuthStatus(): Promise<void> {
+    console.log('checkAuthStatus: Starting auth check');
+    
     this.stateManager.setState({
       auth: { checkInProgress: true },
       ui: { 
@@ -758,33 +875,86 @@ class SimpleQuotewisePopup {
     });
 
     try {
-      const authResult = await this.authChecker.checkAuthStatus();
+      console.log('checkAuthStatus: Sending CHECK_AUTH_STATUS message to service worker');
+      
+      // Set a reasonable timeout for auth check
+      const authPromise = chrome.runtime.sendMessage({ type: 'CHECK_AUTH_STATUS' });
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Auth check timeout')), 10000)
+      );
+      
+      const response = await Promise.race([authPromise, timeoutPromise]);
+      
+      console.log('checkAuthStatus: Received response from service worker:', response);
+      
+      if (chrome.runtime.lastError) {
+        console.error('checkAuthStatus: Chrome runtime error:', chrome.runtime.lastError);
+        throw new Error(chrome.runtime.lastError.message);
+      }
 
-      if ('type' in authResult) {
-        // Authentication error
-        this.handleAuthError(authResult);
+      // More robust response validation
+      if (response && typeof response === 'object' && 'isAuthenticated' in response) {
+        if (response.isAuthenticated === true) {
+          console.log('checkAuthStatus: User is authenticated, calling handleAuthSuccess');
+          this.handleAuthSuccess({
+            isAuthenticated: response.isAuthenticated,
+            isStaff: response.isStaff || false,
+            username: response.username
+          });
+        } else {
+          console.log('checkAuthStatus: User is not authenticated, calling handleAuthError');
+          this.handleAuthError({
+            type: 'not_authenticated',
+            message: 'Please log in to Quotewise',
+            requiresLogin: true
+          });
+        }
       } else {
-        // Valid authentication status
-        this.handleAuthSuccess(authResult);
+        console.error('checkAuthStatus: Invalid response format:', response);
+        // Try direct API fallback for invalid responses
+        await this.fallbackAuthCheck();
       }
 
     } catch (error) {
-      console.error('Error checking auth status:', error);
-      this.stateManager.setState({
-        auth: { 
-          isAuthenticated: false,
-          isStaff: false,
-          checkInProgress: false,
-          authError: {
-            type: 'network_error',
-            message: 'Failed to check authentication status',
-            requiresLogin: false
-          }
-        },
-        ui: { 
-          currentView: 'error',
-          loadingMessage: 'Failed to check authentication status'
-        }
+      console.error('checkAuthStatus: Error occurred:', error);
+      
+      // For timeout or network errors, try direct API fallback
+      if (error instanceof Error && (error.message.includes('timeout') || error.message.includes('network'))) {
+        console.log('checkAuthStatus: Attempting direct API fallback due to network/timeout error');
+        await this.fallbackAuthCheck();
+      } else {
+        this.handleAuthError({
+          type: 'network_error',
+          message: 'Failed to check authentication status',
+          requiresLogin: false
+        });
+      }
+    }
+  }
+
+  /**
+   * Fallback authentication check using direct API call
+   */
+  private async fallbackAuthCheck(): Promise<void> {
+    try {
+      console.log('fallbackAuthCheck: Attempting direct API auth check');
+      const authChecker = new AuthChecker(apiClient);
+      const authResult = await authChecker.checkAuthStatus();
+      
+      if ('type' in authResult) {
+        // AuthError
+        this.handleAuthError(authResult);
+      } else {
+        // AuthStatus
+        console.log('fallbackAuthCheck: Direct API auth successful:', authResult);
+        this.handleAuthSuccess(authResult);
+      }
+    } catch (error) {
+      console.error('fallbackAuthCheck: Direct API auth also failed:', error);
+      this.handleAuthError({
+        type: 'network_error',
+        message: 'Unable to verify authentication status',
+        requiresLogin: false
       });
     }
   }
@@ -856,6 +1026,9 @@ class SimpleQuotewisePopup {
         currentView: 'quote-capture'
       }
     });
+
+    // Load user's collections after successful authentication
+    this.loadCollections();
   }
 
   private async loadTweetData(): Promise<void> {
@@ -868,7 +1041,7 @@ class SimpleQuotewisePopup {
         type: MessageType.GET_TWEET_DATA
       });
 
-      if (response.success && response.data) {
+      if (response && response.success && response.data) {
         this.stateManager.setState({
           tweet: {
             data: response.data,
@@ -879,23 +1052,48 @@ class SimpleQuotewisePopup {
         
         // Populate the form
         const quoteTextArea = document.getElementById('quote-text') as HTMLTextAreaElement;
-        if (quoteTextArea && !quoteTextArea.value) {
+        if (quoteTextArea && !quoteTextArea.value.trim()) {
           quoteTextArea.value = response.data.text;
           this.handleQuoteTextChange(); // Trigger validation
         }
+
+        // Populate tweet information display
+        this.populateTweetInfo(response.data);
+        
+        // Auto-trigger duplicate check with social handle
+        this.triggerAutomaticDuplicateCheck();
         
       } else {
-        this.stateManager.setState({
-          tweet: {
-            data: null,
-            isLoading: false,
-            error: 'No tweet data found. Make sure you are on a tweet page.'
-          },
-          ui: { 
-            currentView: 'error',
-            loadingMessage: 'No tweet data found. Make sure you are on a tweet page.'
-          }
-        });
+        // No tweet data, but check if user is authenticated
+        const currentState = this.stateManager.getState();
+        if (currentState.auth.isAuthenticated) {
+          // User is authenticated but not on a tweet page
+          this.stateManager.setState({
+            tweet: {
+              data: null,
+              isLoading: false,
+              error: 'Not on a tweet page'
+            },
+            ui: { 
+              currentView: 'not-tweet-page',
+              loadingMessage: ''
+            }
+          });
+        } else {
+          // Not authenticated - this shouldn't happen since we check auth first
+          // but handle it just in case
+          this.stateManager.setState({
+            tweet: {
+              data: null,
+              isLoading: false,
+              error: 'No tweet data found'
+            },
+            ui: { 
+              currentView: 'error',
+              loadingMessage: 'No tweet data found'
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Error loading tweet data:', error);
@@ -912,12 +1110,387 @@ class SimpleQuotewisePopup {
       });
     }
   }
+
+  private async loadCollections(): Promise<void> {
+    this.stateManager.setState({
+      collections: { isLoading: true }
+    });
+
+    try {
+      // Load user preferences first
+      await this.loadCollectionsPreferences();
+
+      // Fetch collections from API
+      const response = await apiClient.listCollections();
+      
+      this.stateManager.setState({
+        collections: {
+          collections: response.collections,
+          selectedCollectionId: this.stateManager.getState().collections.selectedCollectionId || response.default_collection_id || undefined,
+          isLoading: false,
+          error: undefined
+        }
+      });
+
+      // Update the UI
+      this.updateCollectionsUI(response.collections, response.default_collection_id);
+
+    } catch (error) {
+      console.error('Error loading collections:', error);
+      this.stateManager.setState({
+        collections: {
+          collections: [],
+          isLoading: false,
+          error: 'Failed to load collections'
+        }
+      });
+    }
+  }
+
+  private async loadCollectionsPreferences(): Promise<void> {
+    try {
+      const result = await chrome.storage.local.get(['addToCollection', 'selectedCollectionId']);
+      
+      this.stateManager.setState({
+        collections: {
+          addToCollection: result.addToCollection !== undefined ? result.addToCollection : true,
+          selectedCollectionId: result.selectedCollectionId
+        }
+      });
+
+      // Update UI elements with saved preferences
+      const addToCollectionCheckbox = document.getElementById('add-to-collection') as HTMLInputElement;
+      if (addToCollectionCheckbox) {
+        addToCollectionCheckbox.checked = this.stateManager.getState().collections.addToCollection;
+      }
+
+    } catch (error) {
+      console.error('Error loading collections preferences:', error);
+    }
+  }
+
+  private async saveCollectionsPreferences(): Promise<void> {
+    try {
+      const state = this.stateManager.getState().collections;
+      await chrome.storage.local.set({
+        addToCollection: state.addToCollection,
+        selectedCollectionId: state.selectedCollectionId
+      });
+    } catch (error) {
+      console.error('Error saving collections preferences:', error);
+    }
+  }
+
+  private updateCollectionsUI(collections: Collection[], defaultCollectionId?: string | null): void {
+    const collectionSelect = document.getElementById('collection-select') as HTMLSelectElement;
+    if (!collectionSelect) return;
+
+    // Clear existing options
+    collectionSelect.innerHTML = '';
+
+    if (collections.length === 0) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = 'No collections available';
+      option.disabled = true;
+      collectionSelect.appendChild(option);
+      return;
+    }
+
+    // Add collections to dropdown
+    collections.forEach(collection => {
+      const option = document.createElement('option');
+      option.value = collection.id;
+      
+      let displayText = collection.name;
+      if (collection.is_default) {
+        displayText += ' (default)';
+      }
+      if (collection.quote_count > 0) {
+        displayText += ` (${collection.quote_count} quotes)`;
+      }
+      
+      option.textContent = displayText;
+      collectionSelect.appendChild(option);
+    });
+
+    // Set selected collection
+    const state = this.stateManager.getState().collections;
+    if (state.selectedCollectionId) {
+      collectionSelect.value = state.selectedCollectionId;
+    } else if (defaultCollectionId) {
+      collectionSelect.value = defaultCollectionId;
+      this.stateManager.setState({
+        collections: { selectedCollectionId: defaultCollectionId }
+      });
+    }
+  }
+
+  private handleCollectionChange(): void {
+    const collectionSelect = document.getElementById('collection-select') as HTMLSelectElement;
+    if (!collectionSelect) return;
+
+    this.stateManager.setState({
+      collections: { selectedCollectionId: collectionSelect.value }
+    });
+
+    // Save preference
+    this.saveCollectionsPreferences();
+  }
+
+  private handleAddToCollectionToggle(): void {
+    const addToCollectionCheckbox = document.getElementById('add-to-collection') as HTMLInputElement;
+    if (!addToCollectionCheckbox) return;
+
+    this.stateManager.setState({
+      collections: { addToCollection: addToCollectionCheckbox.checked }
+    });
+
+    // Save preference
+    this.saveCollectionsPreferences();
+    
+    // Trigger immediate UI update
+    this.updateCollectionsState(this.stateManager.getState());
+  }
+
+  private async handleRefreshPageCheck(): Promise<void> {
+    // Re-check the current page for tweet data
+    console.log('Refreshing page check...');
+    
+    this.stateManager.setState({
+      ui: { 
+        currentView: 'loading',
+        loadingMessage: 'Checking current page...' 
+      }
+    });
+
+    try {
+      // Force reload tweet data
+      await this.loadTweetData();
+    } catch (error) {
+      console.error('Error during refresh page check:', error);
+      this.stateManager.setState({
+        ui: { 
+          currentView: 'error',
+          loadingMessage: 'Failed to check current page'
+        }
+      });
+    }
+  }
+
+  private populateTweetInfo(tweetData: any): void {
+    
+    // Tweet info (date, URL)
+    const tweetInfoElement = document.getElementById('tweet-info');
+    if (tweetInfoElement && tweetData.date) {
+      const date = new Date(tweetData.date);
+      tweetInfoElement.innerHTML = `
+        <div class="tweet-date">Posted: ${date.toLocaleDateString()}</div>
+        <div class="tweet-url"><a href="${tweetData.url}" target="_blank">View Tweet</a></div>
+      `;
+    }
+
+    // Author info
+    const authorInfoElement = document.getElementById('author-info');
+    if (authorInfoElement && tweetData.author) {
+      let authorHtml = `
+        <div class="author-name">@${tweetData.author.username}</div>
+        <div class="author-display">${tweetData.author.displayName || tweetData.author.username}</div>
+      `;
+      
+      // Add retweeter info if this is a retweet
+      if (tweetData.retweeter && tweetData.tweetType === 'retweet') {
+        authorHtml += `
+          <div class="retweet-context">
+            <span class="retweet-indicator">🔄 Retweeted by @${tweetData.retweeter.username}</span>
+          </div>
+        `;
+      }
+      
+      authorInfoElement.innerHTML = authorHtml;
+    }
+
+    // Metrics info
+    const metricsInfoElement = document.getElementById('metrics-info');
+    if (metricsInfoElement) {
+      metricsInfoElement.innerHTML = `
+        <div class="metrics">
+          <span class="likes">❤️ ${tweetData.likes || 0}</span>
+          <span class="retweets">🔄 ${tweetData.retweets || 0}</span>
+          <span class="replies">💬 ${tweetData.replies || 0}</span>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Update collection badge based on duplicate check results
+   */
+  private updateCollectionBadge(state: PopupState): void {
+    const badgeInfo = this.determineCollectionBadgeState(state);
+    
+    // Send message to service worker to update badge
+    chrome.runtime.sendMessage({
+      type: 'UPDATE_COLLECTION_BADGE',
+      data: badgeInfo
+    }).catch(error => {
+      console.error('Error sending badge update message:', error);
+    });
+  }
+
+  /**
+   * Determine collection badge state from duplicate check results
+   */
+  private determineCollectionBadgeState(state: PopupState): import('../types/chrome').CollectionBadgeInfo {
+    const duplicate = state.duplicate;
+    const tweet = state.tweet.data;
+    
+    // Default state - ready but not processed
+    if (!duplicate.hasChecked || !duplicate.result) {
+      return {
+        state: duplicate.isChecking ? 'processing' : 'ready',
+        quoteText: tweet?.text?.substring(0, 50)
+      };
+    }
+
+    const result = duplicate.result;
+    
+    // Check if any exact matches are in user's collections
+    const inUserCollections = result.matches.some(match => 
+      match.similarity >= 95 && match.in_user_collections
+    );
+    
+    if (inUserCollections) {
+      return {
+        state: 'already_collected',
+        quoteText: tweet?.text?.substring(0, 50)
+      };
+    }
+
+    // Check if quote exists in Quotosaurus but not in user collections
+    const exactMatchExists = result.matches.some(match => match.similarity >= 95);
+    
+    if (result.in_quotosaurus || exactMatchExists) {
+      return {
+        state: 'should_collect',
+        quoteText: tweet?.text?.substring(0, 50)
+      };
+    }
+
+    // New quote not in Quotosaurus
+    return {
+      state: 'new_quote',
+      quoteText: tweet?.text?.substring(0, 50)
+    };
+  }
+
+  /**
+   * Handle navigation monitoring based on current view
+   */
+  private handleNavigationMonitoring(currentView: string): void {
+    if (currentView === 'not-tweet-page') {
+      // Start monitoring for navigation changes
+      this.startNavigationMonitoring();
+    } else {
+      // Stop monitoring when not needed
+      this.stopNavigationMonitoring();
+    }
+  }
+
+  /**
+   * Start monitoring for navigation changes to tweet pages
+   */
+  private startNavigationMonitoring(): void {
+    if (this.navigationCheckInterval) return; // Already monitoring
+    
+    console.log('Starting navigation monitoring...');
+    this.navigationCheckInterval = setInterval(() => {
+      this.checkForNavigationChange();
+    }, 1000); // Check every 1 second for faster response
+  }
+
+  /**
+   * Stop navigation monitoring
+   */
+  private stopNavigationMonitoring(): void {
+    if (this.navigationCheckInterval) {
+      console.log('Stopping navigation monitoring...');
+      clearInterval(this.navigationCheckInterval);
+      this.navigationCheckInterval = null;
+    }
+  }
+
+  /**
+   * Check if user has navigated to a tweet page
+   */
+  private async checkForNavigationChange(): Promise<void> {
+    try {
+      console.log('Checking for navigation change...');
+      
+      // Force the content script to re-extract data by requesting it fresh
+      const response = await this.messageHandler.sendMessage({
+        type: MessageType.EXTRACT_TWEET_DATA
+      });
+
+      // Then check if we got tweet data
+      const dataResponse = await this.messageHandler.sendMessage({
+        type: MessageType.GET_TWEET_DATA
+      });
+
+      if (dataResponse && dataResponse.success && dataResponse.data) {
+        console.log('Navigation detected: Found tweet data, switching to quote capture');
+        // Found tweet data! Stop monitoring and switch to quote capture
+        this.stopNavigationMonitoring();
+        await this.loadTweetData();
+      } else {
+        console.log('Still no tweet data found');
+      }
+    } catch (error) {
+      console.log('Error during navigation check:', error);
+      // Continue monitoring even if there's an error
+    }
+  }
+
+  /**
+   * Cleanup when popup is being destroyed
+   */
+  destroy(): void {
+    this.stopNavigationMonitoring();
+  }
+}
+
+// Global variable to prevent double initialization
+let popupInstance: SimpleQuotewisePopup | null = null;
+
+// Fix for Chrome extension popup width issue on Mac
+function fixPopupWidthOnMac(): void {
+  chrome.runtime.getPlatformInfo(info => {
+    if (info.os === 'mac') {
+      setTimeout(() => {
+        // Force redraw by increasing width by 1px to fix Mac rendering bug
+        const currentWidth = document.body.clientWidth;
+        document.body.style.width = `${currentWidth + 1}px`;
+        console.log('Applied Mac width fix:', currentWidth, '→', currentWidth + 1);
+      }, 250); // Allow popup animation to complete
+    }
+  });
 }
 
 // Initialize popup when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+  // Prevent double initialization
+  if (popupInstance) {
+    console.log('Popup already initialized, skipping...');
+    return;
+  }
+
   try {
-    new SimpleQuotewisePopup();
+    console.log('Starting popup initialization...');
+    
+    // Apply Mac width fix
+    fixPopupWidthOnMac();
+    
+    popupInstance = new SimpleQuotewisePopup();
   } catch (error) {
     console.error('Failed to initialize popup:', error);
     

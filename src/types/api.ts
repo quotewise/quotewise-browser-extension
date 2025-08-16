@@ -5,10 +5,16 @@
 
 // Core API response interfaces matching popup expectations
 export interface AuthStatusResult {
-  isAuthenticated: boolean;
-  userInfo?: {
+  authenticated: boolean;
+  is_admin: boolean;
+  user?: {
+    id: number;
     username: string;
-    isAdmin: boolean;
+    email: string;
+  };
+  permissions: {
+    can_submit_quotes: boolean;
+    can_review_quotes: boolean;
   };
   sessionExpiry?: string; // ISO date string
 }
@@ -22,21 +28,45 @@ export interface OriginatorSearchResult {
 }
 
 export interface DuplicateCheckResult {
-  recommendation: 'duplicate' | 'new_version' | 'new_quote';
+  recommendation: 'duplicate' | 'new_version' | 'new_quote' | 'attribution_conflict' | 
+                  'new_quote_known_author' | 'duplicate_known_author' | 'new_version_known_author' | 'attribution_conflict_resolved';
   confidence: number;
+  in_quotosaurus: boolean;
+  social_originator?: {
+    id: number;
+    full_name: string;
+    handle: string;
+    platform: string;
+    platform_name: string;
+    match_confidence: number;
+  };
+  suggested_originator_id?: number;
   matches: Array<{
     quote_id: string;
     version_id: number;
     text: string;
     similarity: number;
     match_type: string;
+    in_user_collections: boolean;
     originator: Originator;
     workflow_status: string;
     likes_count: number;
   }>;
-  existing_sightings_for_url?: Array<any>;
+  existing_sightings_for_url?: Array<{
+    id: number;
+    quote_id: string;
+    source_url: string;
+  }>;
   reasoning: string;
-  search_metadata?: any;
+  search_metadata: {
+    originator_scoped?: boolean;
+    social_handle_checked?: boolean;
+    social_handle_matched?: boolean;
+    source_url_checked?: boolean;
+    total_matches?: number;
+    query_time_ms?: number;
+    error?: boolean;
+  };
 }
 
 export interface QuoteSubmissionResult {
@@ -145,9 +175,27 @@ export interface EnvironmentConfig {
 export interface QuotewiseApiClient {
   baseUrl: string;
   searchOriginators(query: string, limit?: number): Promise<OriginatorSearchResult[]>;
-  checkQuoteDuplicate(text: string, originatorId?: string, sourceUrl?: string): Promise<DuplicateCheckResult>;
+  checkQuoteDuplicate(text: string, originatorId?: string, sourceUrl?: string, socialHandle?: string): Promise<DuplicateCheckResult>;
   submitQuote(quoteData: QuoteSubmissionRequest): Promise<QuoteSubmissionResult>;
   checkAuthStatus(): Promise<AuthStatusResult>;
+  listCollections(): Promise<CollectionsListResponse>;
+}
+
+// Collections
+export interface Collection {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  is_default: boolean;
+  quote_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionsListResponse {
+  collections: Collection[];
+  default_collection_id: string | null;
 }
 
 // Error classes

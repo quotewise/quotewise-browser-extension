@@ -10,6 +10,7 @@ import type {
   QuoteSubmissionRequest,
   QuoteSubmissionResult,
   AuthStatusResult,
+  CollectionsListResponse,
   AuthenticationError,
   ApiError
 } from '../types/api';
@@ -44,10 +45,31 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         ...options
       };
       
+      console.log(`Making ${options.method || 'GET'} request to ${endpoint}`, {
+        headers: requestOptions.headers,
+        body: options.body || 'None'
+      });
+      
       const response = await fetch(`${this.baseUrl}${endpoint}`, requestOptions);
+      
+      console.log(`API Response: ${response.status} for ${endpoint}`, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
       
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
+          console.error(`Authentication failed: ${response.status} ${response.statusText}`);
+          
+          // Try to get the error response body for more details
+          try {
+            const errorText = await response.text();
+            console.error('Error response body:', errorText);
+          } catch (e) {
+            console.error('Could not read error response body');
+          }
+          
           const authError: AuthenticationError = new Error('Authentication required') as any;
           authError.name = 'AuthenticationError';
           throw authError;
@@ -123,23 +145,32 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       return result;
     } catch (error) {
       if (error instanceof Error && error.name === 'AuthenticationError') {
-        return { isAuthenticated: false };
+        return { 
+          authenticated: false, 
+          is_admin: false, 
+          permissions: { can_submit_quotes: false, can_review_quotes: false } 
+        };
       }
       
       // For other errors, assume not authenticated
       console.error('Error checking auth status:', error);
-      return { isAuthenticated: false };
+      return { 
+        authenticated: false, 
+        is_admin: false, 
+        permissions: { can_submit_quotes: false, can_review_quotes: false } 
+      };
     }
   }
 
   /**
    * Check for duplicate quotes
    */
-  async checkQuoteDuplicate(text: string, originatorId?: string, sourceUrl?: string): Promise<DuplicateCheckResult> {
+  async checkQuoteDuplicate(text: string, originatorId?: string, sourceUrl?: string, socialHandle?: string): Promise<DuplicateCheckResult> {
     if (!text.trim()) {
       return {
         recommendation: 'new_quote',
         confidence: 1.0,
+        in_quotosaurus: false,
         matches: [],
         reasoning: 'No quote text provided',
         search_metadata: {}
@@ -148,9 +179,10 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
     
     try {
       const payload = {
-        quote_text: text.trim(),
+        text: text.trim(),
         originator_id: originatorId ? parseInt(originatorId) : undefined,
-        source_url: sourceUrl
+        source_url: sourceUrl,
+        social_handle: socialHandle
       };
       
       const result = await this.makeRequest<DuplicateCheckResult>(
@@ -172,6 +204,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       return {
         recommendation: 'new_quote',
         confidence: 0.5,
+        in_quotosaurus: false,
         matches: [],
         reasoning: 'Error occurred during duplicate check, proceeding as new quote',
         search_metadata: { error: true }
@@ -226,6 +259,28 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         success: false,
         message: errorMessage,
         error: errorMessage
+      };
+    }
+  }
+
+  /**
+   * List user's collections
+   */
+  async listCollections(): Promise<CollectionsListResponse> {
+    try {
+      const result = await this.makeRequest<CollectionsListResponse>(
+        '/api/v1/collections/list/',
+        { method: 'GET' }
+      );
+      
+      return result;
+    } catch (error) {
+      console.error('Error listing collections:', error);
+      
+      // Return empty collections list on error
+      return {
+        collections: [],
+        default_collection_id: null
       };
     }
   }

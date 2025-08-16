@@ -20,13 +20,14 @@ export class AuthenticationMonitor {
   constructor(config: Partial<AuthMonitoringConfig> = {}) {
     this.authChecker = new AuthChecker(apiClient);
     this.config = {
-      checkInterval: config.checkInterval || 300000, // 5 minutes default
+      checkInterval: config.checkInterval || 1800000, // 30 minutes (reduced from 5 minutes)
       maxRetries: config.maxRetries || 3,
       timeoutDuration: config.timeoutDuration || 10000 // 10 seconds
     };
 
     this.setupMessageListeners();
-    this.startMonitoring();
+    // Only start monitoring when explicitly needed
+    // this.startMonitoring();
   }
 
   /**
@@ -177,14 +178,40 @@ export class AuthenticationMonitor {
   }
 
   /**
-   * Update extension badge and title
+   * Update extension badge and title (global state, doesn't override tab-specific badges)
    */
-  private updateBadgeState(state: AuthBadgeState): void {
+  private async updateBadgeState(state: AuthBadgeState): Promise<void> {
     const badgeConfig = this.getBadgeConfig(state);
     
-    chrome.action.setBadgeText({ text: badgeConfig.text });
-    chrome.action.setBadgeBackgroundColor({ color: badgeConfig.color });
-    chrome.action.setTitle({ title: badgeConfig.title });
+    try {
+      // Get the active tab to check if it has a tab-specific badge
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs.length > 0) {
+        const tabId = tabs[0].id;
+        if (tabId) {
+          // Check if this tab already has a tab-specific badge (from tweet processing)
+          const tabBadge = await chrome.action.getBadgeText({ tabId });
+          if (tabBadge && (tabBadge === '✓' || tabBadge === '○')) {
+            // Don't override tweet processing badges, just update the default state
+            chrome.action.setBadgeText({ text: badgeConfig.text });
+            chrome.action.setBadgeBackgroundColor({ color: badgeConfig.color });
+            chrome.action.setTitle({ title: badgeConfig.title });
+            return;
+          }
+        }
+      }
+      
+      // Set global badge state (will be used when no tab-specific badge exists)
+      chrome.action.setBadgeText({ text: badgeConfig.text });
+      chrome.action.setBadgeBackgroundColor({ color: badgeConfig.color });
+      chrome.action.setTitle({ title: badgeConfig.title });
+    } catch (error) {
+      // Fallback to simple badge update if tab querying fails
+      console.error('Error checking tab badge state:', error);
+      chrome.action.setBadgeText({ text: badgeConfig.text });
+      chrome.action.setBadgeBackgroundColor({ color: badgeConfig.color });
+      chrome.action.setTitle({ title: badgeConfig.title });
+    }
   }
 
   /**
@@ -194,15 +221,15 @@ export class AuthenticationMonitor {
     switch (state) {
       case 'authenticated':
         return {
-          text: '',
-          color: '#4CAF50',
-          title: 'Quotewise Extension - Ready to capture quotes'
+          text: '', // No badge text - just regular colored icon
+          color: '#1a73e8', // Regular blue color when authenticated
+          title: 'Quotewise Extension - Authenticated and ready'
         };
       
       case 'unauthenticated':
         return {
-          text: '!',
-          color: '#FF5722',
+          text: '', // No badge text - greyed out icon
+          color: '#9AA0A6', // Grey color for unauthenticated
           title: 'Quotewise Extension - Login required'
         };
       

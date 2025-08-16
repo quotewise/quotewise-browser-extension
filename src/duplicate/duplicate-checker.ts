@@ -22,7 +22,7 @@ export type DuplicateStateListener = (state: DuplicateState) => void;
 export class DuplicateChecker {
   private state: DuplicateState;
   private listeners: DuplicateStateListener[] = [];
-  private debouncedCheck: (text: string, originatorId: string, sourceUrl: string) => void;
+  private debouncedCheck: (text: string, originatorId?: string, sourceUrl?: string, socialHandle?: string) => void;
 
   constructor(private debounceDelay: number = 1000) {
     this.state = {
@@ -91,11 +91,11 @@ export class DuplicateChecker {
   /**
    * Check if we need to re-check duplicates (content has changed)
    */
-  needsRecheck(quoteText: string, originatorId: string, sourceUrl: string): boolean {
+  needsRecheck(quoteText: string, originatorId?: string, sourceUrl?: string): boolean {
     return (
       this.state.lastCheckText !== quoteText ||
-      this.state.lastCheckOriginator !== originatorId ||
-      this.state.lastCheckUrl !== sourceUrl
+      this.state.lastCheckOriginator !== (originatorId || '') ||
+      this.state.lastCheckUrl !== (sourceUrl || '')
     );
   }
 
@@ -104,10 +104,11 @@ export class DuplicateChecker {
    */
   async checkForDuplicates(
     quoteText: string, 
-    originatorId: string, 
-    sourceUrl: string
+    originatorId?: string, 
+    sourceUrl?: string,
+    socialHandle?: string
   ): Promise<void> {
-    await this.performDuplicateCheck(quoteText, originatorId, sourceUrl);
+    await this.performDuplicateCheck(quoteText, originatorId, sourceUrl, socialHandle);
   }
 
   /**
@@ -115,8 +116,9 @@ export class DuplicateChecker {
    */
   checkForDuplicatesDebounced(
     quoteText: string, 
-    originatorId: string, 
-    sourceUrl: string
+    originatorId?: string, 
+    sourceUrl?: string,
+    socialHandle?: string
   ): void {
     // Reset user override when content changes
     if (this.needsRecheck(quoteText, originatorId, sourceUrl)) {
@@ -126,7 +128,7 @@ export class DuplicateChecker {
       });
     }
 
-    this.debouncedCheck(quoteText, originatorId, sourceUrl);
+    this.debouncedCheck(quoteText, originatorId, sourceUrl, socialHandle);
   }
 
   /**
@@ -230,8 +232,9 @@ export class DuplicateChecker {
    */
   private async performDuplicateCheck(
     quoteText: string, 
-    originatorId: string, 
-    sourceUrl: string
+    originatorId?: string, 
+    sourceUrl?: string,
+    socialHandle?: string
   ): Promise<void> {
     if (!quoteText.trim()) {
       return;
@@ -251,7 +254,8 @@ export class DuplicateChecker {
       const result = await apiClient.checkQuoteDuplicate(
         quoteText.trim(),
         originatorId,
-        sourceUrl
+        sourceUrl,
+        socialHandle
       );
 
       this.updateState({
@@ -259,8 +263,8 @@ export class DuplicateChecker {
         hasChecked: true,
         result,
         lastCheckText: quoteText,
-        lastCheckOriginator: originatorId,
-        lastCheckUrl: sourceUrl
+        lastCheckOriginator: originatorId || '',
+        lastCheckUrl: sourceUrl || ''
       });
 
     } catch (error) {
@@ -273,13 +277,14 @@ export class DuplicateChecker {
         result: {
           recommendation: 'new_quote',
           confidence: 0.5,
+          in_quotosaurus: false,
           matches: [],
           reasoning: 'Error occurred during duplicate check, proceeding as new quote',
           search_metadata: { error: true }
         },
         lastCheckText: quoteText,
-        lastCheckOriginator: originatorId,
-        lastCheckUrl: sourceUrl
+        lastCheckOriginator: originatorId || '',
+        lastCheckUrl: sourceUrl || ''
       });
     }
   }

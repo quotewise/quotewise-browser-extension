@@ -35,6 +35,13 @@ export enum MessageType {
   SEARCH_ORIGINATORS = 'SEARCH_ORIGINATORS',
   CHECK_DUPLICATE = 'CHECK_DUPLICATE',
   
+  // Badge updates
+  UPDATE_COLLECTION_BADGE = 'UPDATE_COLLECTION_BADGE',
+  
+  // Storage management
+  CLEANUP_STORAGE = 'CLEANUP_STORAGE',
+  GET_STORAGE_STATS = 'GET_STORAGE_STATS',
+  
   // General responses
   SUCCESS = 'SUCCESS',
   ERROR = 'ERROR'
@@ -55,6 +62,10 @@ export interface TwitterData {
     verified?: boolean;
     profileUrl?: string;
     avatarUrl?: string;
+  };
+  retweeter?: {
+    username: string;
+    displayName: string;
   };
   url: string;
   date: string | null;
@@ -78,6 +89,8 @@ export interface TwitterData {
     has_media?: boolean;
     reply_to_tweet_id?: string;
     quoted_tweet_id?: string;
+    retweeter_username?: string;
+    retweeter_display_name?: string;
   };
 }
 
@@ -143,6 +156,14 @@ export class AuthenticationError extends ExtensionError {
     super(message, 'AUTH_ERROR');
     this.name = 'AuthenticationError';
   }
+}
+
+// Badge types  
+export type CollectionBadgeState = 'already_collected' | 'should_collect' | 'new_quote' | 'processing' | 'ready';
+
+export interface CollectionBadgeInfo {
+  state: CollectionBadgeState;
+  quoteText?: string; // For title display
 }
 
 // Utility types
