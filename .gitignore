@@ -22,6 +22,9 @@ build/
 *.swo
 *~
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # OS files
 .DS_Store
 .DS_Store?
