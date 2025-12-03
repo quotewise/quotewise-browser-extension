@@ -4,7 +4,7 @@
  */
 
 import type { LoginConfig, LoginTabInfo } from '../types/auth';
-import { getEnvironmentConfig, detectEnvironment } from '../config/environment';
+import { getEnvironmentConfig, detectEnvironment, debugLog } from '../config/environment';
 
 /**
  * Handles login redirects and monitors login completion
@@ -37,7 +37,7 @@ export class LoginHandler {
    * Open login page in new tab and monitor for completion
    */
   async openLoginPage(): Promise<void> {
-    console.log('Opening login page:', this.config.loginUrl);
+    debugLog('Opening login page:', this.config.loginUrl);
 
     return new Promise((resolve, reject) => {
       chrome.tabs.create(
@@ -57,7 +57,7 @@ export class LoginHandler {
             return;
           }
 
-          console.log('Login tab created:', tab.id);
+          debugLog('Login tab created:', tab.id);
           
           // Store tab info for monitoring
           const loginTabInfo: LoginTabInfo = {
@@ -85,24 +85,24 @@ export class LoginHandler {
     resolve: () => void,
     reject: (error: Error) => void
   ): void {
-    console.log('Watching for login completion on tab:', tabId);
+    debugLog('Watching for login completion on tab:', tabId);
 
     const onUpdated = (updatedTabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => {
       if (updatedTabId !== tabId) return;
 
       // Only check when page has finished loading
       if (changeInfo.status === 'complete' && tab.url) {
-        console.log('Tab updated:', updatedTabId, tab.url);
+        debugLog('Tab updated:', updatedTabId, tab.url);
 
         // Check if redirected to success page
         if (this.isSuccessfulLoginRedirect(tab.url)) {
-          console.log('Login success detected, cleaning up tab monitoring');
+          debugLog('Login success detected, cleaning up tab monitoring');
           this.cleanupTabMonitoring(tabId, onUpdated, onRemoved);
           resolve();
         }
         // Check if still on login page with error indicators
         else if (this.isLoginError(tab.url)) {
-          console.log('Login error detected:', tab.url);
+          debugLog('Login error detected:', tab.url);
           // Continue monitoring - don't fail yet, user might retry
         }
       }
@@ -110,7 +110,7 @@ export class LoginHandler {
 
     const onRemoved = (removedTabId: number) => {
       if (removedTabId === tabId) {
-        console.log('Login tab was closed:', removedTabId);
+        debugLog('Login tab was closed:', removedTabId);
         this.cleanupTabMonitoring(tabId, onUpdated, onRemoved);
         reject(new Error('Login tab was closed by user'));
       }
@@ -123,7 +123,7 @@ export class LoginHandler {
     // Set timeout for login process (5 minutes)
     setTimeout(() => {
       if (this.activeLoginTabs.has(tabId)) {
-        console.log('Login timeout for tab:', tabId);
+        debugLog('Login timeout for tab:', tabId);
         this.cleanupTabMonitoring(tabId, onUpdated, onRemoved);
         reject(new Error('Login timeout - no login completion detected within 5 minutes'));
       }
@@ -176,7 +176,7 @@ export class LoginHandler {
     onUpdated: (tabId: number, changeInfo: chrome.tabs.TabChangeInfo, tab: chrome.tabs.Tab) => void,
     onRemoved: (tabId: number) => void
   ): void {
-    console.log('Cleaning up tab monitoring for:', tabId);
+    debugLog('Cleaning up tab monitoring for:', tabId);
     
     chrome.tabs.onUpdated.removeListener(onUpdated);
     chrome.tabs.onRemoved.removeListener(onRemoved);
@@ -190,7 +190,7 @@ export class LoginHandler {
     // Clean up any orphaned tab monitoring
     chrome.tabs.onRemoved.addListener((tabId) => {
       if (this.activeLoginTabs.has(tabId)) {
-        console.log('Cleaning up orphaned login tab monitoring:', tabId);
+        debugLog('Cleaning up orphaned login tab monitoring:', tabId);
         this.activeLoginTabs.delete(tabId);
       }
     });
@@ -229,7 +229,7 @@ export class LoginHandler {
    */
   forceCleanupTab(tabId: number): void {
     if (this.activeLoginTabs.has(tabId)) {
-      console.log('Force cleaning up login tab:', tabId);
+      debugLog('Force cleaning up login tab:', tabId);
       this.activeLoginTabs.delete(tabId);
     }
   }

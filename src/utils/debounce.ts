@@ -24,6 +24,7 @@ export function debounce<T extends (...args: any[]) => any>(
 ): DebouncedFunction<T> {
   let timeout: NodeJS.Timeout | null = null;
   let lastArgs: Parameters<T> | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let result: ReturnType<T>;
 
   const debounced = (...args: Parameters<T>): void => {

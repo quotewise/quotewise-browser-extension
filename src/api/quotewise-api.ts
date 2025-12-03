@@ -14,8 +14,8 @@ import type {
   AuthenticationError,
   ApiError
 } from '../types/api';
-import { getDefaultHeaders } from './csrf-utils';
-import { getEnvironmentConfig } from '../config/environment';
+import { getDefaultHeaders, getReadOnlyHeaders, CSRFTokenError } from './csrf-utils';
+import { getEnvironmentConfig, debugLog } from '../config/environment';
 
 /**
  * Main API client implementation with Django session support
@@ -31,37 +31,48 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   /**
    * Make authenticated request to Django API
    * Includes CSRF tokens and session cookies automatically
+   * @param endpoint API endpoint path
+   * @param options Fetch options
+   * @param requireCSRF Whether CSRF token is required (default: true for POST/PUT/DELETE)
    */
   private async makeRequest<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    requireCSRF: boolean = true
   ): Promise<T> {
     try {
-      const headers = await getDefaultHeaders(this.baseUrl);
-      
+      // Determine if CSRF is required based on method
+      const method = (options.method || 'GET').toUpperCase();
+      const needsCSRF = requireCSRF && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+
+      // Get headers - use read-only headers for GET requests, default headers for others
+      const headers = needsCSRF
+        ? await getDefaultHeaders(this.baseUrl)
+        : await getReadOnlyHeaders(this.baseUrl);
+
       const requestOptions: RequestInit = {
         credentials: 'include',  // Include session cookies
         headers: { ...headers, ...(options.headers || {}) },
         ...options
       };
-      
-      console.log(`Making ${options.method || 'GET'} request to ${endpoint}`, {
+
+      debugLog(`Making ${method} request to ${endpoint}`, {
         headers: requestOptions.headers,
         body: options.body || 'None'
       });
-      
+
       const response = await fetch(`${this.baseUrl}${endpoint}`, requestOptions);
-      
-      console.log(`API Response: ${response.status} for ${endpoint}`, {
+
+      debugLog(`API Response: ${response.status} for ${endpoint}`, {
         status: response.status,
         statusText: response.statusText,
         headers: Object.fromEntries(response.headers.entries())
       });
-      
+
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           console.error(`Authentication failed: ${response.status} ${response.statusText}`);
-          
+
           // Try to get the error response body for more details
           try {
             const errorText = await response.text();
@@ -69,12 +80,12 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
           } catch (e) {
             console.error('Could not read error response body');
           }
-          
+
           const authError: AuthenticationError = new Error('Authentication required') as any;
           authError.name = 'AuthenticationError';
           throw authError;
         }
-        
+
         // Try to get error details from response
         let errorMessage = `API error: ${response.status}`;
         try {
@@ -83,19 +94,31 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         } catch {
           // Ignore JSON parsing errors, use default message
         }
-        
+
         const apiError: ApiError = new Error(errorMessage) as any;
         apiError.name = 'ApiError';
         apiError.statusCode = response.status;
         throw apiError;
       }
-      
+
       return await response.json();
     } catch (error) {
-      if (error instanceof Error && (error.name === 'AuthenticationError' || error.name === 'ApiError')) {
+      // Re-throw known error types
+      if (error instanceof Error && (
+        error.name === 'AuthenticationError' ||
+        error.name === 'ApiError' ||
+        error.name === 'CSRFTokenError'
+      )) {
         throw error;
       }
-      
+
+      // Handle CSRF token errors specifically
+      if (error instanceof CSRFTokenError) {
+        const authError: AuthenticationError = new Error(error.message) as any;
+        authError.name = 'AuthenticationError';
+        throw authError;
+      }
+
       // Handle network errors and other exceptions
       console.error('API request failed:', error);
       const apiError: ApiError = new Error(

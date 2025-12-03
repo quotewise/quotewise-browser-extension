@@ -5,6 +5,44 @@
 
 import type { EnvironmentConfig, SessionConfig } from '../types/api';
 
+/**
+ * Debug mode flag - enables console logging in non-production environments
+ * Active when:
+ * - NODE_ENV is 'development'
+ * - Manifest name contains '[DEV]' or '[STAGING]'
+ */
+function isDebugMode(): boolean {
+  // Check NODE_ENV first
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'development') {
+    return true;
+  }
+
+  // Check manifest name for environment indicators
+  if (typeof chrome !== 'undefined' && chrome.runtime?.getManifest) {
+    const manifest = chrome.runtime.getManifest();
+    if (manifest.name?.includes('[DEV]') ||
+        manifest.name?.includes('[STAGING]') ||
+        manifest.name?.toLowerCase().includes('dev')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export const DEBUG_MODE = isDebugMode();
+
+/**
+ * Debug logging function - only logs in debug mode
+ * Use this instead of console.log for development logging
+ */
+export function debugLog(...args: unknown[]): void {
+  if (DEBUG_MODE) {
+    // eslint-disable-next-line no-console
+    console.log('[Quotewise]', ...args);
+  }
+}
+
 // Environment configurations matching Django settings
 export const ENVIRONMENTS: Record<string, EnvironmentConfig> = {
     development: {

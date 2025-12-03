@@ -454,7 +454,7 @@ describe('DuplicateDisplay', () => {
     });
 
     it('should handle view details button click', () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+      const windowOpenSpy = jest.spyOn(window, 'open').mockImplementation();
 
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
@@ -498,13 +498,12 @@ describe('DuplicateDisplay', () => {
 
       viewDetailsBtn.click();
 
-      expect(consoleSpy).toHaveBeenCalledWith('View details clicked for quote:', 'test-quote-id');
+      expect(windowOpenSpy).toHaveBeenCalledWith('https://quotosaurus.com/quotes/test-quote-id/', '_blank');
 
-      consoleSpy.mockRestore();
+      windowOpenSpy.mockRestore();
     });
 
     it('should handle show more button click', () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
 
       const matches = Array.from({ length: 5 }, (_, i) => ({
         quote_id: `${i + 1}`,
@@ -550,9 +549,15 @@ describe('DuplicateDisplay', () => {
 
       showMoreBtn.click();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Show more matches clicked');
+      // Check that the matches list has 'expanded' class toggled
+      const matchesList = container.querySelector('.matches-list');
+      expect(matchesList?.classList.contains('expanded')).toBe(true);
+      expect(showMoreBtn.textContent).toBe('Show less');
 
-      consoleSpy.mockRestore();
+      // Click again to collapse
+      showMoreBtn.click();
+      expect(matchesList?.classList.contains('expanded')).toBe(false);
+      expect(showMoreBtn.textContent).toBe('Show more');
     });
   });
 

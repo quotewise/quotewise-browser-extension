@@ -12,7 +12,9 @@ module.exports = {
     '^@content/(.*)$': '<rootDir>/src/content/$1',
     '^@popup/(.*)$': '<rootDir>/src/popup/$1',
     '^@background/(.*)$': '<rootDir>/src/background/$1',
-    '^@config/(.*)$': '<rootDir>/src/config/$1'
+    '^@config/(.*)$': '<rootDir>/src/config/$1',
+    // Mock environment module for all tests
+    '^(\\.\\./)*config/environment$': '<rootDir>/tests/__mocks__/environment.ts'
   },
   collectCoverageFrom: [
     'src/**/*.{ts,tsx}',

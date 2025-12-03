@@ -140,7 +140,7 @@ export interface PlatformData {
   quote_count?: number;
   bookmark_count?: number;
   view_count?: number;
-  is_protected?: boolean; // TODO: backend should honor this for private/limited-scope collections
+  is_protected?: boolean; // Backend dependency: API should honor this flag for private/limited-scope collections (feature parity pending)
   thread_position?: number;
   [key: string]: any;
 }

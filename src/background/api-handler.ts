@@ -3,10 +3,10 @@
  * Integrates QuotewiseApiClient with popup messaging system
  */
 
-import type { ExtensionMessage, MessageType } from '../types/index';
+import type { ExtensionMessage } from '../types/index';
 import type { QuotewiseApiClient } from '../types/api';
 import { QuotewiseApiClientImpl } from '../api/quotewise-api';
-import { getEnvironmentConfig, detectEnvironment } from '../config/environment';
+import { getEnvironmentConfig, detectEnvironment, debugLog } from '../config/environment';
 
 /**
  * API Handler for Chrome extension service worker
@@ -20,7 +20,7 @@ export class ApiHandler {
         this.environment = detectEnvironment();
         const config = getEnvironmentConfig(this.environment);
         
-        console.log(`Initializing ApiHandler for ${this.environment} environment`, {
+        debugLog(`Initializing ApiHandler for ${this.environment} environment`, {
             apiBaseUrl: config.apiBaseUrl,
             sessionCookieName: config.sessionCookieName
         });
@@ -37,7 +37,7 @@ export class ApiHandler {
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
-            console.log('Handling API message:', { type: message.type, data: message.data });
+            debugLog('Handling API message:', { type: message.type, data: message.data });
             
             switch (message.type) {
                 case 'CHECK_AUTH_STATUS':
@@ -89,7 +89,7 @@ export class ApiHandler {
                 username: authResult.user?.username
             };
             
-            console.log('Sending auth status to popup:', transformedStatus);
+            debugLog('Sending auth status to popup:', transformedStatus);
             sendResponse(transformedStatus);
         } catch (error) {
             console.error('Error checking auth status:', error);
@@ -228,6 +228,6 @@ export class ApiHandler {
  * Initialize API handler - called from service worker
  */
 export function initializeApiHandler(): ApiHandler {
-    console.log('Initializing API handler...');
+    debugLog('Initializing API handler...');
     return new ApiHandler();
 }
