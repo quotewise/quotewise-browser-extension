@@ -16,7 +16,7 @@ export class AuthChecker {
 
   /**
    * Check current authentication status with Django backend
-   * Uses /api/v1/auth/status/ endpoint (matches Django patterns)
+   * Uses /api/v2/auth/status/ endpoint (matches Django patterns)
    */
   async checkAuthStatus(): Promise<AuthStatus | AuthError> {
     try {

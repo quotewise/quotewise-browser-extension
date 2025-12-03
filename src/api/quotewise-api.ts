@@ -145,7 +145,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       });
       
       const result = await this.makeRequest<{results: OriginatorSearchResult[]}>(
-        `/api/v1/originators/search/?${params}`
+        `/api/v2/originators/search/?${params}`
       );
       
       return result.results || [];
@@ -164,7 +164,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
    */
   async checkAuthStatus(): Promise<AuthStatusResult> {
     try {
-      const result = await this.makeRequest<AuthStatusResult>('/api/v1/auth/status/');
+      const result = await this.makeRequest<AuthStatusResult>('/api/v2/auth/status/');
       return result;
     } catch (error) {
       if (error instanceof Error && error.name === 'AuthenticationError') {
@@ -209,7 +209,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       };
       
       const result = await this.makeRequest<DuplicateCheckResult>(
-        '/api/v1/quotes/check-duplicate/',
+        '/api/v2/quotes/check_duplicate/',
         {
           method: 'POST',
           body: JSON.stringify(payload)
@@ -258,7 +258,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       }
       
       const result = await this.makeRequest<{ id: string; message?: string }>(
-        '/api/v1/quotes/',
+        '/api/v2/quotes/',
         {
           method: 'POST',
           body: JSON.stringify(quoteData)
@@ -292,7 +292,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   async listCollections(): Promise<CollectionsListResponse> {
     try {
       const result = await this.makeRequest<CollectionsListResponse>(
-        '/api/v1/collections/list/',
+        '/api/v2/collections/',
         { method: 'GET' }
       );
       

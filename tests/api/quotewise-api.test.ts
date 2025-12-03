@@ -13,29 +13,64 @@ global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
 // Mock CSRF utilities
 jest.mock('../../src/api/csrf-utils', () => ({
   getDefaultHeaders: jest.fn(),
+  getReadOnlyHeaders: jest.fn(),
   getCookie: jest.fn(),
-  getCSRFToken: jest.fn()
+  getCSRFToken: jest.fn(),
+  CSRFTokenError: class CSRFTokenError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = 'CSRFTokenError';
+    }
+  }
 }));
 
 describe('QuotewiseApiClient', () => {
   let client: QuotewiseApiClientImpl;
   const mockFetch = fetch as jest.MockedFunction<typeof fetch>;
   const mockGetDefaultHeaders = csrfUtils.getDefaultHeaders as jest.MockedFunction<typeof csrfUtils.getDefaultHeaders>;
+  const mockGetReadOnlyHeaders = (csrfUtils as any).getReadOnlyHeaders as jest.MockedFunction<typeof csrfUtils.getDefaultHeaders>;
 
   beforeEach(() => {
     jest.clearAllMocks();
     client = new QuotewiseApiClientImpl('http://localhost:8001');
-    
-    // Default mock for headers
+
+    // Mock for POST/PUT/DELETE requests (with CSRF)
     mockGetDefaultHeaders.mockResolvedValue({
       'Content-Type': 'application/json',
       'X-CSRFToken': 'test-csrf-token',
       'X-Requested-With': 'XMLHttpRequest'
     });
+
+    // Mock for GET requests (no CSRF required)
+    mockGetReadOnlyHeaders.mockResolvedValue({
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest'
+    });
   });
 
   describe('CSRF Token Handling', () => {
-    test('includes CSRF token in requests', async () => {
+    test('includes CSRF token in POST requests', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ recommendation: 'new_quote', confidence: 1.0, matches: [], in_quotosaurus: false, reasoning: '', search_metadata: {} })
+      } as Response);
+
+      await client.checkQuoteDuplicate('test quote');
+
+      // POST requests should use getDefaultHeaders which includes CSRF
+      expect(mockGetDefaultHeaders).toHaveBeenCalledWith('http://localhost:8001');
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'X-CSRFToken': 'test-csrf-token'
+          })
+        })
+      );
+    });
+
+    test('uses read-only headers for GET requests', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ results: [] })
@@ -43,12 +78,13 @@ describe('QuotewiseApiClient', () => {
 
       await client.searchOriginators('test');
 
-      expect(mockGetDefaultHeaders).toHaveBeenCalledWith('http://localhost:8001');
+      // GET requests should use getReadOnlyHeaders (no CSRF required)
+      expect(mockGetReadOnlyHeaders).toHaveBeenCalledWith('http://localhost:8001');
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
-            'X-CSRFToken': 'test-csrf-token'
+            'Content-Type': 'application/json'
           })
         })
       );
@@ -146,13 +182,13 @@ describe('QuotewiseApiClient', () => {
       const results = await client.searchOriginators('Einstein', 5);
 
       expect(results).toEqual(mockResults);
+      // GET requests use read-only headers (no CSRF required)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8001/api/v1/originators/search/?q=Einstein&limit=5',
+        'http://localhost:8001/api/v2/originators/search/?q=Einstein&limit=5',
         expect.objectContaining({
           credentials: 'include',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'X-CSRFToken': 'test-csrf-token'
+            'Content-Type': 'application/json'
           })
         })
       );
@@ -201,7 +237,7 @@ describe('QuotewiseApiClient', () => {
 
       expect(result).toEqual(mockAuthResult);
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8001/api/v1/auth/status/',
+        'http://localhost:8001/api/v2/auth/status/',
         expect.objectContaining({
           credentials: 'include'
         })
@@ -261,7 +297,7 @@ describe('QuotewiseApiClient', () => {
 
       expect(result).toEqual(mockDuplicateResult);
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8001/api/v1/quotes/check-duplicate/',
+        'http://localhost:8001/api/v2/quotes/check_duplicate/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({
@@ -345,7 +381,7 @@ describe('QuotewiseApiClient', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8001/api/v1/quotes/',
+        'http://localhost:8001/api/v2/quotes/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(validQuoteData)
