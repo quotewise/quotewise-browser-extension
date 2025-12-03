@@ -14,7 +14,8 @@ jest.mock('../../src/api/quotewise-api', () => ({
     checkAuthStatus: jest.fn(),
     searchOriginators: jest.fn(),
     checkQuoteDuplicate: jest.fn(),
-    submitQuote: jest.fn()
+    submitQuote: jest.fn(),
+    listCollections: jest.fn()
   }))
 }));
 
@@ -46,18 +47,12 @@ const mockChrome = {
 describe('ApiHandler', () => {
   let apiHandler: ApiHandler;
   let mockApiClient: jest.Mocked<QuotewiseApiClientImpl>;
-  let messageListener: (message: any, sender: any, sendResponse: any) => void;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    // Capture the message listener
-    mockChrome.runtime.onMessage.addListener.mockImplementation((listener) => {
-      messageListener = listener;
-    });
 
     apiHandler = new ApiHandler();
-    
+
     // Get the mocked API client instance
     mockApiClient = (QuotewiseApiClientImpl as jest.Mock).mock.results[0].value;
   });
@@ -65,7 +60,6 @@ describe('ApiHandler', () => {
   describe('Initialization', () => {
     test('initializes with correct environment', () => {
       expect(QuotewiseApiClientImpl).toHaveBeenCalledWith('http://localhost:8001');
-      expect(mockChrome.runtime.onMessage.addListener).toHaveBeenCalled();
     });
 
     test('provides environment info', () => {
@@ -86,8 +80,10 @@ describe('ApiHandler', () => {
 
     test('handles CHECK_AUTH_STATUS message', async () => {
       const mockAuthResult = {
-        isAuthenticated: true,
-        userInfo: { username: 'testuser', isAdmin: false }
+        authenticated: true,
+        is_admin: false,
+        user: { id: 1, username: 'testuser', email: 'test@example.com' },
+        permissions: { can_submit_quotes: true, can_review_quotes: false }
       };
       mockApiClient.checkAuthStatus.mockResolvedValue(mockAuthResult);
 
@@ -95,15 +91,20 @@ describe('ApiHandler', () => {
         type: 'CHECK_AUTH_STATUS' as MessageType
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
       expect(mockApiClient.checkAuthStatus).toHaveBeenCalled();
-      expect(mockSendResponse).toHaveBeenCalledWith(mockAuthResult);
+      // ApiHandler transforms the response to match AuthChecker format
+      expect(mockSendResponse).toHaveBeenCalledWith({
+        isAuthenticated: true,
+        isStaff: false,
+        username: 'testuser'
+      });
     });
 
     test('handles SEARCH_ORIGINATORS message', async () => {
       const mockResults = [
-        { id: '1', full_name: 'Albert Einstein', sort_name: 'Einstein, Albert' }
+        { id: 1, unique_id: 'albert-einstein', full_name: 'Albert Einstein', sort_name_display: 'Einstein, Albert', confidence: 10 }
       ];
       mockApiClient.searchOriginators.mockResolvedValue(mockResults);
 
@@ -112,7 +113,7 @@ describe('ApiHandler', () => {
         data: { query: 'Einstein', limit: 10 }
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
       expect(mockApiClient.searchOriginators).toHaveBeenCalledWith('Einstein', 10);
       expect(mockSendResponse).toHaveBeenCalledWith({
@@ -127,7 +128,7 @@ describe('ApiHandler', () => {
         data: {}
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
       expect(mockApiClient.searchOriginators).not.toHaveBeenCalled();
       expect(mockSendResponse).toHaveBeenCalledWith({
@@ -138,9 +139,12 @@ describe('ApiHandler', () => {
 
     test('handles CHECK_DUPLICATE_QUOTE message', async () => {
       const mockDuplicateResult = {
-        hasDuplicates: false,
-        duplicates: [],
-        similarityThreshold: 0.8
+        recommendation: 'new_quote' as const,
+        confidence: 0.9,
+        in_quotosaurus: false,
+        matches: [],
+        reasoning: 'No duplicates found',
+        search_metadata: {}
       };
       mockApiClient.checkQuoteDuplicate.mockResolvedValue(mockDuplicateResult);
 
@@ -149,7 +153,7 @@ describe('ApiHandler', () => {
         data: { text: 'Test quote', originatorId: '1' }
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
       expect(mockApiClient.checkQuoteDuplicate).toHaveBeenCalledWith('Test quote', '1');
       expect(mockSendResponse).toHaveBeenCalledWith({
@@ -189,36 +193,10 @@ describe('ApiHandler', () => {
         data: quoteData
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
       expect(mockApiClient.submitQuote).toHaveBeenCalledWith(quoteData);
       expect(mockSendResponse).toHaveBeenCalledWith(mockSubmissionResult);
-    });
-
-    test('handles GET_TWEET_DATA message', async () => {
-      mockChrome.tabs.query.mockResolvedValue([{ id: 123 }]);
-      mockChrome.tabs.sendMessage.mockResolvedValue({
-        success: true,
-        data: { text: 'Tweet text', url: 'https://twitter.com/test/status/123' }
-      });
-
-      const message: ExtensionMessage = {
-        type: 'GET_TWEET_DATA' as MessageType
-      };
-
-      await messageListener(message, {}, mockSendResponse);
-
-      expect(mockChrome.tabs.query).toHaveBeenCalledWith({
-        active: true,
-        currentWindow: true
-      });
-      expect(mockChrome.tabs.sendMessage).toHaveBeenCalledWith(123, {
-        type: 'GET_TWEET_DATA'
-      });
-      expect(mockSendResponse).toHaveBeenCalledWith({
-        success: true,
-        data: { text: 'Tweet text', url: 'https://twitter.com/test/status/123' }
-      });
     });
 
     test('handles unknown message type', async () => {
@@ -226,7 +204,7 @@ describe('ApiHandler', () => {
         type: 'UNKNOWN_MESSAGE' as MessageType
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
       expect(mockSendResponse).toHaveBeenCalledWith({
         success: false,
@@ -242,11 +220,12 @@ describe('ApiHandler', () => {
         type: 'CHECK_AUTH_STATUS' as MessageType
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
-      // checkAuthStatus catches errors and returns { isAuthenticated: false, error: ... }
+      // ApiHandler.handleCheckAuthStatus catches errors and returns transformed error
       expect(mockSendResponse).toHaveBeenCalledWith({
         isAuthenticated: false,
+        isStaff: false,
         error: 'API request failed'
       });
     });
@@ -269,7 +248,7 @@ describe('ApiHandler', () => {
         data: { query: 'test' }
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
       expect(mockSendResponse).toHaveBeenCalledWith({
         success: false,
@@ -286,7 +265,7 @@ describe('ApiHandler', () => {
         data: { text: 'test' }
       };
 
-      await messageListener(message, {}, mockSendResponse);
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
       expect(mockSendResponse).toHaveBeenCalledWith({
         success: false,
@@ -294,50 +273,6 @@ describe('ApiHandler', () => {
         hasDuplicates: false,
         duplicates: [],
         similarityThreshold: 0.8
-      });
-    });
-  });
-
-  describe('Tweet Data Handling', () => {
-    let mockSendResponse: jest.Mock;
-
-    beforeEach(() => {
-      mockSendResponse = jest.fn();
-    });
-
-    test('handles no active tab', async () => {
-      mockChrome.tabs.query.mockResolvedValue([]);
-
-      const message: ExtensionMessage = {
-        type: 'GET_TWEET_DATA' as MessageType
-      };
-
-      await messageListener(message, {}, mockSendResponse);
-
-      expect(mockSendResponse).toHaveBeenCalledWith({
-        success: false,
-        error: 'No active tab found',
-        data: null
-      });
-    });
-
-    test('handles content script errors', async () => {
-      mockChrome.tabs.query.mockResolvedValue([{ id: 123 }]);
-      mockChrome.tabs.sendMessage.mockResolvedValue({
-        success: false,
-        error: 'No tweet found'
-      });
-
-      const message: ExtensionMessage = {
-        type: 'GET_TWEET_DATA' as MessageType
-      };
-
-      await messageListener(message, {}, mockSendResponse);
-
-      expect(mockSendResponse).toHaveBeenCalledWith({
-        success: false,
-        error: 'No tweet found',
-        data: null
       });
     });
   });

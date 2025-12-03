@@ -74,8 +74,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_quote',
         confidence: 0.9,
+        in_quotosaurus: false,
         matches: [],
-        reasoning: 'No similar quotes found'
+        reasoning: 'No similar quotes found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({
@@ -91,8 +93,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches: [],
-        reasoning: 'Similar quote with different originator'
+        reasoning: 'Similar quote with different originator',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({
@@ -108,8 +112,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [],
-        reasoning: 'Exact duplicate found'
+        reasoning: 'Exact duplicate found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({
@@ -126,8 +132,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [],
-        reasoning: 'Exact duplicate found'
+        reasoning: 'Exact duplicate found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({
@@ -172,8 +180,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_quote',
         confidence: 0.9,
+        in_quotosaurus: false,
         matches: [],
-        reasoning: 'No duplicates found'
+        reasoning: 'No duplicates found',
+        search_metadata: {}
       };
 
       mockApiClient.checkQuoteDuplicate.mockResolvedValue(mockResult);
@@ -183,7 +193,8 @@ describe('DuplicateChecker', () => {
       expect(mockApiClient.checkQuoteDuplicate).toHaveBeenCalledWith(
         'test quote',
         '123',
-        'https://test.com'
+        'https://test.com',
+        undefined
       );
 
       expect(mockListener).toHaveBeenCalledWith(
@@ -210,7 +221,9 @@ describe('DuplicateChecker', () => {
           result: expect.objectContaining({
             recommendation: 'new_quote',
             confidence: 0.5,
-            reasoning: 'Error occurred during duplicate check, proceeding as new quote'
+            in_quotosaurus: false,
+            reasoning: 'Error occurred during duplicate check, proceeding as new quote',
+            search_metadata: { error: true }
           })
         })
       );
@@ -248,8 +261,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [],
-        reasoning: 'Exact duplicate found'
+        reasoning: 'Exact duplicate found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({
@@ -270,8 +285,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_quote',
         confidence: 0.9,
+        in_quotosaurus: false,
         matches: [],
-        reasoning: 'No duplicates found'
+        reasoning: 'No duplicates found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({
@@ -297,8 +314,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_quote',
         confidence: 0.9,
+        in_quotosaurus: false,
         matches: [],
-        reasoning: 'No duplicates found'
+        reasoning: 'No duplicates found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({ result: mockResult });
@@ -316,8 +335,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches: [],
-        reasoning: 'Similar quote with different originator'
+        reasoning: 'Similar quote with different originator',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({ result: mockResult });
@@ -335,11 +356,13 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [],
-        reasoning: 'Exact duplicate found'
+        reasoning: 'Exact duplicate found',
+        search_metadata: {}
       };
 
-      duplicateChecker['updateState']({ 
+      duplicateChecker['updateState']({
         result: mockResult,
         userOverride: false
       });
@@ -357,11 +380,13 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [],
-        reasoning: 'Exact duplicate found'
+        reasoning: 'Exact duplicate found',
+        search_metadata: {}
       };
 
-      duplicateChecker['updateState']({ 
+      duplicateChecker['updateState']({
         result: mockResult,
         userOverride: true
       });
@@ -381,8 +406,10 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_quote',
         confidence: 0.9,
+        in_quotosaurus: false,
         matches: [],
-        reasoning: 'No duplicates found'
+        reasoning: 'No duplicates found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({ result: mockResult });
@@ -394,6 +421,7 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [
           {
             quote_id: '1',
@@ -401,7 +429,8 @@ describe('DuplicateChecker', () => {
             text: 'Test quote',
             similarity: 0.8,
             match_type: 'semantic',
-            originator: { id: 1, full_name: 'Test Author' } as any,
+            in_user_collections: false,
+            originator: { id: '1', full_name: 'Test Author', sort_name: null, birth_year: null, death_year: null },
             workflow_status: 'approved',
             likes_count: 10
           },
@@ -411,12 +440,14 @@ describe('DuplicateChecker', () => {
             text: 'Test quote exact',
             similarity: 0.95,
             match_type: 'exact',
-            originator: { id: 1, full_name: 'Test Author' } as any,
+            in_user_collections: true,
+            originator: { id: '1', full_name: 'Test Author', sort_name: null, birth_year: null, death_year: null },
             workflow_status: 'approved',
             likes_count: 20
           }
         ],
-        reasoning: 'High similarity matches found'
+        reasoning: 'High similarity matches found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({ result: mockResult });
@@ -430,17 +461,20 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'Test quote',
           similarity: 0.97,
           match_type: 'exact',
-          originator: { id: 1, full_name: 'Test Author' } as any,
+          in_user_collections: false,
+          originator: { id: '1', full_name: 'Test Author', sort_name: null, birth_year: null, death_year: null },
           workflow_status: 'approved',
           likes_count: 10
         }],
-        reasoning: 'Exact match found'
+        reasoning: 'Exact match found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({ result: mockResult });
@@ -452,17 +486,20 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.85,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'Test quote',
           similarity: 0.85,
           match_type: 'semantic',
-          originator: { id: 2, full_name: 'Different Author' } as any,
+          in_user_collections: false,
+          originator: { id: '2', full_name: 'Different Author', sort_name: null, birth_year: null, death_year: null },
           workflow_status: 'approved',
           likes_count: 10
         }],
-        reasoning: 'Very similar match found'
+        reasoning: 'Very similar match found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({ result: mockResult });
@@ -474,17 +511,20 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.7,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'Test quote',
           similarity: 0.65,
           match_type: 'fuzzy',
-          originator: { id: 2, full_name: 'Different Author' } as any,
+          in_user_collections: false,
+          originator: { id: '2', full_name: 'Different Author', sort_name: null, birth_year: null, death_year: null },
           workflow_status: 'approved',
           likes_count: 10
         }],
-        reasoning: 'Similar match found'
+        reasoning: 'Similar match found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({ result: mockResult });
@@ -496,17 +536,20 @@ describe('DuplicateChecker', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_quote',
         confidence: 0.3,
+        in_quotosaurus: false,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'Test quote',
           similarity: 0.3,
           match_type: 'fuzzy',
-          originator: { id: 2, full_name: 'Different Author' } as any,
+          in_user_collections: false,
+          originator: { id: '2', full_name: 'Different Author', sort_name: null, birth_year: null, death_year: null },
           workflow_status: 'approved',
           likes_count: 10
         }],
-        reasoning: 'Low similarity match found'
+        reasoning: 'Low similarity match found',
+        search_metadata: {}
       };
 
       duplicateChecker['updateState']({ result: mockResult });
