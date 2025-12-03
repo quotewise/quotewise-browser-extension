@@ -28,7 +28,7 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
     chrome.storage.local.set({
       settings: {
-        environment: 'production',
+        environment: 'development',
         autoCapture: true,
         duplicateCheck: true
       }
@@ -43,6 +43,16 @@ chrome.runtime.onStartup.addListener(() => {
   authMonitor = new AuthenticationMonitor();
   storageCleanup = initializeStorageCleanup();
   storageCleanup.startPeriodicCleanup();
+});
+
+// Toolbar icon click: trigger extraction refresh in active tab
+chrome.action.onClicked.addListener(async (tab) => {
+  try {
+    if (!tab.id) return;
+    await chrome.tabs.sendMessage(tab.id, { type: MessageType.SHOW_OVERLAY });
+  } catch (error) {
+    console.error('Error handling action click:', error);
+  }
 });
 
 // Handle messages from content scripts and popup
@@ -120,6 +130,15 @@ chrome.runtime.onMessage.addListener((
         sendResponse({ success: false, error: 'Storage cleanup not initialized' });
         return true;
       }
+
+    case MessageType.OPEN_POPUP:
+      chrome.action.openPopup().then(() => {
+        sendResponse({ success: true });
+      }).catch(error => {
+        console.error('Error opening popup:', error);
+        sendResponse({ success: false, error: error?.message || 'Failed to open popup' });
+      });
+      return true;
       
     default:
       console.warn('Unknown message type:', message.type);

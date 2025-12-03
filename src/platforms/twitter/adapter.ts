@@ -37,6 +37,10 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     }
   }
 
+  async getLatestData(): Promise<TwitterData | null> {
+    return this.ensureData();
+  }
+
   async handleMessage(
     message: ExtensionMessage,
     sendResponse: (response: any) => void
@@ -293,25 +297,46 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       quotes: 0
     };
 
-    const metricMap: Record<keyof typeof metrics, string[]> = {
+    const selectors: Record<keyof typeof metrics, string[]> = {
       replies: ['[data-testid="reply"]'],
       retweets: ['[data-testid="retweet"]', '[data-testid="retweetConfirm"]'],
       likes: ['[data-testid="like"]', '[data-testid="likeConfirm"]'],
-      views: ['[data-testid="app-text-transition-container"]'],
-      bookmarks: ['[data-testid="bookmark"]'],
+      views: ['[aria-label*="View"]', '[data-testid="app-text-transition-container"]'],
+      bookmarks: ['[data-testid="bookmark"]', '[aria-label*="Bookmark"]'],
       quotes: ['[data-testid="quoteTweet"] [data-testid="app-text-transition-container"]']
     };
 
-    for (const key of Object.keys(metricMap) as (keyof typeof metrics)[]) {
-      for (const selector of metricMap[key]) {
-        const node = article.querySelector(selector);
-        if (node) {
-          const label = node.getAttribute('aria-label') || node.textContent || '';
-          metrics[key] = parseNumber(label);
-          break;
+    const collectElements = (sels: string[]): Element[] => {
+      const found: Element[] = [];
+      sels.forEach(sel => {
+        article.querySelectorAll(sel).forEach(el => found.push(el));
+      });
+      return found;
+    };
+
+    const parseCount = (els: Element[], hints: string[] = []): number => {
+      for (const el of els) {
+        const candidates = [el, ...Array.from(el.querySelectorAll('[data-testid="app-text-transition-container"]'))];
+        for (const c of candidates) {
+          const text = c.getAttribute('aria-label') || c.textContent || '';
+          const lowered = text.toLowerCase();
+          if (hints.length === 0 || hints.some(h => lowered.includes(h)) || /\d/.test(text)) {
+            const num = parseNumber(text);
+            if (!isNaN(num) && num >= 0) {
+              return num;
+            }
+          }
         }
       }
-    }
+      return 0;
+    };
+
+    metrics.replies = parseCount(collectElements(selectors.replies));
+    metrics.retweets = parseCount(collectElements(selectors.retweets));
+    metrics.likes = parseCount(collectElements(selectors.likes));
+    metrics.bookmarks = parseCount(collectElements(selectors.bookmarks), ['bookmark']);
+    metrics.quotes = parseCount(collectElements(selectors.quotes));
+    metrics.views = parseCount(collectElements(selectors.views), ['view']);
 
     return metrics;
   }

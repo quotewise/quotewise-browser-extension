@@ -8,7 +8,7 @@ import type { EnvironmentConfig, SessionConfig } from '../types/api';
 // Environment configurations matching Django settings
 export const ENVIRONMENTS: Record<string, EnvironmentConfig> = {
     development: {
-        apiBaseUrl: 'http://localhost:8001',
+        apiBaseUrl: 'http://127.0.0.1:8000',
         sessionCookieName: 'sessionid',
         secure: false  // Based on settings/test.py:153
     },
@@ -41,6 +41,11 @@ export function getSessionConfig(environment: 'development' | 'staging' | 'produ
  * Detect current environment based on extension context
  */
 export function detectEnvironment(): 'development' | 'staging' | 'production' {
+    // Prefer explicit env flag (set via build)
+    if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
+        return 'development';
+    }
+
     // Check if we're in a Chrome extension context
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
         const manifest = chrome.runtime.getManifest();
