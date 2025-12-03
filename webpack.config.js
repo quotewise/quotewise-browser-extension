@@ -90,6 +90,11 @@ module.exports = (env, argv) => {
     target: 'web',
     experiments: {
       outputModule: false
+    },
+
+    watchOptions: {
+      ignored: /node_modules/,
+      poll: 500
     }
   };
 };
