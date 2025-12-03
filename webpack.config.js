@@ -10,7 +10,7 @@ module.exports = (env, argv) => {
     
     entry: {
       'background/service-worker': './src/background/service-worker.ts',
-      'content/twitter': './src/content/twitter.ts',
+      'content/index': './src/content/index.ts',
       'popup/popup': './src/popup/popup.ts'
     },
     

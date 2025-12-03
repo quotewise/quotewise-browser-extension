@@ -809,6 +809,7 @@ class SimpleQuotewisePopup {
         likes_count: state.tweet.data.likes || 0,
         post_date: state.tweet.data.date || undefined,
         attribution_type: attributionType,
+        // TODO: API should accept platform_data.is_protected to flag private/limited visibility posts
         platform_data: state.tweet.data.platform_data
       };
 
