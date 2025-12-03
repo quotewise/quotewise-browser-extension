@@ -74,7 +74,7 @@ export async function getCSRFToken(apiBaseUrl: string): Promise<string | null> {
         // For extensions, we need to make a GET request to trigger cookie setting
         // Use the auth status endpoint which is available and safe to call
         try {
-            await fetch(`${apiBaseUrl}/api/v1/auth/status/`, {
+            await fetch(`${apiBaseUrl}/api/v2/auth/status/`, {
                 credentials: 'include',
                 method: 'GET'
             });
