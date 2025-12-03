@@ -5,6 +5,7 @@
 
 import type { DuplicateCheckResult } from '../types/api';
 import type { DuplicateState } from './duplicate-checker';
+import { debugLog } from '../config/environment';
 
 export interface DuplicateDisplayOptions {
   container: HTMLElement;
@@ -265,8 +266,13 @@ export class DuplicateDisplay {
     if (showMoreBtn) {
       showMoreBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        // TODO: Implement expand/collapse functionality
-        console.log('Show more matches clicked');
+        // Expand/collapse functionality: toggle visibility of all matches
+        const matchesList = this.container.querySelector('.matches-list');
+        if (matchesList) {
+          matchesList.classList.toggle('expanded');
+          showMoreBtn.textContent = matchesList.classList.contains('expanded') ? 'Show less' : 'Show more';
+        }
+        debugLog('Show more matches clicked');
       });
     }
 
@@ -276,8 +282,10 @@ export class DuplicateDisplay {
         e.preventDefault();
         const quoteId = (btn as HTMLElement).dataset.quoteId;
         if (quoteId) {
-          // TODO: Implement view details functionality
-          console.log('View details clicked for quote:', quoteId);
+          // Open quote detail on quotosaurus.com in new tab
+          const quoteUrl = `https://quotosaurus.com/quotes/${quoteId}/`;
+          window.open(quoteUrl, '_blank');
+          debugLog('View details clicked for quote:', quoteId);
         }
       });
     });

@@ -1,30 +1,69 @@
 /**
  * Chrome extension service worker
  * Handles extension lifecycle, messaging, and background tasks
+ *
+ * MV3 Resilience: Service workers can be terminated at any time.
+ * All services are lazily initialized on demand via ensureServicesInitialized().
  */
 
 import { MessageType, ExtensionMessage, TwitterData } from '../types/index';
 import { initializeApiHandler } from './api-handler';
 import { AuthenticationMonitor } from './auth-monitor';
 import { initializeStorageCleanup } from './storage-cleanup';
+import { validateTwitterData, ValidationError } from '../utils/validators';
+import { debugLog } from '../config/environment';
 
-// Initialize API handler, auth monitor, and storage cleanup
-let apiHandler: ReturnType<typeof initializeApiHandler>;
-let authMonitor: AuthenticationMonitor;
-let storageCleanup: ReturnType<typeof initializeStorageCleanup>;
+// Service instances - lazily initialized to handle MV3 service worker termination
+let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
+let authMonitor: AuthenticationMonitor | null = null;
+let storageCleanup: ReturnType<typeof initializeStorageCleanup> | null = null;
 
-console.log('Service worker starting...');
+// Track initialization state
+let servicesInitialized = false;
 
-// Extension installation and startup
-chrome.runtime.onInstalled.addListener((details) => {
-  console.log('Quotewise extension installed:', details.reason);
-  
-  // Initialize API handler, auth monitor, and storage cleanup
+debugLog('Service worker starting...');
+
+/**
+ * Ensure all services are initialized
+ * Called before any message handling to recover from service worker termination
+ */
+async function ensureServicesInitialized(): Promise<void> {
+  if (servicesInitialized && apiHandler && authMonitor && storageCleanup) {
+    return;
+  }
+
+  debugLog('Initializing services (lazy/recovery)...');
+
+  // Initialize services
   apiHandler = initializeApiHandler();
   authMonitor = new AuthenticationMonitor();
   storageCleanup = initializeStorageCleanup();
+
+  // Restore auth state from storage if available
+  try {
+    const { lastAuthCheck } = await chrome.storage.local.get('lastAuthCheck');
+    if (lastAuthCheck?.status) {
+      debugLog('Restored auth state from storage:', lastAuthCheck.status.isAuthenticated);
+      // AuthMonitor will pick up the cached state on next check
+    }
+  } catch (error) {
+    console.warn('Failed to restore auth state:', error);
+  }
+
+  // Start periodic cleanup
   storageCleanup.startPeriodicCleanup();
-  
+
+  servicesInitialized = true;
+  debugLog('Services initialized successfully');
+}
+
+// Extension installation and startup
+chrome.runtime.onInstalled.addListener(async (details) => {
+  debugLog('Quotewise extension installed:', details.reason);
+
+  // Initialize services
+  await ensureServicesInitialized();
+
   if (details.reason === 'install') {
     chrome.storage.local.set({
       settings: {
@@ -36,13 +75,10 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
-// Initialize API handler, auth monitor, and storage cleanup on startup
-chrome.runtime.onStartup.addListener(() => {
-  console.log('Quotewise extension starting up');
-  apiHandler = initializeApiHandler();
-  authMonitor = new AuthenticationMonitor();
-  storageCleanup = initializeStorageCleanup();
-  storageCleanup.startPeriodicCleanup();
+// Initialize services on startup
+chrome.runtime.onStartup.addListener(async () => {
+  debugLog('Quotewise extension starting up');
+  await ensureServicesInitialized();
 });
 
 // Toolbar icon click: trigger extraction refresh in active tab
@@ -57,94 +93,88 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 // Handle messages from content scripts and popup
 // NOTE: Service worker handles core messages, API handler handles API messages
+// IMPORTANT: ensureServicesInitialized() is called first to recover from MV3 termination
 chrome.runtime.onMessage.addListener((
   message: ExtensionMessage,
   sender,
   sendResponse
 ) => {
-  console.log('Service worker received message:', message.type);
+  // Ensure services are initialized before processing any message
+  // This handles MV3 service worker termination and recovery
+  ensureServicesInitialized().then(() => {
+    debugLog('Service worker received message:', message.type);
 
-  switch (message.type) {
-    case MessageType.TWEET_DATA_EXTRACTED:
-      handleTweetDataExtracted(message.data as TwitterData, sendResponse);
-      return true; // We handle this message
-      
-    case MessageType.GET_TWEET_DATA:
-      handleGetTweetData(sender.tab?.id, sendResponse);
-      return true; // We handle this message
-      
-    // Delegate API messages to API handler
-    case MessageType.CHECK_AUTH_STATUS:
-      // Start auth monitoring when user first requests auth status
-      if (authMonitor && !authMonitor.getCurrentAuthStatus()) {
-        console.log('Starting auth monitoring due to user interaction');
-        authMonitor.startMonitoring();
-      }
-      // Fall through to delegate to API handler
-    case MessageType.SEARCH_ORIGINATORS:
-    case MessageType.CHECK_DUPLICATE:
-    case MessageType.SUBMIT_QUOTE:
-      // Delegate to API handler if available
-      if (apiHandler) {
-        apiHandler.handleMessage(message, sender, sendResponse).catch(error => {
+    switch (message.type) {
+      case MessageType.TWEET_DATA_EXTRACTED:
+        handleTweetDataExtracted(message.data, sendResponse);
+        break;
+
+      case MessageType.GET_TWEET_DATA:
+        handleGetTweetData(sender.tab?.id, sendResponse);
+        break;
+
+      // Delegate API messages to API handler
+      case MessageType.CHECK_AUTH_STATUS:
+        // Start auth monitoring when user first requests auth status
+        if (authMonitor && !authMonitor.getCurrentAuthStatus()) {
+          debugLog('Starting auth monitoring due to user interaction');
+          authMonitor.startMonitoring();
+        }
+        // Fall through to delegate to API handler
+      case MessageType.SEARCH_ORIGINATORS:
+      case MessageType.CHECK_DUPLICATE:
+      case MessageType.SUBMIT_QUOTE:
+        // Delegate to API handler (guaranteed initialized by ensureServicesInitialized)
+        apiHandler!.handleMessage(message, sender, sendResponse).catch(error => {
           console.error('API handler error:', error);
           sendResponse({
             success: false,
             error: error.message || 'API request failed'
           });
         });
-        return true; // Keep message port open for async response
-      } else {
-        sendResponse({ success: false, error: 'API handler not initialized' });
-        return true;
-      }
-      
-    case MessageType.CLEANUP_STORAGE:
-      // Manual storage cleanup for debugging
-      if (storageCleanup) {
-        storageCleanup.runCleanup().then(() => {
+        break;
+
+      case MessageType.CLEANUP_STORAGE:
+        // Manual storage cleanup for debugging (guaranteed initialized)
+        storageCleanup!.runCleanup().then(() => {
           sendResponse({ success: true, message: 'Storage cleanup completed' });
         }).catch(error => {
           sendResponse({ success: false, error: error.message });
         });
-        return true;
-      } else {
-        sendResponse({ success: false, error: 'Storage cleanup not initialized' });
-        return true;
-      }
-      
-    case MessageType.UPDATE_COLLECTION_BADGE:
-      handleUpdateCollectionBadge(message.data, sendResponse);
-      return true;
-      
-    case MessageType.GET_STORAGE_STATS:
-      // Get storage statistics for debugging
-      if (storageCleanup) {
-        storageCleanup.getStorageStats().then(stats => {
+        break;
+
+      case MessageType.UPDATE_COLLECTION_BADGE:
+        handleUpdateCollectionBadge(message.data, sendResponse);
+        break;
+
+      case MessageType.GET_STORAGE_STATS:
+        // Get storage statistics for debugging (guaranteed initialized)
+        storageCleanup!.getStorageStats().then(stats => {
           sendResponse({ success: true, stats });
         }).catch(error => {
           sendResponse({ success: false, error: error.message });
         });
-        return true;
-      } else {
-        sendResponse({ success: false, error: 'Storage cleanup not initialized' });
-        return true;
-      }
+        break;
 
-    case MessageType.OPEN_POPUP:
-      chrome.action.openPopup().then(() => {
-        sendResponse({ success: true });
-      }).catch(error => {
-        console.error('Error opening popup:', error);
-        sendResponse({ success: false, error: error?.message || 'Failed to open popup' });
-      });
-      return true;
-      
-    default:
-      console.warn('Unknown message type:', message.type);
-      sendResponse({ error: 'Unknown message type' });
-      return true;
-  }
+      case MessageType.OPEN_POPUP:
+        chrome.action.openPopup().then(() => {
+          sendResponse({ success: true });
+        }).catch(error => {
+          console.error('Error opening popup:', error);
+          sendResponse({ success: false, error: error?.message || 'Failed to open popup' });
+        });
+        break;
+
+      default:
+        console.warn('Unknown message type:', message.type);
+        sendResponse({ error: 'Unknown message type' });
+    }
+  }).catch(error => {
+    console.error('Failed to initialize services:', error);
+    sendResponse({ success: false, error: 'Service initialization failed' });
+  });
+
+  return true; // Keep message port open for async response
 });
 
 /**
@@ -227,26 +257,45 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 /**
  * Handle tweet data extracted from content script
+ * Validates incoming data before storage for security
  */
 async function handleTweetDataExtracted(
-  tweetData: TwitterData, 
+  tweetData: unknown,
   sendResponse: (response: any) => void
 ) {
   try {
+    // Validate incoming data before processing (security hardening)
+    try {
+      validateTwitterData(tweetData);
+    } catch (validationError) {
+      if (validationError instanceof ValidationError) {
+        console.error('Tweet data validation failed:', validationError.message, validationError.field);
+        sendResponse({
+          success: false,
+          error: `Invalid tweet data: ${validationError.message}`
+        });
+        return;
+      }
+      throw validationError;
+    }
+
+    // Type assertion safe after validation
+    const validatedData = tweetData as TwitterData;
+
     // Store the extracted data for popup access
     await chrome.storage.local.set({
       currentTweet: {
-        data: tweetData,
+        data: validatedData,
         timestamp: Date.now(),
-        url: tweetData.url
+        url: validatedData.url
       }
     });
-    
-    console.log('Tweet data stored:', tweetData);
-    
+
+    debugLog('Tweet data stored:', validatedData.text.substring(0, 50) + '...');
+
     // Update icon to show tweet data is ready
-    await updateExtensionIconForTweetPage(tweetData);
-    
+    await updateExtensionIconForTweetPage(validatedData);
+
     sendResponse({ success: true });
   } catch (error) {
     console.error('Error storing tweet data:', error);
@@ -422,4 +471,4 @@ function getCollectionBadgeConfig(badgeInfo: import('../types/chrome').Collectio
   }
 }
 
-console.log('Service worker initialized');
+debugLog('Service worker initialized');

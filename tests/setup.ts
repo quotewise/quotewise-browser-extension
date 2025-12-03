@@ -2,6 +2,7 @@
  * Jest test setup for Chrome extension
  */
 
+
 // Mock Chrome APIs
 const mockChrome = {
   runtime: {
@@ -12,7 +13,11 @@ const mockChrome = {
     lastError: null,
     onInstalled: {
       addListener: jest.fn()
-    }
+    },
+    getManifest: jest.fn(() => ({
+      name: 'Quotewise [DEV]',
+      version: '1.1.1'
+    }))
   },
   storage: {
     local: {

@@ -2,7 +2,8 @@
  * Common utilities for content scripts
  */
 
-import { MessageType, ExtensionMessage } from '../types/index';
+import { ExtensionMessage } from '../types/index';
+import { debugLog as envDebugLog } from '../config/environment';
 
 /**
  * Send message to service worker with error handling
@@ -63,7 +64,7 @@ export function waitForElement(
       return;
     }
     
-    const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver(() => {
       const element = document.querySelector(selector);
       if (element) {
         observer.disconnect();
@@ -160,11 +161,10 @@ export function detectPlatform(): 'twitter' | 'unknown' {
 
 /**
  * Log debug information (only in development)
+ * Re-exports the centralized debugLog for backwards compatibility
  */
-export function debugLog(message: string, data?: any): void {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[Quotewise] ${message}`, data || '');
-  }
+export function debugLog(message: string, data?: unknown): void {
+  envDebugLog(message, data || '');
 }
 
 /**

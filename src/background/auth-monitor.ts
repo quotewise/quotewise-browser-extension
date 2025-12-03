@@ -6,6 +6,7 @@
 import { AuthChecker } from '../auth/auth-checker';
 import { apiClient } from '../api/quotewise-api';
 import type { AuthStatus, AuthError, AuthChangeEvent, AuthBadgeState, AuthMonitoringConfig } from '../types/auth';
+import { debugLog } from '../config/environment';
 
 /**
  * Manages background authentication monitoring and badge updates
@@ -34,7 +35,7 @@ export class AuthenticationMonitor {
    * Start periodic authentication monitoring
    */
   startMonitoring(): void {
-    console.log('Starting authentication monitoring...');
+    debugLog('Starting authentication monitoring...');
     
     // Do initial check
     this.checkAuthenticationStatus();
@@ -48,7 +49,7 @@ export class AuthenticationMonitor {
       this.checkAuthenticationStatus();
     }, this.config.checkInterval);
 
-    console.log(`Authentication monitoring started with ${this.config.checkInterval / 1000}s interval`);
+    debugLog(`Authentication monitoring started with ${this.config.checkInterval / 1000}s interval`);
   }
 
   /**
@@ -58,7 +59,7 @@ export class AuthenticationMonitor {
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
       this.monitoringInterval = null;
-      console.log('Authentication monitoring stopped');
+      debugLog('Authentication monitoring stopped');
     }
   }
 
@@ -67,7 +68,7 @@ export class AuthenticationMonitor {
    */
   private async checkAuthenticationStatus(): Promise<void> {
     try {
-      console.log('Checking authentication status (background)...');
+      debugLog('Checking authentication status (background)...');
       
       const authResult = await this.authChecker.checkAuthStatus();
       
@@ -85,7 +86,7 @@ export class AuthenticationMonitor {
       this.retryCount++;
       
       if (this.retryCount <= this.config.maxRetries) {
-        console.log(`Retrying auth check (${this.retryCount}/${this.config.maxRetries})`);
+        debugLog(`Retrying auth check (${this.retryCount}/${this.config.maxRetries})`);
         // Retry with exponential backoff
         setTimeout(() => {
           this.checkAuthenticationStatus();
@@ -106,7 +107,7 @@ export class AuthenticationMonitor {
     const statusChanged = this.hasAuthStatusChanged(authStatus);
     
     if (statusChanged) {
-      console.log('Authentication status changed:', authStatus);
+      debugLog('Authentication status changed:', authStatus);
       
       const changeEvent: AuthChangeEvent = {
         type: 'AUTH_STATUS_CHANGED',
@@ -129,7 +130,7 @@ export class AuthenticationMonitor {
    * Handle authentication error
    */
   private handleAuthError(authError: AuthError): void {
-    console.log('Authentication error (background):', authError);
+    debugLog('Authentication error (background):', authError);
     
     // Update badge to show unauthenticated state
     this.updateBadgeState('unauthenticated');

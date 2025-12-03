@@ -4,7 +4,8 @@
  */
 
 import type { QuotewiseApiClient } from '../types/api';
-import type { AuthStatus, AuthError, AuthStatusResponse } from '../types/auth';
+import type { AuthStatus, AuthError } from '../types/auth';
+import { debugLog } from '../config/environment';
 
 /**
  * Checks authentication status against Django backend
@@ -19,7 +20,7 @@ export class AuthChecker {
    */
   async checkAuthStatus(): Promise<AuthStatus | AuthError> {
     try {
-      console.log('Checking authentication status...');
+      debugLog('Checking authentication status...');
       
       // Call Django auth status endpoint
       const response = await this.apiClient.checkAuthStatus();
@@ -47,7 +48,7 @@ export class AuthChecker {
         authStatus.sessionAge = Math.max(0, Math.floor((expiryTime - currentTime) / 1000));
       }
 
-      console.log('Authentication status:', authStatus);
+      debugLog('Authentication status:', authStatus);
       return authStatus;
 
     } catch (error) {
@@ -74,7 +75,7 @@ export class AuthChecker {
    * Polls for authentication status with configurable timeout
    */
   async waitForAuthChange(timeout = 30000): Promise<AuthStatus> {
-    console.log('Waiting for authentication change...');
+    debugLog('Waiting for authentication change...');
     const startTime = Date.now();
     const pollInterval = 1000; // Check every second
 
@@ -82,7 +83,7 @@ export class AuthChecker {
       const status = await this.checkAuthStatus();
 
       if ('isAuthenticated' in status && status.isAuthenticated) {
-        console.log('Authentication detected:', status);
+        debugLog('Authentication detected:', status);
         return status;
       }
 

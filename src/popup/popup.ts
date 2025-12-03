@@ -19,6 +19,7 @@ import { OriginatorSearch, SearchState } from '../search/originator-search';
 import type { OriginatorSearchResult } from '../types/api';
 import { DuplicateChecker, DuplicateState } from '../duplicate/duplicate-checker';
 import { DuplicateDisplay } from '../duplicate/duplicate-display';
+import { debugLog } from '../config/environment';
 
 // State Management Interfaces
 interface AuthenticationState {
@@ -233,34 +234,34 @@ class SimpleQuotewisePopup {
   }
 
   private async init(): Promise<void> {
-    console.log('Initializing Quotewise popup v1.0.1');
+    debugLog('Initializing Quotewise popup v1.0.1');
     
     try {
-      console.log('Setting up event listeners...');
+      debugLog('Setting up event listeners...');
       this.setupEventListeners();
       
-      console.log('Initializing originator search...');
+      debugLog('Initializing originator search...');
       this.initializeOriginatorSearch();
       
-      console.log('Initializing duplicate checker...');
+      debugLog('Initializing duplicate checker...');
       this.initializeDuplicateChecker();
       
-      console.log('Setting up state manager subscription...');
+      debugLog('Setting up state manager subscription...');
       this.stateManager.subscribe(this.onStateChange.bind(this));
       
-      console.log('About to check auth status...');
+      debugLog('About to check auth status...');
       await this.checkAuthStatus();
       
       // Only load tweet data after auth check completes successfully
       const currentState = this.stateManager.getState();
       if (currentState.auth.isAuthenticated && currentState.ui.currentView !== 'error') {
-        console.log('About to load tweet data...');
+        debugLog('About to load tweet data...');
         await this.loadTweetData();
       } else {
-        console.log('Skipping tweet data load - not authenticated or auth error occurred');
+        debugLog('Skipping tweet data load - not authenticated or auth error occurred');
       }
       
-      console.log('Popup initialization completed successfully');
+      debugLog('Popup initialization completed successfully');
       
     } catch (error) {
       console.error('Error initializing popup:', error);
@@ -447,7 +448,7 @@ class SimpleQuotewisePopup {
     }
   }
 
-  private updateOriginatorState(state: PopupState): void {
+  private updateOriginatorState(_state: PopupState): void {
     // The originator search component manages its own UI state
     // We just need to ensure form validation is updated
     this.validateForm();
@@ -466,7 +467,7 @@ class SimpleQuotewisePopup {
   }
 
   private async handleLogin(): Promise<void> {
-    console.log('Login button clicked');
+    debugLog('Login button clicked');
     
     try {
       this.stateManager.setState({
@@ -487,7 +488,7 @@ class SimpleQuotewisePopup {
       // Wait for authentication to complete
       const authStatus = await this.authChecker.waitForAuthChange(60000); // 1 minute timeout
 
-      console.log('Login completed, auth status:', authStatus);
+      debugLog('Login completed, auth status:', authStatus);
       
       // Handle the authentication result
       this.handleAuthSuccess(authStatus);
@@ -512,7 +513,7 @@ class SimpleQuotewisePopup {
     }
   }
 
-  private updateAuthUI(currentView: string): void {
+  private updateAuthUI(_currentView: string): void {
     const state = this.stateManager.getState();
     
     // Update header status text
@@ -809,7 +810,7 @@ class SimpleQuotewisePopup {
         likes_count: state.tweet.data.likes || 0,
         post_date: state.tweet.data.date || undefined,
         attribution_type: attributionType,
-        // TODO: API should accept platform_data.is_protected to flag private/limited visibility posts
+        // Backend dependency: API should accept platform_data.is_protected to flag private/limited visibility posts (feature parity pending)
         platform_data: state.tweet.data.platform_data
       };
 
@@ -865,7 +866,7 @@ class SimpleQuotewisePopup {
   }
 
   private async checkAuthStatus(): Promise<void> {
-    console.log('checkAuthStatus: Starting auth check');
+    debugLog('checkAuthStatus: Starting auth check');
     
     this.stateManager.setState({
       auth: { checkInProgress: true },
@@ -876,7 +877,7 @@ class SimpleQuotewisePopup {
     });
 
     try {
-      console.log('checkAuthStatus: Sending CHECK_AUTH_STATUS message to service worker');
+      debugLog('checkAuthStatus: Sending CHECK_AUTH_STATUS message to service worker');
       
       // Set a reasonable timeout for auth check
       const authPromise = chrome.runtime.sendMessage({ type: 'CHECK_AUTH_STATUS' });
@@ -886,7 +887,7 @@ class SimpleQuotewisePopup {
       
       const response = await Promise.race([authPromise, timeoutPromise]);
       
-      console.log('checkAuthStatus: Received response from service worker:', response);
+      debugLog('checkAuthStatus: Received response from service worker:', response);
       
       if (chrome.runtime.lastError) {
         console.error('checkAuthStatus: Chrome runtime error:', chrome.runtime.lastError);
@@ -896,14 +897,14 @@ class SimpleQuotewisePopup {
       // More robust response validation
       if (response && typeof response === 'object' && 'isAuthenticated' in response) {
         if (response.isAuthenticated === true) {
-          console.log('checkAuthStatus: User is authenticated, calling handleAuthSuccess');
+          debugLog('checkAuthStatus: User is authenticated, calling handleAuthSuccess');
           this.handleAuthSuccess({
             isAuthenticated: response.isAuthenticated,
             isStaff: response.isStaff || false,
             username: response.username
           });
         } else {
-          console.log('checkAuthStatus: User is not authenticated, calling handleAuthError');
+          debugLog('checkAuthStatus: User is not authenticated, calling handleAuthError');
           this.handleAuthError({
             type: 'not_authenticated',
             message: 'Please log in to Quotewise',
@@ -921,7 +922,7 @@ class SimpleQuotewisePopup {
       
       // For timeout or network errors, try direct API fallback
       if (error instanceof Error && (error.message.includes('timeout') || error.message.includes('network'))) {
-        console.log('checkAuthStatus: Attempting direct API fallback due to network/timeout error');
+        debugLog('checkAuthStatus: Attempting direct API fallback due to network/timeout error');
         await this.fallbackAuthCheck();
       } else {
         this.handleAuthError({
@@ -938,7 +939,7 @@ class SimpleQuotewisePopup {
    */
   private async fallbackAuthCheck(): Promise<void> {
     try {
-      console.log('fallbackAuthCheck: Attempting direct API auth check');
+      debugLog('fallbackAuthCheck: Attempting direct API auth check');
       const authChecker = new AuthChecker(apiClient);
       const authResult = await authChecker.checkAuthStatus();
       
@@ -947,7 +948,7 @@ class SimpleQuotewisePopup {
         this.handleAuthError(authResult);
       } else {
         // AuthStatus
-        console.log('fallbackAuthCheck: Direct API auth successful:', authResult);
+        debugLog('fallbackAuthCheck: Direct API auth successful:', authResult);
         this.handleAuthSuccess(authResult);
       }
     } catch (error) {
@@ -961,7 +962,7 @@ class SimpleQuotewisePopup {
   }
 
   private handleAuthError(authError: AuthError): void {
-    console.log('Authentication error:', authError);
+    debugLog('Authentication error:', authError);
     
     this.stateManager.setState({
       auth: {
@@ -977,7 +978,7 @@ class SimpleQuotewisePopup {
   }
 
   private handleAuthSuccess(authStatus: AuthStatus): void {
-    console.log('Authentication success:', authStatus);
+    debugLog('Authentication success:', authStatus);
 
     // Check if user has sufficient privileges
     const privilegeError = this.authChecker.validatePrivileges(authStatus);
@@ -1256,7 +1257,7 @@ class SimpleQuotewisePopup {
 
   private async handleRefreshPageCheck(): Promise<void> {
     // Re-check the current page for tweet data
-    console.log('Refreshing page check...');
+    debugLog('Refreshing page check...');
     
     this.stateManager.setState({
       ui: { 
@@ -1404,7 +1405,7 @@ class SimpleQuotewisePopup {
   private startNavigationMonitoring(): void {
     if (this.navigationCheckInterval) return; // Already monitoring
     
-    console.log('Starting navigation monitoring...');
+    debugLog('Starting navigation monitoring...');
     this.navigationCheckInterval = setInterval(() => {
       this.checkForNavigationChange();
     }, 1000); // Check every 1 second for faster response
@@ -1415,7 +1416,7 @@ class SimpleQuotewisePopup {
    */
   private stopNavigationMonitoring(): void {
     if (this.navigationCheckInterval) {
-      console.log('Stopping navigation monitoring...');
+      debugLog('Stopping navigation monitoring...');
       clearInterval(this.navigationCheckInterval);
       this.navigationCheckInterval = null;
     }
@@ -1426,10 +1427,10 @@ class SimpleQuotewisePopup {
    */
   private async checkForNavigationChange(): Promise<void> {
     try {
-      console.log('Checking for navigation change...');
+      debugLog('Checking for navigation change...');
       
       // Force the content script to re-extract data by requesting it fresh
-      const response = await this.messageHandler.sendMessage({
+      await this.messageHandler.sendMessage({
         type: MessageType.EXTRACT_TWEET_DATA
       });
 
@@ -1439,15 +1440,15 @@ class SimpleQuotewisePopup {
       });
 
       if (dataResponse && dataResponse.success && dataResponse.data) {
-        console.log('Navigation detected: Found tweet data, switching to quote capture');
+        debugLog('Navigation detected: Found tweet data, switching to quote capture');
         // Found tweet data! Stop monitoring and switch to quote capture
         this.stopNavigationMonitoring();
         await this.loadTweetData();
       } else {
-        console.log('Still no tweet data found');
+        debugLog('Still no tweet data found');
       }
     } catch (error) {
-      console.log('Error during navigation check:', error);
+      debugLog('Error during navigation check:', error);
       // Continue monitoring even if there's an error
     }
   }
@@ -1471,7 +1472,7 @@ function fixPopupWidthOnMac(): void {
         // Force redraw by increasing width by 1px to fix Mac rendering bug
         const currentWidth = document.body.clientWidth;
         document.body.style.width = `${currentWidth + 1}px`;
-        console.log('Applied Mac width fix:', currentWidth, '→', currentWidth + 1);
+        debugLog('Applied Mac width fix:', currentWidth, '→', currentWidth + 1);
       }, 250); // Allow popup animation to complete
     }
   });
@@ -1481,12 +1482,12 @@ function fixPopupWidthOnMac(): void {
 document.addEventListener('DOMContentLoaded', () => {
   // Prevent double initialization
   if (popupInstance) {
-    console.log('Popup already initialized, skipping...');
+    debugLog('Popup already initialized, skipping...');
     return;
   }
 
   try {
-    console.log('Starting popup initialization...');
+    debugLog('Starting popup initialization...');
     
     // Apply Mac width fix
     fixPopupWidthOnMac();

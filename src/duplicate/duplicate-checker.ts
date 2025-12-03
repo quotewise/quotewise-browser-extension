@@ -3,7 +3,7 @@
  * Manages duplicate check state and API calls for quote submission
  */
 
-import type { DuplicateCheckResult, OriginatorSearchResult } from '../types/api';
+import type { DuplicateCheckResult } from '../types/api';
 import { apiClient } from '../api/quotewise-api';
 import { debounce } from '../utils/debounce';
 

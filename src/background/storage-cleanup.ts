@@ -3,7 +3,7 @@
  * Handles periodic cleanup of stale data in chrome.storage.local
  */
 
-import { getSessionConfig, detectEnvironment } from '../config/environment';
+import { getSessionConfig, detectEnvironment, debugLog } from '../config/environment';
 
 interface StoredTweetData {
   data: any;
@@ -53,7 +53,7 @@ export class StorageCleanupService {
       ...config
     };
     
-    console.log('Storage cleanup service initialized:', {
+    debugLog('Storage cleanup service initialized:', {
       cleanupInterval: this.config.cleanupInterval / (60 * 60 * 1000) + ' hours',
       maxAge: {
         tweets: this.config.maxAge.tweets / (60 * 60 * 1000) + ' hours',
@@ -68,11 +68,11 @@ export class StorageCleanupService {
    */
   public startPeriodicCleanup(): void {
     if (this.cleanupInterval) {
-      console.log('Storage cleanup already running');
+      debugLog('Storage cleanup already running');
       return;
     }
-    
-    console.log('Starting periodic storage cleanup...');
+
+    debugLog('Starting periodic storage cleanup...');
     
     // Run cleanup immediately
     this.runCleanup();
@@ -82,7 +82,7 @@ export class StorageCleanupService {
       this.runCleanup();
     }, this.config.cleanupInterval);
     
-    console.log(`Periodic storage cleanup started with ${this.config.cleanupInterval / (60 * 60 * 1000)}h interval`);
+    debugLog(`Periodic storage cleanup started with ${this.config.cleanupInterval / (60 * 60 * 1000)}h interval`);
   }
   
   /**
@@ -92,7 +92,7 @@ export class StorageCleanupService {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
-      console.log('Periodic storage cleanup stopped');
+      debugLog('Periodic storage cleanup stopped');
     }
   }
   
@@ -100,7 +100,7 @@ export class StorageCleanupService {
    * Run cleanup immediately
    */
   public async runCleanup(): Promise<void> {
-    console.log('Running storage cleanup...');
+    debugLog('Running storage cleanup...');
     
     try {
       const now = Date.now();
@@ -115,7 +115,7 @@ export class StorageCleanupService {
       // Clean up search history
       totalCleaned += await this.cleanupSearchHistory(now);
       
-      console.log(`Storage cleanup completed. Cleaned ${totalCleaned} items.`);
+      debugLog(`Storage cleanup completed. Cleaned ${totalCleaned} items.`);
     } catch (error) {
       console.error('Error during storage cleanup:', error);
     }
@@ -136,7 +136,7 @@ export class StorageCleanupService {
       const age = now - currentTweet.timestamp;
       if (age > this.config.maxAge.tweets) {
         await chrome.storage.local.remove(['currentTweet']);
-        console.log(`Cleaned up stale tweet data (age: ${Math.round(age / (60 * 60 * 1000))}h)`);
+        debugLog(`Cleaned up stale tweet data (age: ${Math.round(age / (60 * 60 * 1000))}h)`);
         return 1;
       }
       
@@ -162,7 +162,7 @@ export class StorageCleanupService {
       const age = now - lastAuthCheck.timestamp;
       if (age > this.config.maxAge.authChecks) {
         await chrome.storage.local.remove(['lastAuthCheck']);
-        console.log(`Cleaned up stale auth check (age: ${Math.round(age / (60 * 1000))}m)`);
+        debugLog(`Cleaned up stale auth check (age: ${Math.round(age / (60 * 1000))}m)`);
         return 1;
       }
       
@@ -202,7 +202,7 @@ export class StorageCleanupService {
         await chrome.storage.local.set({
           originator_search_history: filteredHistory
         });
-        console.log(`Cleaned up ${cleanedCount} stale search history items`);
+        debugLog(`Cleaned up ${cleanedCount} stale search history items`);
       }
       
       return cleanedCount;

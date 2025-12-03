@@ -3,6 +3,8 @@
  * Exact implementation from quotewise/static/js/quote_collection.js
  */
 
+import { debugLog } from '../config/environment';
+
 /**
  * Extract cookie value by name
  * Works in both content scripts (with document) and service workers (with chrome.cookies API)
@@ -31,23 +33,23 @@ export async function getCookie(name: string): Promise<string | null> {
                 domain = 'localhost';
             }
             
-            console.log(`Getting cookie '${name}' for domain: ${domain}`);
+            debugLog(`Getting cookie '${name}' for domain: ${domain}`);
             
             const cookie = await chrome.cookies.get({
                 url: `https://${domain}`,
                 name: name
             });
             
-            console.log(`Cookie result for '${name}':`, cookie);
+            debugLog(`Cookie result for '${name}':`, cookie);
             
             // Also try to get all cookies for debugging
             if (name === 'csrftoken') {
                 const allCookies = await chrome.cookies.getAll({ domain: domain });
-                console.log('All cookies for domain:', allCookies.map(c => ({ name: c.name, value: c.value.substring(0, 10) + '...', domain: c.domain, secure: c.secure, httpOnly: c.httpOnly })));
+                debugLog('All cookies for domain:', allCookies.map(c => ({ name: c.name, value: c.value.substring(0, 10) + '...', domain: c.domain, secure: c.secure, httpOnly: c.httpOnly })));
                 
                 // Also try without explicit domain to see all staging cookies
                 const allStagingCookies = await chrome.cookies.getAll({ url: `https://${domain}` });
-                console.log('All cookies for URL:', allStagingCookies.map(c => ({ name: c.name, value: c.value.substring(0, 10) + '...', domain: c.domain, secure: c.secure, httpOnly: c.httpOnly })));
+                debugLog('All cookies for URL:', allStagingCookies.map(c => ({ name: c.name, value: c.value.substring(0, 10) + '...', domain: c.domain, secure: c.secure, httpOnly: c.httpOnly })));
             }
             
             return cookie ? cookie.value : null;
@@ -72,7 +74,7 @@ export async function getCSRFToken(apiBaseUrl: string): Promise<string | null> {
         // For extensions, we need to make a GET request to trigger cookie setting
         // Use the auth status endpoint which is available and safe to call
         try {
-            const response = await fetch(`${apiBaseUrl}/api/v1/auth/status/`, {
+            await fetch(`${apiBaseUrl}/api/v1/auth/status/`, {
                 credentials: 'include',
                 method: 'GET'
             });
@@ -103,29 +105,59 @@ export function isValidCSRFToken(token: string | null): boolean {
 }
 
 /**
- * Get default request headers with CSRF token
+ * Error thrown when CSRF token is required but unavailable
  */
-export async function getDefaultHeaders(apiBaseUrl: string): Promise<HeadersInit> {
+export class CSRFTokenError extends Error {
+    constructor(message: string = 'CSRF token unavailable') {
+        super(message);
+        this.name = 'CSRFTokenError';
+    }
+}
+
+/**
+ * Get default request headers with CSRF token
+ * @param apiBaseUrl The API base URL
+ * @param requireCSRF If true (default), throws CSRFTokenError when token unavailable
+ * @throws CSRFTokenError if CSRF token is required but unavailable
+ */
+export async function getDefaultHeaders(
+    apiBaseUrl: string,
+    requireCSRF: boolean = true
+): Promise<HeadersInit> {
     const csrfToken = await getCSRFToken(apiBaseUrl);
-    
-    console.log('CSRF token for headers:', csrfToken);
-    
+
+    // Log token status (truncated for security)
+    if (csrfToken) {
+        debugLog('CSRF token available:', csrfToken.substring(0, 8) + '...');
+    } else {
+        console.warn('No CSRF token available');
+    }
+
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
         // Add Referer header to make Django CSRF protection think request comes from the website
         'Referer': `${apiBaseUrl}/`
     };
-    
+
     if (csrfToken) {
         // Line 736 pattern from quote_collection.js
         headers['X-CSRFToken'] = csrfToken;
-        console.log('Added CSRF token to headers');
-    } else {
-        console.warn('No CSRF token available for headers');
+    } else if (requireCSRF) {
+        // SECURITY: Fail safely - do not proceed without CSRF token
+        // This prevents requests that would be rejected by Django anyway
+        throw new CSRFTokenError(
+            'CSRF token unavailable. User may need to log in to quotosaurus.com first.'
+        );
     }
-    
-    console.log('Final headers:', headers);
-    
+
     return headers;
+}
+
+/**
+ * Get headers for read-only requests (CSRF token optional)
+ * Use this for GET requests that don't require CSRF protection
+ */
+export async function getReadOnlyHeaders(apiBaseUrl: string): Promise<HeadersInit> {
+    return getDefaultHeaders(apiBaseUrl, false);
 }
