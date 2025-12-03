@@ -14,5 +14,5 @@
 | 1-10 | [Create extension icons](./1-10.md) | Proposed | Design and implement extension branding |
 | 1-11 | [Fix test suite & type consistency](./1-11.md) | Proposed | Align API types and fix 12 failing tests |
 | 1-12 | [Service worker resilience & security](./1-12.md) | Proposed | MV3 compliance and input validation |
-| 1-13 | [Developer tooling & publishing prep](./1-13.md) | Proposed | ESLint, debug logging, icons, privacy policy |
+| 1-13 | [Developer tooling & publishing prep](./1-13.md) | Done | ESLint, debug logging, icons, privacy policy |
 | 1-14 | ["Collect Quote" flow & badge improvements](./1-14.md) | Proposed | Add sighting for duplicates, improve badges |
