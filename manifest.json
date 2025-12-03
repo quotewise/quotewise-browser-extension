@@ -28,7 +28,7 @@
         "https://twitter.com/*/status/*",
         "https://x.com/*/status/*"
       ],
-      "js": ["content/twitter.js"],
+      "js": ["content/index.js"],
       "run_at": "document_idle"
     }
   ],

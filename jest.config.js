@@ -6,7 +6,7 @@ module.exports = {
     '<rootDir>/tests/**/*.test.ts',
     '<rootDir>/tests/**/*.test.tsx'
   ],
-  moduleNameMapping: {
+  moduleNameMapper: {
     '^@api/(.*)$': '<rootDir>/src/api/$1',
     '^@types/(.*)$': '<rootDir>/src/types/$1',
     '^@content/(.*)$': '<rootDir>/src/content/$1',
