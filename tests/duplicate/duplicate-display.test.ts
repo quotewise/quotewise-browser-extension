@@ -96,6 +96,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_quote',
         confidence: 0.9,
+        in_quotosaurus: false,
         matches: [],
         reasoning: 'No similar quotes found',
         search_metadata: {}
@@ -124,12 +125,14 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'Similar quote text',
           similarity: 0.75,
           match_type: 'semantic',
+          in_user_collections: false,
           originator: {
             id: '2',
             full_name: 'Different Author',
@@ -168,12 +171,14 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'Exact quote text',
           similarity: 0.96,
           match_type: 'exact',
+          in_user_collections: true,
           originator: {
             id: '123',
             full_name: 'Same Author',
@@ -214,12 +219,14 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'This is a test quote that should be displayed in the match',
           similarity: 0.85,
           match_type: 'semantic',
+          in_user_collections: false,
           originator: {
             id: '2',
             full_name: 'Test Author',
@@ -276,6 +283,7 @@ describe('DuplicateDisplay', () => {
         text: `Test quote ${i + 1}`,
         similarity: 0.8 - (i * 0.1),
         match_type: 'semantic',
+        in_user_collections: false,
         originator: {
           id: `${i + 1}`,
           full_name: `Author ${i + 1}`,
@@ -290,6 +298,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches,
         reasoning: 'Multiple similar quotes found',
         search_metadata: {}
@@ -323,6 +332,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [],
         reasoning: 'Duplicate found',
         search_metadata: {}
@@ -357,6 +367,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [],
         reasoning: 'Duplicate found',
         search_metadata: {}
@@ -386,6 +397,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches: [],
         reasoning: 'Similar quote found',
         search_metadata: {}
@@ -415,6 +427,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.9,
+        in_quotosaurus: true,
         matches: [],
         reasoning: 'Duplicate found',
         search_metadata: {}
@@ -446,12 +459,14 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches: [{
           quote_id: 'test-quote-id',
           version_id: 1,
           text: 'Test quote',
           similarity: 0.8,
           match_type: 'semantic',
+          in_user_collections: false,
           originator: {
             id: '1',
             full_name: 'Test Author',
@@ -497,6 +512,7 @@ describe('DuplicateDisplay', () => {
         text: `Test quote ${i + 1}`,
         similarity: 0.8,
         match_type: 'semantic',
+        in_user_collections: false,
         originator: {
           id: `${i + 1}`,
           full_name: `Author ${i + 1}`,
@@ -511,6 +527,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches,
         reasoning: 'Multiple matches found',
         search_metadata: {}
@@ -544,12 +561,14 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'Test quote',
           similarity: 0.97,
           match_type: 'exact',
+          in_user_collections: true,
           originator: {
             id: '1',
             full_name: 'Test Author',
@@ -584,12 +603,14 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.85,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: 'Test quote',
           similarity: 0.85,
           match_type: 'semantic',
+          in_user_collections: false,
           originator: {
             id: '1',
             full_name: 'Test Author',
@@ -628,12 +649,14 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: longText,
           similarity: 0.8,
           match_type: 'semantic',
+          in_user_collections: false,
           originator: {
             id: '1',
             full_name: 'Test Author',
@@ -672,12 +695,14 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
+        in_quotosaurus: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
           text: htmlText,
           similarity: 0.8,
           match_type: 'semantic',
+          in_user_collections: false,
           originator: {
             id: '1',
             full_name: 'Test <b>Author</b>',

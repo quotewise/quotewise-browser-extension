@@ -13,7 +13,8 @@ const mockApiClient = {
   checkAuthStatus: jest.fn(),
   searchOriginators: jest.fn(),
   checkQuoteDuplicate: jest.fn(),
-  submitQuote: jest.fn()
+  submitQuote: jest.fn(),
+  listCollections: jest.fn()
 } as jest.Mocked<QuotewiseApiClient>;
 
 describe('AuthChecker', () => {
@@ -26,13 +27,20 @@ describe('AuthChecker', () => {
 
   describe('checkAuthStatus', () => {
     test('returns authenticated status for valid session', async () => {
+      const sessionExpiry = new Date(Date.now() + 3600000).toISOString(); // 1 hour from now
       const mockResponse = {
-        isAuthenticated: true,
-        userInfo: {
+        authenticated: true,
+        is_admin: true,
+        user: {
+          id: 1,
           username: 'testuser',
-          isAdmin: true
+          email: 'test@example.com'
         },
-        sessionExpiry: new Date(Date.now() + 3600000).toISOString() // 1 hour from now
+        permissions: {
+          can_submit_quotes: true,
+          can_review_quotes: true
+        },
+        sessionExpiry
       };
 
       mockApiClient.checkAuthStatus.mockResolvedValue(mockResponse);
@@ -44,14 +52,16 @@ describe('AuthChecker', () => {
         expect(result.isAuthenticated).toBe(true);
         expect(result.isStaff).toBe(true);
         expect(result.username).toBe('testuser');
-        expect(result.sessionExpiry).toBe('2025-01-14T12:00:00Z');
+        expect(result.sessionExpiry).toBe(sessionExpiry);
         expect(result.sessionAge).toBeGreaterThan(0);
       }
     });
 
     test('returns auth error for unauthenticated request', async () => {
       const mockResponse = {
-        isAuthenticated: false
+        authenticated: false,
+        is_admin: false,
+        permissions: { can_submit_quotes: false, can_review_quotes: false }
       };
 
       mockApiClient.checkAuthStatus.mockResolvedValue(mockResponse);
@@ -99,10 +109,16 @@ describe('AuthChecker', () => {
     test('resolves when authentication is detected', async () => {
       // Mock first call as unauthenticated, second as authenticated
       mockApiClient.checkAuthStatus
-        .mockResolvedValueOnce({ isAuthenticated: false })
         .mockResolvedValueOnce({
-          isAuthenticated: true,
-          userInfo: { username: 'testuser', isAdmin: true }
+          authenticated: false,
+          is_admin: false,
+          permissions: { can_submit_quotes: false, can_review_quotes: false }
+        })
+        .mockResolvedValueOnce({
+          authenticated: true,
+          is_admin: true,
+          user: { id: 1, username: 'testuser', email: 'test@example.com' },
+          permissions: { can_submit_quotes: true, can_review_quotes: true }
         });
 
       const result = await authChecker.waitForAuthChange(2000);
@@ -113,7 +129,11 @@ describe('AuthChecker', () => {
     });
 
     test('throws timeout error when no authentication detected', async () => {
-      mockApiClient.checkAuthStatus.mockResolvedValue({ isAuthenticated: false });
+      mockApiClient.checkAuthStatus.mockResolvedValue({
+        authenticated: false,
+        is_admin: false,
+        permissions: { can_submit_quotes: false, can_review_quotes: false }
+      });
 
       await expect(authChecker.waitForAuthChange(1000))
         .rejects
