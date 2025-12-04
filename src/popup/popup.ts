@@ -151,7 +151,8 @@ class SimplePopupStateManager {
     Object.keys(updates).forEach(key => {
       const section = key as keyof PopupState;
       if (updates[section]) {
-        this.state[section] = { ...this.state[section], ...updates[section] } as any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (this.state as any)[section] = { ...this.state[section], ...updates[section] };
       }
     });
     this.notifyListeners();
@@ -186,6 +187,7 @@ class SimplePopupStateManager {
 class SimpleMessageHandler {
   constructor(private stateManager: SimplePopupStateManager) {}
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async sendMessage(message: ExtensionMessage): Promise<any> {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, (response) => {
@@ -1280,7 +1282,7 @@ class SimpleQuotewisePopup {
     }
   }
 
-  private populateTweetInfo(tweetData: any): void {
+  private populateTweetInfo(tweetData: TwitterData): void {
     
     // Tweet info (date, URL)
     const tweetInfoElement = document.getElementById('tweet-info');

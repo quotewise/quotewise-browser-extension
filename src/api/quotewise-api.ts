@@ -81,9 +81,9 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
             console.error('Could not read error response body');
           }
 
-          const authError: AuthenticationError = new Error('Authentication required') as any;
+          const authError = new Error('Authentication required') as Error & { name: string };
           authError.name = 'AuthenticationError';
-          throw authError;
+          throw authError as AuthenticationError;
         }
 
         // Try to get error details from response
@@ -95,10 +95,10 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
           // Ignore JSON parsing errors, use default message
         }
 
-        const apiError: ApiError = new Error(errorMessage) as any;
+        const apiError = new Error(errorMessage) as Error & { name: string; statusCode?: number };
         apiError.name = 'ApiError';
         apiError.statusCode = response.status;
-        throw apiError;
+        throw apiError as ApiError;
       }
 
       return await response.json();
@@ -114,18 +114,18 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
 
       // Handle CSRF token errors specifically
       if (error instanceof CSRFTokenError) {
-        const authError: AuthenticationError = new Error(error.message) as any;
+        const authError = new Error(error.message) as Error & { name: string };
         authError.name = 'AuthenticationError';
-        throw authError;
+        throw authError as AuthenticationError;
       }
 
       // Handle network errors and other exceptions
       console.error('API request failed:', error);
-      const apiError: ApiError = new Error(
+      const apiError = new Error(
         error instanceof Error ? error.message : 'Network error occurred'
-      ) as any;
+      ) as Error & { name: string };
       apiError.name = 'ApiError';
-      throw apiError;
+      throw apiError as ApiError;
     }
   }
 

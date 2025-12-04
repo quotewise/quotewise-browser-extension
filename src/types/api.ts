@@ -142,7 +142,8 @@ export interface PlatformData {
   view_count?: number;
   is_protected?: boolean; // Backend dependency: API should honor this flag for private/limited-scope collections (feature parity pending)
   thread_position?: number;
-  [key: string]: any;
+  has_media?: boolean;
+  [key: string]: string | number | boolean | null | undefined;
 }
 
 // Attribution Types
@@ -214,7 +215,7 @@ export class ApiError extends Error {
 }
 
 // Generic API response wrapper
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;

@@ -261,6 +261,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
  */
 async function handleTweetDataExtracted(
   tweetData: unknown,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendResponse: (response: any) => void
 ) {
   try {
@@ -307,7 +308,8 @@ async function handleTweetDataExtracted(
  * Handle request for current tweet data from popup
  */
 async function handleGetTweetData(
-  tabId: number | undefined, 
+  tabId: number | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendResponse: (response: any) => void
 ) {
   try {
@@ -381,6 +383,7 @@ async function handleGetTweetData(
  */
 async function handleUpdateCollectionBadge(
   badgeInfo: import('../types/chrome').CollectionBadgeInfo,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendResponse: (response: any) => void
 ) {
   try {

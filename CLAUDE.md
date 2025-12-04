@@ -93,3 +93,11 @@ Tests live in `tests/` mirroring src structure. Chrome APIs are mocked in `tests
 - Keep side effects in entry points; prefer pure helpers in `utils/`
 - Match existing 2-space indentation
 - Validate Chrome permissions remain minimal; document permission changes in PRs
+
+## Type Safety
+
+- Prefer `unknown` over `any` for truly unknown values; use type guards to narrow
+- Use `Record<string, unknown>` for generic object shapes
+- Chrome messaging APIs (`sendResponse`) require `any` - use eslint-disable comments with explanation
+- Generic utilities (debounce, etc.) may need `any` in type parameters for proper inference - wrap with eslint-disable block
+- For error casting, use intersection types: `as Error & { name: string }` rather than `as any`

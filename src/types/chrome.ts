@@ -53,6 +53,7 @@ export enum MessageType {
 
 export interface ExtensionMessage {
   type: MessageType;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   data?: any;
   requestId?: string;
 }
@@ -118,7 +119,7 @@ export interface ExtensionStorage {
 }
 
 // API response types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -137,7 +138,7 @@ export class ExtensionError extends Error {
   constructor(
     message: string,
     public code?: string,
-    public details?: any
+    public details?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'ExtensionError';
@@ -148,7 +149,7 @@ export class ApiError extends ExtensionError {
   constructor(
     message: string,
     public statusCode?: number,
-    details?: any
+    details?: Record<string, unknown>
   ) {
     super(message, 'API_ERROR', details);
     this.name = 'ApiError';
@@ -183,7 +184,7 @@ export interface PlatformDetection {
 // Content script injection types
 export interface ContentScriptMessage {
   type: string;
-  data?: any;
+  data?: Record<string, unknown>;
   source: 'quotewise-extension';
 }
 
@@ -198,5 +199,5 @@ export type PopupState =
 export interface PopupStateData {
   state: PopupState;
   message?: string;
-  data?: any;
+  data?: Record<string, unknown>;
 }
