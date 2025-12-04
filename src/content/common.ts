@@ -8,6 +8,7 @@ import { debugLog as envDebugLog } from '../config/environment';
 /**
  * Send message to service worker with error handling
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function sendMessageToBackground(message: ExtensionMessage): Promise<any> {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(message, (response) => {
@@ -134,7 +135,7 @@ export function parseNumber(numberString: string): number {
 /**
  * Debounce function to limit API calls
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -193,6 +194,6 @@ export function safeQuerySelectorAll<T extends Element = Element>(
     return parent.querySelectorAll<T>(selector);
   } catch (error) {
     console.error('Error in querySelectorAll:', error);
-    return [] as any;
+    return [] as unknown as NodeListOf<T>;
   }
 }

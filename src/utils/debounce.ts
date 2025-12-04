@@ -11,6 +11,7 @@
  * @param immediate Trigger the function on the leading edge, instead of the trailing
  * @returns Debounced function
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export interface DebouncedFunction<T extends (...args: any[]) => any> {
   (...args: Parameters<T>): void;
   cancel(): void;
@@ -29,26 +30,26 @@ export function debounce<T extends (...args: any[]) => any>(
 
   const debounced = (...args: Parameters<T>): void => {
     lastArgs = args; // Store arguments for flush method
-    
+
     const later = () => {
       timeout = null;
       if (!immediate) {
-        result = func(...args);
+        result = func(...args) as ReturnType<T>;
       }
     };
 
     const callNow = immediate && !timeout;
-    
+
     if (timeout) {
       clearTimeout(timeout);
     }
-    
+
     // Handle edge cases: ensure minimum timeout of 0
     const safeWait = Math.max(0, wait);
     timeout = setTimeout(later, safeWait);
-    
+
     if (callNow) {
-      result = func(...args);
+      result = func(...args) as ReturnType<T>;
     }
   };
 
@@ -64,52 +65,54 @@ export function debounce<T extends (...args: any[]) => any>(
   debounced.flush = () => {
     if (timeout && lastArgs) {
       clearTimeout(timeout);
-      result = func(...lastArgs); // Use stored arguments
+      result = func(...lastArgs) as ReturnType<T>; // Use stored arguments
       timeout = null;
     }
   };
 
   return debounced as DebouncedFunction<T>;
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 /**
  * Debounce function specifically for async operations
  * Cancels previous promise if a new one is triggered
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export function debounceAsync<T extends (...args: any[]) => Promise<any>>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => Promise<ReturnType<T>> {
   let timeout: NodeJS.Timeout | null = null;
   let currentResolve: ((value: ReturnType<T>) => void) | null = null;
-  let currentReject: ((reason?: any) => void) | null = null;
-  
+  let currentReject: ((reason?: unknown) => void) | null = null;
+
   return (...args: Parameters<T>): Promise<ReturnType<T>> => {
     return new Promise<ReturnType<T>>((resolve, reject) => {
       // Cancel previous promise by resolving it to undefined
       if (currentResolve) {
-        currentResolve(undefined as any);
+        currentResolve(undefined as ReturnType<T>);
       }
-      
+
       // Clear existing timeout
       if (timeout) {
         clearTimeout(timeout);
       }
-      
+
       // Store current resolvers
       currentResolve = resolve;
       currentReject = reject;
-      
+
       // Handle edge cases: ensure minimum timeout of 0
       const safeWait = Math.max(0, wait);
-      
+
       // Set new timeout
       timeout = setTimeout(async () => {
         try {
           const result = await func(...args);
           // Only resolve if this is still the current promise
           if (currentResolve === resolve) {
-            resolve(result);
+            resolve(result as ReturnType<T>);
             currentResolve = null;
             currentReject = null;
           }
@@ -127,3 +130,4 @@ export function debounceAsync<T extends (...args: any[]) => Promise<any>>(
     });
   };
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */

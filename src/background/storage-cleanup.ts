@@ -6,13 +6,13 @@
 import { getSessionConfig, detectEnvironment, debugLog } from '../config/environment';
 
 interface StoredTweetData {
-  data: any;
+  data: Record<string, unknown>;
   timestamp: number;
   url: string;
 }
 
 interface StoredAuthCheck {
-  status: any;
+  status: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -186,11 +186,11 @@ export class StorageCleanupService {
       }
       
       const originalLength = searchHistory.length;
-      const filteredHistory = searchHistory.filter((item: any) => {
+      const filteredHistory = searchHistory.filter((item: { searchedAt?: string }) => {
         if (!item.searchedAt) {
           return false; // Remove items without timestamp
         }
-        
+
         const searchTime = new Date(item.searchedAt).getTime();
         const age = now - searchTime;
         return age <= this.config.maxAge.searchHistory;
@@ -253,7 +253,7 @@ export class StorageCleanupService {
         
         if (history.length > 0) {
           const timestamps = history
-            .map((item: any) => new Date(item.searchedAt).getTime())
+            .map((item: { searchedAt?: string }) => new Date(item.searchedAt || '').getTime())
             .filter((time: number) => !isNaN(time));
           
           if (timestamps.length > 0) {

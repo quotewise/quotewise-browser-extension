@@ -33,7 +33,8 @@ export class ApiHandler {
      */
     public async handleMessage(
         message: ExtensionMessage,
-        sender: chrome.runtime.MessageSender,
+        _sender: chrome.runtime.MessageSender,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
@@ -76,7 +77,8 @@ export class ApiHandler {
      * Handle authentication status check
      */
     private async handleCheckAuthStatus(
-        message: ExtensionMessage,
+        _message: ExtensionMessage,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
@@ -106,6 +108,7 @@ export class ApiHandler {
      */
     private async handleSearchOriginators(
         message: ExtensionMessage,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
@@ -143,6 +146,7 @@ export class ApiHandler {
      */
     private async handleCheckDuplicateQuote(
         message: ExtensionMessage,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
@@ -182,6 +186,7 @@ export class ApiHandler {
      */
     private async handleSubmitQuote(
         message: ExtensionMessage,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
