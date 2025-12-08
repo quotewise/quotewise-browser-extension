@@ -343,8 +343,8 @@ describe('QuotewiseApiClient', () => {
 
   describe('submitQuote', () => {
     const validQuoteData: QuoteSubmissionRequest = {
-      quote_text: 'Test quote',
-      sighting_url: 'https://twitter.com/user/status/123',
+      text: 'Test quote',
+      source_url: 'https://twitter.com/user/status/123',
       platform_code: 'TX',
       likes_count: 42,
       attribution_type: 'DIRECT',
@@ -390,7 +390,7 @@ describe('QuotewiseApiClient', () => {
     });
 
     test('validates required fields', async () => {
-      const invalidData = { ...validQuoteData, quote_text: '' };
+      const invalidData = { ...validQuoteData, text: '' };
       
       const result = await client.submitQuote(invalidData);
 

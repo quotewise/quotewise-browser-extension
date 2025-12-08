@@ -722,6 +722,134 @@ html, body {
     cursor: not-allowed;
 }
 
+/* Handle Lookup Status Row */
+.handle-lookup-section {
+    margin-top: 8px;
+}
+
+.handle-lookup-display {
+    margin-bottom: 12px;
+}
+
+.handle-lookup-status {
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.handle-lookup-status.looking {
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+    color: #1565c0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.handle-lookup-status.found {
+    background: #e8f5e9;
+    border: 1px solid #a5d6a7;
+    color: #2e7d32;
+}
+
+.handle-lookup-status.not-found {
+    background: #fff3e0;
+    border: 1px solid #ffcc80;
+    color: #ef6c00;
+}
+
+.handle-lookup-status.error {
+    background: #ffebee;
+    border: 1px solid #ef9a9a;
+    color: #c62828;
+}
+
+.lookup-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.lookup-icon {
+    font-size: 14px;
+}
+
+.lookup-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #90caf9;
+    border-top-color: #1565c0;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.lookup-details {
+    margin-top: 4px;
+    padding-left: 22px;
+    font-size: 12px;
+    color: #666;
+}
+
+.lookup-details .handle-match {
+    margin-right: 8px;
+    font-family: monospace;
+}
+
+.lookup-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.lookup-action-btn {
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid #ddd;
+    background: #fff;
+    color: #333;
+    text-decoration: none;
+    display: inline-block;
+    transition: background-color 0.2s ease;
+}
+
+.lookup-action-btn:hover {
+    background: #f5f5f5;
+}
+
+.lookup-action-btn.use-originator {
+    background: #1a73e8;
+    border-color: #1a73e8;
+    color: #fff;
+}
+
+.lookup-action-btn.use-originator:hover {
+    background: #1557b0;
+}
+
+.lookup-action-btn.create-link {
+    background: #ff9800;
+    border-color: #ff9800;
+    color: #fff;
+}
+
+.lookup-action-btn.create-link:hover {
+    background: #f57c00;
+}
+
+.lookup-action-btn.dismiss {
+    background: transparent;
+    border-color: #999;
+    color: #666;
+}
+
+.lookup-action-btn.dismiss:hover {
+    background: #f0f0f0;
+}
+
 /* Enhanced duplicate checking display */
 .duplicate-section {
     margin: 16px 0;

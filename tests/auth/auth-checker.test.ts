@@ -14,7 +14,8 @@ const mockApiClient = {
   searchOriginators: jest.fn(),
   checkQuoteDuplicate: jest.fn(),
   submitQuote: jest.fn(),
-  listCollections: jest.fn()
+  listCollections: jest.fn(),
+  lookupOriginatorByHandle: jest.fn()
 } as jest.Mocked<QuotewiseApiClient>;
 
 describe('AuthChecker', () => {

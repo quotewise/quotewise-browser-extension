@@ -12,6 +12,8 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
   private cachedData: TwitterData | null = null;
   private mutationObserver: MutationObserver | null = null;
   private extractionInFlight = false;
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastExtractedHash: string | null = null; // To avoid re-sending identical data
 
   matches(location: Location): boolean {
     const host = location.hostname;
@@ -31,6 +33,11 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
 
   async teardown(): Promise<void> {
     this.cachedData = null;
+    this.lastExtractedHash = null;
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
     if (this.mutationObserver) {
       this.mutationObserver.disconnect();
       this.mutationObserver = null;
@@ -67,16 +74,28 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
   private startDomWatcher(): void {
     if (this.mutationObserver) return;
 
-    const reExtract = () => {
-      const newUrl = window.location.href;
-      if (newUrl !== this.currentUrl) {
-        this.currentUrl = newUrl;
-        this.cachedData = null;
+    const debouncedReExtract = () => {
+      // Clear any pending debounce timer
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
       }
-      this.extractAndCache();
+
+      // Debounce extraction to avoid repeated calls during DOM updates
+      this.debounceTimer = setTimeout(() => {
+        const newUrl = window.location.href;
+        // Compare tweet IDs, not full URLs - this is more reliable for detecting actual tweet changes
+        const newTweetId = this.extractTweetIdFromUrl(newUrl);
+        const oldTweetId = this.extractTweetIdFromUrl(this.currentUrl);
+        if (newTweetId !== oldTweetId) {
+          this.currentUrl = newUrl;
+          this.cachedData = null;
+          this.lastExtractedHash = null;
+        }
+        this.extractAndCache();
+      }, 500); // Wait 500ms after last DOM mutation
     };
 
-    this.mutationObserver = new MutationObserver(() => reExtract());
+    this.mutationObserver = new MutationObserver(() => debouncedReExtract());
     this.mutationObserver.observe(document.body, { childList: true, subtree: true });
   }
 
@@ -96,15 +115,27 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
         return null;
       }
 
-      this.cachedData = data;
+      // Create a hash of the important data to detect changes
+      // Tweet ID is the most reliable indicator of different tweets
+      const tweetId = this.extractTweetId();
+      const dataHash = `${tweetId}|${data.text}|${data.author?.username}`;
 
-      try {
-        await sendMessageToBackground({
-          type: MessageType.TWEET_DATA_EXTRACTED,
-          data
-        });
-      } catch (error) {
-        console.warn('Unable to send extracted tweet to background', error);
+      // Only send to background if data has actually changed
+      if (dataHash !== this.lastExtractedHash) {
+        this.lastExtractedHash = dataHash;
+        this.cachedData = data;
+
+        try {
+          await sendMessageToBackground({
+            type: MessageType.TWEET_DATA_EXTRACTED,
+            data
+          });
+          debugLog('TwitterAdapter: sent new data to background');
+        } catch (error) {
+          console.warn('Unable to send extracted tweet to background', error);
+        }
+      } else {
+        debugLog('TwitterAdapter: data unchanged, skipping send');
       }
 
       return data;
@@ -125,8 +156,11 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     const text = this.extractTweetText(article);
     const author = this.extractAuthor(article);
     const metrics = this.extractMetrics(article);
-    const tweetId = this.extractTweetId();
-    const url = cleanUrl(window.location.href);
+    const tweetId = this.extractTweetIdFromArticle(article);
+    // Construct URL from extracted tweet ID and author to ensure we have the correct direct link
+    const url = tweetId && author.username
+      ? `https://x.com/${author.username}/status/${tweetId}`
+      : cleanUrl(window.location.href);
     const date = this.extractDate(article);
     const language = this.extractLanguage(article);
     const isProtected = this.detectProtected(article);
@@ -341,8 +375,38 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     return metrics;
   }
 
+  /**
+   * Extract tweet ID from the article element (timestamp link) or fall back to URL
+   */
+  private extractTweetIdFromArticle(article: Element): string | null {
+    // Try to get tweet ID from the timestamp link within the article
+    // This is more reliable for reply threads where URL is the parent tweet
+    const timeLink = article.querySelector('a[href*="/status/"] time')?.parentElement as HTMLAnchorElement | null;
+    if (timeLink?.href) {
+      const match = timeLink.href.match(/status\/(\d+)/);
+      if (match) return match[1];
+    }
+
+    // Also try other links that might contain the tweet status URL
+    const statusLinks = article.querySelectorAll('a[href*="/status/"]');
+    for (const link of statusLinks) {
+      const href = (link as HTMLAnchorElement).href;
+      // Skip links to quoted tweets or other embedded content
+      if (href.includes('/photo/') || href.includes('/video/')) continue;
+      const match = href.match(/status\/(\d+)/);
+      if (match) return match[1];
+    }
+
+    // Fall back to URL-based extraction
+    return this.extractTweetIdFromUrl(window.location.href);
+  }
+
   private extractTweetId(): string | null {
-    const match = window.location.pathname.match(/status\/(\d+)/);
+    return this.extractTweetIdFromUrl(window.location.href);
+  }
+
+  private extractTweetIdFromUrl(url: string): string | null {
+    const match = url.match(/status\/(\d+)/);
     return match ? match[1] : null;
   }
 

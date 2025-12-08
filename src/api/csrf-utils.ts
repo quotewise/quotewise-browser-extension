@@ -25,33 +25,31 @@ export async function getCookie(name: string): Promise<string | null> {
         try {
             // Get the current environment to determine the correct domain
             const manifestName = chrome.runtime.getManifest().name || '';
-            let domain = 'quotosaurus.com';
-            
-            if (manifestName.includes('Staging')) {
-                domain = 'staging.quotosaurus.com';
-            } else if (manifestName.includes('dev')) {
-                domain = 'localhost';
+            const lowerName = manifestName.toLowerCase();
+            let url = 'https://quotosaurus.com';
+
+            if (lowerName.includes('staging')) {
+                url = 'https://staging.quotosaurus.com';
+            } else if (lowerName.includes('dev')) {
+                // Development uses http://127.0.0.1:8000 - must match the API base URL
+                url = 'http://127.0.0.1:8000';
             }
-            
-            debugLog(`Getting cookie '${name}' for domain: ${domain}`);
-            
+
+            debugLog(`Getting cookie '${name}' for URL: ${url}`);
+
             const cookie = await chrome.cookies.get({
-                url: `https://${domain}`,
+                url: url,
                 name: name
             });
             
             debugLog(`Cookie result for '${name}':`, cookie);
-            
+
             // Also try to get all cookies for debugging
             if (name === 'csrftoken') {
-                const allCookies = await chrome.cookies.getAll({ domain: domain });
-                debugLog('All cookies for domain:', allCookies.map(c => ({ name: c.name, value: c.value.substring(0, 10) + '...', domain: c.domain, secure: c.secure, httpOnly: c.httpOnly })));
-                
-                // Also try without explicit domain to see all staging cookies
-                const allStagingCookies = await chrome.cookies.getAll({ url: `https://${domain}` });
-                debugLog('All cookies for URL:', allStagingCookies.map(c => ({ name: c.name, value: c.value.substring(0, 10) + '...', domain: c.domain, secure: c.secure, httpOnly: c.httpOnly })));
+                const allCookies = await chrome.cookies.getAll({ url: url });
+                debugLog('All cookies for URL:', allCookies.map(c => ({ name: c.name, value: c.value.substring(0, 10) + '...', domain: c.domain, secure: c.secure, httpOnly: c.httpOnly })));
             }
-            
+
             return cookie ? cookie.value : null;
         } catch (error) {
             console.error('Error getting cookie via chrome.cookies:', error);
@@ -69,19 +67,39 @@ export async function getCookie(name: string): Promise<string | null> {
 export async function getCSRFToken(apiBaseUrl: string): Promise<string | null> {
     // Get from cookie first (Django standard approach)
     let token = await getCookie('csrftoken');
-    
+    debugLog('Initial CSRF token from cookie:', token ? token.substring(0, 8) + '...' : 'null');
+
     if (!token) {
         // For extensions, we need to make a GET request to trigger cookie setting
         // Use the auth status endpoint which is available and safe to call
         try {
-            await fetch(`${apiBaseUrl}/api/v1/auth/status/`, {
+            debugLog('No CSRF token in cookies, making GET request to trigger cookie setting...');
+            const response = await fetch(`${apiBaseUrl}/api/v1/auth/status/`, {
                 credentials: 'include',
                 method: 'GET'
             });
-            
+
+            // Try to get CSRF token from Set-Cookie header (if accessible)
+            const setCookie = response.headers.get('set-cookie');
+            debugLog('Set-Cookie header:', setCookie);
+
             // Check again for cookie after the request
             token = await getCookie('csrftoken');
-            
+            debugLog('CSRF token after GET request:', token ? token.substring(0, 8) + '...' : 'null');
+
+            if (!token) {
+                // Last resort: try to extract from response if Django returns it
+                try {
+                    const data = await response.clone().json();
+                    if (data.csrftoken) {
+                        token = data.csrftoken;
+                        debugLog('Got CSRF token from response body');
+                    }
+                } catch {
+                    // Response might not be JSON, ignore
+                }
+            }
+
             if (!token) {
                 console.warn('CSRF token not available after auth request');
                 return null;
@@ -91,7 +109,7 @@ export async function getCSRFToken(apiBaseUrl: string): Promise<string | null> {
             return null;
         }
     }
-    
+
     return token;
 }
 
@@ -133,9 +151,16 @@ export async function getDefaultHeaders(
         console.warn('No CSRF token available');
     }
 
+    // Extract origin from apiBaseUrl (e.g., "http://127.0.0.1:8000" from "http://127.0.0.1:8000/api/...")
+    const urlObj = new URL(apiBaseUrl);
+    const origin = urlObj.origin;
+
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
+        // Override Origin header to match the API URL (Django checks this for CSRF)
+        // Chrome extensions send "chrome-extension://..." as Origin which Django rejects
+        'Origin': origin,
         // Add Referer header to make Django CSRF protection think request comes from the website
         'Referer': `${apiBaseUrl}/`
     };

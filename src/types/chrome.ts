@@ -34,6 +34,7 @@ export enum MessageType {
   SUBMIT_QUOTE = 'SUBMIT_QUOTE',
   SEARCH_ORIGINATORS = 'SEARCH_ORIGINATORS',
   CHECK_DUPLICATE = 'CHECK_DUPLICATE',
+  LOOKUP_ORIGINATOR_BY_HANDLE = 'LOOKUP_ORIGINATOR_BY_HANDLE',
   
   // Badge updates
   UPDATE_COLLECTION_BADGE = 'UPDATE_COLLECTION_BADGE',
@@ -163,8 +164,8 @@ export class AuthenticationError extends ExtensionError {
   }
 }
 
-// Badge types  
-export type CollectionBadgeState = 'already_collected' | 'should_collect' | 'new_quote' | 'processing' | 'ready';
+// Badge types
+export type CollectionBadgeState = 'already_collected' | 'exists_not_collected' | 'new_quote' | 'processing' | 'ready';
 
 export interface CollectionBadgeInfo {
   state: CollectionBadgeState;

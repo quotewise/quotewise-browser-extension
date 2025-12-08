@@ -150,14 +150,24 @@ describe('ApiHandler', () => {
 
       const message: ExtensionMessage = {
         type: 'CHECK_DUPLICATE' as MessageType,
-        data: { text: 'Test quote', originatorId: '1' }
+        data: {
+          text: 'Test quote',
+          originator_id: '1',
+          source_url: 'https://x.com/test/status/123'
+        }
       };
 
       await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
-      expect(mockApiClient.checkQuoteDuplicate).toHaveBeenCalledWith('Test quote', '1');
+      expect(mockApiClient.checkQuoteDuplicate).toHaveBeenCalledWith(
+        'Test quote',
+        '1',
+        'https://x.com/test/status/123',
+        undefined
+      );
       expect(mockSendResponse).toHaveBeenCalledWith({
         success: true,
+        result: mockDuplicateResult,
         ...mockDuplicateResult
       });
     });
