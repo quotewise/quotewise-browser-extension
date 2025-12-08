@@ -11,6 +11,7 @@ import type {
   QuoteSubmissionResult,
   AuthStatusResult,
   CollectionsListResponse,
+  HandleLookupResult,
   AuthenticationError,
   ApiError
 } from '../types/api';
@@ -56,9 +57,11 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         ...options
       };
 
+      // Log full request details for debugging
+      const bodyForLog = options.body ? JSON.parse(options.body as string) : 'None';
       debugLog(`Making ${method} request to ${endpoint}`, {
         headers: requestOptions.headers,
-        body: options.body || 'None'
+        body: bodyForLog
       });
 
       const response = await fetch(`${this.baseUrl}${endpoint}`, requestOptions);
@@ -90,7 +93,35 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         let errorMessage = `API error: ${response.status}`;
         try {
           const errorData = await response.json();
-          errorMessage = errorData.error || errorData.detail || errorMessage;
+          console.error('API error response:', JSON.stringify(errorData, null, 2));
+
+          // Handle DRF validation errors (field-level errors)
+          if (errorData.errors && typeof errorData.errors === 'object') {
+            // Handle array of error objects or object with field keys
+            if (Array.isArray(errorData.errors)) {
+              errorMessage = errorData.errors
+                .map((err: Record<string, unknown>) => {
+                  if (typeof err === 'string') return err;
+                  // Extract field and message from error object
+                  const field = err.field || err.attr || 'error';
+                  const msg = err.detail || err.message || JSON.stringify(err);
+                  return `${field}: ${msg}`;
+                })
+                .join('; ');
+            } else {
+              const fieldErrors = Object.entries(errorData.errors)
+                .map(([field, messages]) => {
+                  if (Array.isArray(messages)) {
+                    return `${field}: ${messages.map(m => typeof m === 'object' ? JSON.stringify(m) : m).join(', ')}`;
+                  }
+                  return `${field}: ${typeof messages === 'object' ? JSON.stringify(messages) : messages}`;
+                })
+                .join('; ');
+              errorMessage = fieldErrors;
+            }
+          } else {
+            errorMessage = errorData.error || errorData.detail || errorData.message || errorMessage;
+          }
         } catch {
           // Ignore JSON parsing errors, use default message
         }
@@ -241,22 +272,22 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   async submitQuote(quoteData: QuoteSubmissionRequest): Promise<QuoteSubmissionResult> {
     try {
       // Validate required fields
-      if (!quoteData.quote_text?.trim()) {
+      if (!quoteData.text?.trim()) {
         return {
           success: false,
           message: 'Quote text is required',
           error: 'Quote text is required'
         };
       }
-      
-      if (!quoteData.sighting_url?.trim()) {
+
+      if (!quoteData.source_url?.trim()) {
         return {
           success: false,
-          message: 'Sighting URL is required',
-          error: 'Sighting URL is required'
+          message: 'Source URL is required',
+          error: 'Source URL is required'
         };
       }
-      
+
       const result = await this.makeRequest<{ id: string; message?: string }>(
         '/api/v1/quotes/',
         {
@@ -295,15 +326,106 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         '/api/v1/collections/',
         { method: 'GET' }
       );
-      
+
       return result;
     } catch (error) {
       console.error('Error listing collections:', error);
-      
+
       // Return empty collections list on error
       return {
         collections: [],
         default_collection_id: null
+      };
+    }
+  }
+
+  /**
+   * Lookup originator by social media handle
+   * Uses /api/v1/originators/by-handle/ endpoint
+   */
+  async lookupOriginatorByHandle(
+    handle: string,
+    platform: string = 'twitter'
+  ): Promise<HandleLookupResult> {
+    // Handle empty input
+    if (!handle?.trim()) {
+      return {
+        found: false,
+        handle: handle || '',
+        platform,
+        create_url: undefined
+      };
+    }
+
+    // Normalize handle - strip @ prefix if present
+    const cleanHandle = handle.trim().replace(/^@/, '');
+
+    try {
+      const params = new URLSearchParams({
+        handle: cleanHandle,
+        platform
+      });
+
+      interface ByHandleApiResponse {
+        found: boolean;
+        originator?: {
+          id: number;
+          full_name: string;
+          slug: string;
+          social_handles?: Record<string, string>;
+        };
+        match_platform?: string;
+        confidence?: number;
+        create_url?: string;
+        handle?: string;
+        platform?: string;
+      }
+
+      const result = await this.makeRequest<ByHandleApiResponse>(
+        `/api/v1/originators/by-handle/?${params}`,
+        { method: 'GET' },
+        false  // No CSRF needed for GET
+      );
+
+      if (result.found && result.originator) {
+        // Transform API response to match OriginatorSearchResult format
+        return {
+          found: true,
+          originator: {
+            id: result.originator.id,
+            unique_id: result.originator.slug,
+            full_name: result.originator.full_name,
+            sort_name_display: result.originator.full_name,  // API may not return sort_name
+            confidence: result.confidence ?? 1.0
+          },
+          handle: cleanHandle,
+          platform,
+          match_platform: result.match_platform,
+          confidence: result.confidence
+        };
+      } else {
+        // Not found - return create URL
+        return {
+          found: false,
+          handle: cleanHandle,
+          platform,
+          create_url: result.create_url
+        };
+      }
+    } catch (error) {
+      console.error('Error looking up originator by handle:', error);
+
+      // Re-throw auth errors
+      if (error instanceof Error && error.name === 'AuthenticationError') {
+        throw error;
+      }
+
+      // Return not found for other errors to allow graceful degradation
+      return {
+        found: false,
+        handle: cleanHandle,
+        platform,
+        create_url: undefined
       };
     }
   }

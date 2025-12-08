@@ -27,8 +27,18 @@ export interface OriginatorSearchResult {
   confidence: number | null;     // Search confidence score (0-10, from max_score)
 }
 
+export interface HandleLookupResult {
+  found: boolean;
+  originator?: OriginatorSearchResult;  // Present when found=true
+  create_url?: string;                   // Present when found=false
+  handle: string;
+  platform: string;
+  match_platform?: string;              // Platform where handle was matched
+  confidence?: number;                   // Match confidence (1.0 for exact)
+}
+
 export interface DuplicateCheckResult {
-  recommendation: 'duplicate' | 'new_version' | 'new_quote' | 'attribution_conflict' | 
+  recommendation: 'duplicate' | 'new_version' | 'new_quote' | 'attribution_conflict' |
                   'new_quote_known_author' | 'duplicate_known_author' | 'new_version_known_author' | 'attribution_conflict_resolved';
   confidence: number;
   in_quotosaurus: boolean;
@@ -92,13 +102,13 @@ export interface Originator {
 }
 
 export interface QuoteSubmissionRequest {
-  quote_text: string;
+  text: string;
   originator_id?: number;
   originator_search?: string;
-  sighting_url: string;
+  source_url: string;
   platform_code: PlatformCode;
-  likes_count: number;
-  post_date?: string;
+  likes_count?: number;
+  quote_date?: string;
   attribution_type: AttributionType;
   context?: string;
   image_urls?: string[];
@@ -180,6 +190,7 @@ export interface QuotewiseApiClient {
   submitQuote(quoteData: QuoteSubmissionRequest): Promise<QuoteSubmissionResult>;
   checkAuthStatus(): Promise<AuthStatusResult>;
   listCollections(): Promise<CollectionsListResponse>;
+  lookupOriginatorByHandle(handle: string, platform?: string): Promise<HandleLookupResult>;
 }
 
 // Collections

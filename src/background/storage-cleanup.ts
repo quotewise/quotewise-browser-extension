@@ -52,37 +52,24 @@ export class StorageCleanupService {
       },
       ...config
     };
-    
-    debugLog('Storage cleanup service initialized:', {
-      cleanupInterval: this.config.cleanupInterval / (60 * 60 * 1000) + ' hours',
-      maxAge: {
-        tweets: this.config.maxAge.tweets / (60 * 60 * 1000) + ' hours',
-        authChecks: this.config.maxAge.authChecks / (60 * 60 * 1000) + ' hours',
-        searchHistory: this.config.maxAge.searchHistory / (24 * 60 * 60 * 1000) + ' days'
-      }
-    });
   }
   
   /**
    * Start periodic cleanup
+   * @param quiet - If true, suppress startup logs (used during service worker init)
    */
-  public startPeriodicCleanup(): void {
+  public startPeriodicCleanup(quiet = false): void {
     if (this.cleanupInterval) {
-      debugLog('Storage cleanup already running');
       return;
     }
 
-    debugLog('Starting periodic storage cleanup...');
-    
-    // Run cleanup immediately
-    this.runCleanup();
-    
+    // Run cleanup immediately (quiet on startup)
+    this.runCleanup(quiet);
+
     // Set up periodic cleanup
     this.cleanupInterval = setInterval(() => {
       this.runCleanup();
     }, this.config.cleanupInterval);
-    
-    debugLog(`Periodic storage cleanup started with ${this.config.cleanupInterval / (60 * 60 * 1000)}h interval`);
   }
   
   /**
@@ -98,24 +85,26 @@ export class StorageCleanupService {
   
   /**
    * Run cleanup immediately
+   * @param quiet - If true, suppress logs unless items were cleaned
    */
-  public async runCleanup(): Promise<void> {
-    debugLog('Running storage cleanup...');
-    
+  public async runCleanup(quiet = false): Promise<void> {
     try {
       const now = Date.now();
       let totalCleaned = 0;
-      
+
       // Clean up tweets
       totalCleaned += await this.cleanupTweets(now);
-      
-      // Clean up auth checks  
+
+      // Clean up auth checks
       totalCleaned += await this.cleanupAuthChecks(now);
-      
+
       // Clean up search history
       totalCleaned += await this.cleanupSearchHistory(now);
-      
-      debugLog(`Storage cleanup completed. Cleaned ${totalCleaned} items.`);
+
+      // Only log if items were actually cleaned (or if not quiet mode)
+      if (totalCleaned > 0 || !quiet) {
+        debugLog(`Storage cleanup: ${totalCleaned} items cleaned`);
+      }
     } catch (error) {
       console.error('Error during storage cleanup:', error);
     }

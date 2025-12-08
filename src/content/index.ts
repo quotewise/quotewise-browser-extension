@@ -70,7 +70,7 @@ class ContentOrchestrator {
     }, 750);
   }
 
-  private async selectAdapter(forceRestart: boolean = false): Promise<void> {
+  private async selectAdapter(urlChanged: boolean = false): Promise<void> {
     const match = this.adapters.find(adapter => adapter.matches(window.location)) || null;
 
     if (!match) {
@@ -80,14 +80,28 @@ class ContentOrchestrator {
       return;
     }
 
-    const switched = forceRestart || !this.activeAdapter || this.activeAdapter.id !== match.id;
-    if (switched) {
+    // Only restart if switching platforms OR if tweet ID actually changed
+    const samePlatform = this.activeAdapter?.id === match.id;
+    const needsRestart = !samePlatform || (urlChanged && this.tweetIdChanged());
+
+    if (needsRestart) {
       await this.activeAdapter?.teardown();
       this.activeAdapter = match;
       debugLog(`Activating adapter: ${match.id}`);
       await this.activeAdapter.bootstrap();
       // Do not auto-show overlay; user triggers via action click
     }
+  }
+
+  private tweetIdChanged(): boolean {
+    const currentId = this.extractTweetId(window.location.href);
+    const lastId = this.extractTweetId(this.lastUrl);
+    return currentId !== lastId;
+  }
+
+  private extractTweetId(url: string): string | null {
+    const match = url.match(/status\/(\d+)/);
+    return match ? match[1] : null;
   }
 
   private async showOverlay(forceRefresh = false): Promise<void> {

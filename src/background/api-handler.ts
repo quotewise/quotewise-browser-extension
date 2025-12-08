@@ -6,7 +6,7 @@
 import type { ExtensionMessage } from '../types/index';
 import type { QuotewiseApiClient } from '../types/api';
 import { QuotewiseApiClientImpl } from '../api/quotewise-api';
-import { getEnvironmentConfig, detectEnvironment, debugLog } from '../config/environment';
+import { getEnvironmentConfig, detectEnvironment } from '../config/environment';
 
 /**
  * API Handler for Chrome extension service worker
@@ -19,12 +19,6 @@ export class ApiHandler {
     constructor() {
         this.environment = detectEnvironment();
         const config = getEnvironmentConfig(this.environment);
-        
-        debugLog(`Initializing ApiHandler for ${this.environment} environment`, {
-            apiBaseUrl: config.apiBaseUrl,
-            sessionCookieName: config.sessionCookieName
-        });
-        
         this.apiClient = new QuotewiseApiClientImpl(config.apiBaseUrl);
     }
     
@@ -38,7 +32,6 @@ export class ApiHandler {
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
-            debugLog('Handling API message:', { type: message.type, data: message.data });
             
             switch (message.type) {
                 case 'CHECK_AUTH_STATUS':
@@ -56,7 +49,11 @@ export class ApiHandler {
                 case 'SUBMIT_QUOTE':
                     await this.handleSubmitQuote(message, sendResponse);
                     break;
-                    
+
+                case 'LOOKUP_ORIGINATOR_BY_HANDLE':
+                    await this.handleLookupOriginatorByHandle(message, sendResponse);
+                    break;
+
                 default:
                     console.warn('Unknown message type:', message.type);
                     sendResponse({ 
@@ -90,8 +87,6 @@ export class ApiHandler {
                 isStaff: authResult.is_admin || false,
                 username: authResult.user?.username
             };
-            
-            debugLog('Sending auth status to popup:', transformedStatus);
             sendResponse(transformedStatus);
         } catch (error) {
             console.error('Error checking auth status:', error);
@@ -150,8 +145,13 @@ export class ApiHandler {
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
-            const { text, originatorId } = message.data || {};
-            
+            // Support both camelCase and snake_case field names
+            const data = message.data || {};
+            const text = data.text;
+            const originatorId = data.originatorId ?? data.originator_id;
+            const sourceUrl = data.sourceUrl ?? data.source_url;
+            const socialHandle = data.socialHandle ?? data.social_handle;
+
             if (!text || typeof text !== 'string') {
                 sendResponse({
                     success: false,
@@ -159,14 +159,17 @@ export class ApiHandler {
                 });
                 return;
             }
-            
+
             const duplicateResult = await this.apiClient.checkQuoteDuplicate(
                 text,
-                originatorId
+                originatorId,
+                sourceUrl,
+                socialHandle
             );
-            
+
             sendResponse({
                 success: true,
+                result: duplicateResult,
                 ...duplicateResult
             });
         } catch (error) {
@@ -212,7 +215,46 @@ export class ApiHandler {
             });
         }
     }
-    
+
+    /**
+     * Handle originator lookup by social media handle
+     */
+    private async handleLookupOriginatorByHandle(
+        message: ExtensionMessage,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sendResponse: (response: any) => void
+    ): Promise<void> {
+        try {
+            const { handle, platform } = message.data || {};
+
+            if (!handle || typeof handle !== 'string') {
+                sendResponse({
+                    success: false,
+                    error: 'Handle is required',
+                    found: false
+                });
+                return;
+            }
+
+            const result = await this.apiClient.lookupOriginatorByHandle(
+                handle,
+                typeof platform === 'string' ? platform : 'twitter'
+            );
+
+            sendResponse({
+                success: true,
+                ...result
+            });
+        } catch (error) {
+            console.error('Error looking up originator by handle:', error);
+            sendResponse({
+                success: false,
+                error: error instanceof Error ? error.message : 'Lookup failed',
+                found: false
+            });
+        }
+    }
+
     /**
      * Handle tweet data request
      * Forwards to content script for data extraction
@@ -233,6 +275,5 @@ export class ApiHandler {
  * Initialize API handler - called from service worker
  */
 export function initializeApiHandler(): ApiHandler {
-    debugLog('Initializing API handler...');
     return new ApiHandler();
 }

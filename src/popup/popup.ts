@@ -19,6 +19,8 @@ import { OriginatorSearch, SearchState } from '../search/originator-search';
 import type { OriginatorSearchResult } from '../types/api';
 import { DuplicateChecker, DuplicateState } from '../duplicate/duplicate-checker';
 import { DuplicateDisplay } from '../duplicate/duplicate-display';
+import { HandleLookup, HandleLookupState } from '../lookup/handle-lookup';
+import { HandleLookupDisplay } from '../lookup/handle-lookup-display';
 import { debugLog } from '../config/environment';
 
 // State Management Interfaces
@@ -88,6 +90,7 @@ interface PopupState {
   submission: SubmissionState;
   duplicate: DuplicateState;
   collections: CollectionsState;
+  handleLookup: HandleLookupState;
 }
 
 type PartialPopupState = {
@@ -143,6 +146,15 @@ class SimplePopupStateManager {
         collections: [],
         addToCollection: true, // Default to checked
         isLoading: false
+      },
+      handleLookup: {
+        isLooking: false,
+        hasLookedUp: false,
+        result: null,
+        matchedOriginator: null,
+        createUrl: null,
+        matchedHandle: null,
+        errorMessage: null
       }
     };
   }
@@ -201,7 +213,7 @@ class SimpleMessageHandler {
   }
 }
 
-// Simplified Popup Controller  
+// Simplified Popup Controller
 class SimpleQuotewisePopup {
   private stateManager: SimplePopupStateManager;
   private messageHandler: SimpleMessageHandler;
@@ -210,6 +222,8 @@ class SimpleQuotewisePopup {
   private originatorSearch: OriginatorSearch;
   private duplicateChecker: DuplicateChecker;
   private duplicateDisplay: DuplicateDisplay;
+  private handleLookup: HandleLookup;
+  private handleLookupDisplay: HandleLookupDisplay;
   private navigationCheckInterval: NodeJS.Timeout | null = null;
 
   constructor() {
@@ -231,7 +245,15 @@ class SimpleQuotewisePopup {
       onEditQuote: () => this.focusQuoteText(),
       onChangeOriginator: () => this.focusOriginatorSearch()
     });
-    
+
+    // Initialize handle lookup components
+    this.handleLookup = new HandleLookup();
+    this.handleLookupDisplay = new HandleLookupDisplay({
+      container: document.createElement('div'), // Temporary container
+      onSelectOriginator: () => this.handleUseFoundOriginator(),
+      onDismiss: () => this.handleDismissHandleLookup()
+    });
+
     this.init();
   }
 
@@ -247,7 +269,10 @@ class SimpleQuotewisePopup {
       
       debugLog('Initializing duplicate checker...');
       this.initializeDuplicateChecker();
-      
+
+      debugLog('Initializing handle lookup...');
+      this.initializeHandleLookup();
+
       debugLog('Setting up state manager subscription...');
       this.stateManager.subscribe(this.onStateChange.bind(this));
       
@@ -283,6 +308,7 @@ class SimpleQuotewisePopup {
     this.updateOriginatorState(state);
     this.updateDuplicateState(state);
     this.updateCollectionsState(state);
+    this.updateHandleLookupState(state);
   }
 
   private updateView(currentView: string): void {
@@ -722,6 +748,71 @@ class SimpleQuotewisePopup {
     }
   }
 
+  /**
+   * Initialize handle lookup component
+   */
+  private initializeHandleLookup(): void {
+    const lookupContainer = document.getElementById('handle-lookup-display');
+    if (lookupContainer) {
+      this.handleLookupDisplay.setContainer(lookupContainer);
+
+      // Listen for handle lookup state changes
+      this.handleLookup.addListener((lookupState: HandleLookupState) => {
+        this.stateManager.setState({
+          handleLookup: lookupState
+        });
+      });
+    } else {
+      debugLog('Handle lookup container not found - feature will be disabled');
+    }
+  }
+
+  /**
+   * Update handle lookup display state
+   */
+  private updateHandleLookupState(state: PopupState): void {
+    this.handleLookupDisplay.updateDisplay(state.handleLookup);
+  }
+
+  /**
+   * Trigger automatic handle lookup when tweet data loads
+   */
+  private async triggerHandleLookup(handle: string): Promise<void> {
+    if (!handle?.trim()) {
+      return;
+    }
+
+    // Don't lookup if originator is already selected
+    const state = this.stateManager.getState();
+    if (state.originator.selectedOriginator) {
+      debugLog('Skipping handle lookup - originator already selected');
+      return;
+    }
+
+    debugLog(`Triggering handle lookup for @${handle}`);
+    await this.handleLookup.lookupByHandle(handle, 'twitter');
+  }
+
+  /**
+   * Handle using the found originator from handle lookup
+   */
+  private handleUseFoundOriginator(): void {
+    const matchedOriginator = this.handleLookup.getMatchedOriginator();
+    if (matchedOriginator) {
+      debugLog('Using found originator:', matchedOriginator.full_name);
+      this.originatorSearch.selectOriginator(matchedOriginator);
+      this.handleLookup.dismiss();
+    }
+  }
+
+  /**
+   * Handle dismissing the lookup result
+   */
+  private handleDismissHandleLookup(): void {
+    this.handleLookup.dismiss();
+    this.focusOriginatorSearch();
+  }
+
   private triggerAutomaticDuplicateCheck(): void {
     const state = this.stateManager.getState();
     const quoteTextArea = document.getElementById('quote-text') as HTMLTextAreaElement;
@@ -805,12 +896,12 @@ class SimpleQuotewisePopup {
 
     try {
       const submissionData: QuoteSubmissionRequest = {
-        quote_text: quoteText,
+        text: quoteText,
         originator_id: state.originator.selectedOriginator?.id,
-        sighting_url: state.tweet.data.url,
+        source_url: state.tweet.data.url,
         platform_code: 'TX',
         likes_count: state.tweet.data.likes || 0,
-        post_date: state.tweet.data.date || undefined,
+        quote_date: state.tweet.data.date || undefined,
         attribution_type: attributionType,
         // Backend dependency: API should accept platform_data.is_protected to flag private/limited visibility posts (feature parity pending)
         platform_data: state.tweet.data.platform_data
@@ -1063,7 +1154,12 @@ class SimpleQuotewisePopup {
 
         // Populate tweet information display
         this.populateTweetInfo(response.data);
-        
+
+        // Auto-trigger handle lookup for the tweet author
+        if (response.data.author?.username) {
+          this.triggerHandleLookup(response.data.author.username);
+        }
+
         // Auto-trigger duplicate check with social handle
         this.triggerAutomaticDuplicateCheck();
         
@@ -1376,7 +1472,7 @@ class SimpleQuotewisePopup {
     
     if (result.in_quotosaurus || exactMatchExists) {
       return {
-        state: 'should_collect',
+        state: 'exists_not_collected',
         quoteText: tweet?.text?.substring(0, 50)
       };
     }
@@ -1460,6 +1556,7 @@ class SimpleQuotewisePopup {
    */
   destroy(): void {
     this.stopNavigationMonitoring();
+    this.handleLookup.destroy();
   }
 }
 

@@ -23,6 +23,20 @@ After building, load the unpacked extension from `dist/` in `chrome://extensions
 
 ## Architecture
 
+### Data Flow on Tweet Page Load
+
+```
+1. Navigate to tweet URL (x.com/user/status/123)
+2. Content script activates → TwitterAdapter extracts data
+3. TWEET_DATA_EXTRACTED → Service worker
+4. Service worker (in parallel, non-blocking):
+   a. Stores tweet data in chrome.storage.local
+   b. Looks up originator by Twitter handle → caches result
+   c. Checks for duplicates (with originator_id + social_handle) → caches result
+   d. Updates extension badge (★ new, ✓ collected, + exists)
+5. User clicks toolbar → Overlay opens instantly using cached data
+```
+
 ### Three-Layer Communication Model
 
 ```
@@ -35,7 +49,7 @@ Quotewise API (Django backend)
 
 ### Entry Points (webpack)
 
-- `src/background/service-worker.ts` → Background service worker handling messaging, auth monitoring, API delegation
+- `src/background/service-worker.ts` → Background service worker handling messaging, auth monitoring, API delegation, badge updates
 - `src/content/index.ts` → Content script orchestrator that selects platform adapters
 - `src/popup/popup.ts` → Extension popup (currently disabled in favor of in-page overlay)
 
@@ -53,16 +67,74 @@ interface PlatformAdapter<TData> {
 }
 ```
 
-- `src/platforms/twitter/adapter.ts` - Twitter/X DOM extraction
+- `src/platforms/twitter/adapter.ts` - Twitter/X DOM extraction (text, author, metrics, tweet ID from article element)
 - Add new platforms by implementing `PlatformAdapter` and registering in `ContentOrchestrator`
 
 ### Message Types
 
-All inter-context communication uses typed messages from `src/types/chrome.ts`. The `MessageType` enum defines message types; API-related messages are delegated from service-worker to `api-handler.ts`.
+All inter-context communication uses typed messages from `src/types/chrome.ts`. The `MessageType` enum defines:
+- `TWEET_DATA_EXTRACTED` - Content → Background when tweet data extracted
+- `SHOW_OVERLAY` - Background → Content to display capture UI
+- `LOOKUP_ORIGINATOR_BY_HANDLE` - Lookup originator by social handle
+- `CHECK_DUPLICATE` - Check for duplicate quotes (accepts originator_id, source_url, social_handle)
+- `SUBMIT_QUOTE` - Submit quote to backend
+- `CHECK_AUTH_STATUS` - Check Django session authentication
+
+API-related messages are delegated from service-worker to `api-handler.ts`.
+
+### Caching Strategy
+
+- **In-memory cache** (`originatorCache` in overlay-bar.ts): Session-lifetime cache for originator lookups by handle
+- **chrome.storage.local**:
+  - `currentTweet` - Current tweet data for popup/overlay access
+  - `preloadedOriginator` - Originator lookup result (60s TTL)
+  - `preloadedDuplicateCheck` - Duplicate check result (60s TTL)
 
 ### Environment Configuration
 
 `src/config/environment.ts` manages dev/staging/production settings matching Django backend. Environment detection uses manifest name, version flags, or domain detection.
+
+## Directory Structure
+
+```
+src/
+├── api/                 # API client and utilities
+│   ├── quotewise-api.ts # Main API client (auth, search, duplicate check, submit)
+│   └── csrf-utils.ts    # CSRF token handling for Django
+├── auth/                # Authentication utilities
+│   ├── auth-checker.ts  # Auth status checking
+│   └── login-handler.ts # Login flow handling
+├── background/          # Service worker components
+│   ├── service-worker.ts # Main entry, message routing, badge updates
+│   ├── api-handler.ts   # API message delegation
+│   ├── auth-monitor.ts  # Session monitoring
+│   └── storage-cleanup.ts # Periodic storage cleanup
+├── content/             # Content script
+│   ├── index.ts         # ContentOrchestrator entry point
+│   ├── common.ts        # Shared utilities (cleanUrl, parseNumber, etc.)
+│   └── ui/
+│       └── overlay-bar.ts # In-page capture UI with originator lookup
+├── config/
+│   └── environment.ts   # Environment detection and config
+├── duplicate/           # Duplicate checking UI components
+├── lookup/              # Originator lookup UI components
+├── platforms/           # Platform adapters
+│   ├── types.ts         # PlatformAdapter interface
+│   └── twitter/
+│       └── adapter.ts   # Twitter/X DOM extraction
+├── popup/
+│   └── popup.ts         # Extension popup (disabled)
+├── search/              # Search components
+│   └── originator-search.ts
+├── types/               # TypeScript type definitions
+│   ├── api.ts           # API request/response types
+│   ├── auth.ts          # Auth types
+│   ├── chrome.ts        # Extension message types, TwitterData
+│   └── index.ts         # Re-exports
+└── utils/
+    ├── validators.ts    # Input validation
+    └── debounce.ts      # Debounce utility
+```
 
 ## Path Aliases
 
@@ -82,10 +154,12 @@ Tests live in `tests/` mirroring src structure. Chrome APIs are mocked in `tests
 ## Key Files
 
 - `manifest.json` - Extension permissions, content script matching (twitter.com/x.com status pages)
-- `src/content/ui/overlay-bar.ts` - In-page capture UI shown via toolbar click
+- `src/content/ui/overlay-bar.ts` - In-page capture UI with originator lookup, duplicate check display, quote submission
 - `src/api/quotewise-api.ts` - Django API client with session auth
 - `src/api/csrf-utils.ts` - CSRF token handling for Django
-- `src/background/auth-monitor.ts` - Session authentication state monitoring
+- `src/background/service-worker.ts` - Message routing, preloading, badge updates
+- `src/background/api-handler.ts` - API message handling
+- `src/platforms/twitter/adapter.ts` - Tweet data extraction from DOM
 
 ## Conventions
 

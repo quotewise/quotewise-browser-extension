@@ -17,3 +17,4 @@
 | 1-13 | [Developer tooling & publishing prep](./1-13.md) | Done | ESLint, debug logging, icons, privacy policy |
 | 1-14 | ["Collect Quote" flow & badge improvements](./1-14.md) | Proposed | Add sighting for duplicates, improve badges |
 | 1-15 | [Migrate API endpoints to v2](./1-15.md) | Done | Update all API calls from v1 to v2 endpoints |
+| 1-16 | [Automatic originator lookup by handle](./1-16.md) | Proposed | Auto-lookup originator by Twitter handle, show create link if not found |

@@ -21,7 +21,10 @@ let storageCleanup: ReturnType<typeof initializeStorageCleanup> | null = null;
 // Track initialization state
 let servicesInitialized = false;
 
-debugLog('Service worker starting...');
+// Track in-flight duplicate check requests to prevent race conditions
+const pendingDuplicateChecks = new Map<string, Promise<void>>();
+
+// Service worker startup is logged once after initialization completes
 
 /**
  * Ensure all services are initialized
@@ -32,8 +35,6 @@ async function ensureServicesInitialized(): Promise<void> {
     return;
   }
 
-  debugLog('Initializing services (lazy/recovery)...');
-
   // Initialize services
   apiHandler = initializeApiHandler();
   authMonitor = new AuthenticationMonitor();
@@ -41,30 +42,24 @@ async function ensureServicesInitialized(): Promise<void> {
 
   // Restore auth state from storage if available
   try {
-    const { lastAuthCheck } = await chrome.storage.local.get('lastAuthCheck');
-    if (lastAuthCheck?.status) {
-      debugLog('Restored auth state from storage:', lastAuthCheck.status.isAuthenticated);
-      // AuthMonitor will pick up the cached state on next check
-    }
+    await chrome.storage.local.get('lastAuthCheck');
+    // AuthMonitor will pick up the cached state on next check
   } catch (error) {
     console.warn('Failed to restore auth state:', error);
   }
 
-  // Start periodic cleanup
-  storageCleanup.startPeriodicCleanup();
+  // Start periodic cleanup (quiet mode - no startup logs)
+  storageCleanup.startPeriodicCleanup(true);
 
   servicesInitialized = true;
-  debugLog('Services initialized successfully');
 }
 
 // Extension installation and startup
 chrome.runtime.onInstalled.addListener(async (details) => {
-  debugLog('Quotewise extension installed:', details.reason);
-
-  // Initialize services
   await ensureServicesInitialized();
 
   if (details.reason === 'install') {
+    debugLog('Extension installed');
     chrome.storage.local.set({
       settings: {
         environment: 'development',
@@ -77,11 +72,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 
 // Initialize services on startup
 chrome.runtime.onStartup.addListener(async () => {
-  debugLog('Quotewise extension starting up');
   await ensureServicesInitialized();
 });
 
-// Toolbar icon click: trigger extraction refresh in active tab
+// Toolbar icon click: show overlay bar in active tab
 chrome.action.onClicked.addListener(async (tab) => {
   try {
     if (!tab.id) return;
@@ -102,11 +96,9 @@ chrome.runtime.onMessage.addListener((
   // Ensure services are initialized before processing any message
   // This handles MV3 service worker termination and recovery
   ensureServicesInitialized().then(() => {
-    debugLog('Service worker received message:', message.type);
-
     switch (message.type) {
       case MessageType.TWEET_DATA_EXTRACTED:
-        handleTweetDataExtracted(message.data, sendResponse);
+        handleTweetDataExtracted(message.data, sender.tab?.id, sendResponse);
         break;
 
       case MessageType.GET_TWEET_DATA:
@@ -117,13 +109,13 @@ chrome.runtime.onMessage.addListener((
       case MessageType.CHECK_AUTH_STATUS:
         // Start auth monitoring when user first requests auth status
         if (authMonitor && !authMonitor.getCurrentAuthStatus()) {
-          debugLog('Starting auth monitoring due to user interaction');
           authMonitor.startMonitoring();
         }
         // Fall through to delegate to API handler
       case MessageType.SEARCH_ORIGINATORS:
       case MessageType.CHECK_DUPLICATE:
       case MessageType.SUBMIT_QUOTE:
+      case MessageType.LOOKUP_ORIGINATOR_BY_HANDLE:
         // Delegate to API handler (guaranteed initialized by ensureServicesInitialized)
         apiHandler!.handleMessage(message, sender, sendResponse).catch(error => {
           console.error('API handler error:', error);
@@ -261,6 +253,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
  */
 async function handleTweetDataExtracted(
   tweetData: unknown,
+  tabId: number | undefined,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendResponse: (response: any) => void
 ) {
@@ -294,13 +287,225 @@ async function handleTweetDataExtracted(
 
     debugLog('Tweet data stored:', validatedData.text.substring(0, 50) + '...');
 
-    // Update icon to show tweet data is ready
-    await updateExtensionIconForTweetPage(validatedData);
+    const cacheKey = validatedData.url;
+
+    // Check if there's already a pending request for this URL (prevent race conditions)
+    const pending = pendingDuplicateChecks.get(cacheKey);
+    if (pending) {
+      debugLog('Duplicate check already in progress for:', cacheKey);
+      sendResponse({ success: true });
+      return;
+    }
+
+    // Show processing state while we check for duplicates
+    await updateCollectionBadgeForTweet('processing', validatedData.text, tabId);
+
+    // Check if quote already exists in Quotosaurus (async, don't block response)
+    const checkPromise = checkQuoteCollectionStatus(validatedData, tabId).finally(() => {
+      pendingDuplicateChecks.delete(cacheKey);
+    });
+    pendingDuplicateChecks.set(cacheKey, checkPromise);
+
+    checkPromise.catch(error => {
+      console.error('Error checking quote collection status:', error);
+    });
 
     sendResponse({ success: true });
   } catch (error) {
     console.error('Error storing tweet data:', error);
     sendResponse({ error: 'Failed to store tweet data' });
+  }
+}
+
+/**
+ * Check if a quote exists in Quotosaurus and update badge accordingly
+ * Also preloads originator lookup for faster overlay display
+ */
+async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number): Promise<void> {
+  try {
+    // Ensure API handler is initialized
+    await ensureServicesInitialized();
+
+    if (!apiHandler) {
+      debugLog('API handler not available for collection check');
+      return;
+    }
+
+    const handle = tweetData.author?.username;
+    let originatorId: number | undefined;
+
+    // Step 1: Lookup originator by handle (preload for overlay)
+    if (handle) {
+      debugLog('Looking up originator for handle:', handle);
+      const lookupResponse = await new Promise<{
+        success: boolean;
+        found?: boolean;
+        originator?: { id: number; full_name: string; unique_id: string; sort_name_display: string; confidence: number | null };
+        create_url?: string;
+      }>((resolve) => {
+        apiHandler!.handleMessage(
+          { type: MessageType.LOOKUP_ORIGINATOR_BY_HANDLE, data: { handle, platform: 'twitter' } },
+          {} as chrome.runtime.MessageSender,
+          resolve
+        );
+      });
+
+      if (lookupResponse.success && lookupResponse.found && lookupResponse.originator) {
+        originatorId = lookupResponse.originator.id;
+        debugLog('Originator found:', lookupResponse.originator.full_name);
+
+        // Cache originator result for overlay to use
+        await chrome.storage.local.set({
+          preloadedOriginator: {
+            handle: handle.toLowerCase(),
+            originator: lookupResponse.originator,
+            timestamp: Date.now()
+          }
+        });
+      } else {
+        debugLog('Originator not found for handle:', handle);
+        // Cache not-found result with create_url
+        await chrome.storage.local.set({
+          preloadedOriginator: {
+            handle: handle.toLowerCase(),
+            originator: null,
+            create_url: lookupResponse.create_url,
+            timestamp: Date.now()
+          }
+        });
+      }
+    }
+
+    // Step 2: Check for duplicates using the API (with originator ID if found, or handle as fallback)
+    debugLog('Checking duplicates with originator_id:', originatorId, 'handle:', handle);
+    const response = await new Promise<{
+      success: boolean;
+      in_quotosaurus?: boolean;
+      existing_sightings_for_url?: Array<{ id: number; in_user_collections?: boolean }>;
+      matches?: Array<{ similarity: number; in_user_collections?: boolean }>;
+      recommendation?: string;
+      result?: unknown;
+    }>((resolve) => {
+      apiHandler!.handleMessage(
+        {
+          type: MessageType.CHECK_DUPLICATE,
+          data: {
+            text: tweetData.text,
+            originator_id: originatorId,
+            source_url: tweetData.url,
+            social_handle: handle // Pass handle so backend can lookup originator if ID not found
+          }
+        },
+        {} as chrome.runtime.MessageSender,
+        resolve
+      );
+    });
+
+    let status: 'already_collected' | 'exists_not_collected' | 'new_quote' = 'new_quote';
+
+    if (!response.success) {
+      debugLog('Duplicate check failed, showing as new quote');
+    } else {
+      debugLog('Duplicate check response:', response);
+
+      // Cache duplicate check result for overlay to use
+      await chrome.storage.local.set({
+        preloadedDuplicateCheck: {
+          url: tweetData.url,
+          result: response,
+          timestamp: Date.now()
+        }
+      });
+
+      // Check for exact URL matches first (sighting already exists for this URL)
+      const existingSightings = response.existing_sightings_for_url || [];
+      if (existingSightings.length > 0) {
+        // URL already captured - check if in user's collections
+        const inUserCollections = existingSightings.some(s => s.in_user_collections);
+        status = inUserCollections ? 'already_collected' : 'exists_not_collected';
+      } else {
+        // No exact URL match - check text similarity matches (must be high similarity)
+        const matches = response.matches || [];
+        const highSimilarityMatch = matches.find(m => m.similarity >= 85);
+
+        if (highSimilarityMatch?.in_user_collections) {
+          status = 'already_collected';
+        } else if (highSimilarityMatch) {
+          // High similarity match exists but not in user's collection
+          status = 'exists_not_collected';
+        }
+        // Otherwise stays as 'new_quote' - in_quotosaurus alone doesn't mean THIS quote exists
+      }
+    }
+
+    debugLog('Badge status determined:', status);
+    await updateCollectionBadgeForTweet(status, tweetData.text, tabId);
+  } catch (error) {
+    console.error('Error checking quote collection status:', error);
+    // On error, show as new quote (safe default)
+    await updateCollectionBadgeForTweet('new_quote', tweetData.text, tabId);
+  }
+}
+
+/**
+ * Update badge for tweet collection status
+ */
+async function updateCollectionBadgeForTweet(
+  state: 'processing' | 'already_collected' | 'exists_not_collected' | 'new_quote',
+  quoteText: string,
+  tabId?: number
+): Promise<void> {
+  try {
+    // Use provided tabId, or fall back to active tab
+    let targetTabId = tabId;
+    if (!targetTabId) {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tabs.length === 0) return;
+      targetTabId = tabs[0].id;
+    }
+    if (!targetTabId) return;
+
+    const preview = quoteText.substring(0, 50);
+    let badge: { text: string; color: string; title: string };
+
+    switch (state) {
+      case 'processing':
+        badge = {
+          text: '○',
+          color: '#2196F3', // Blue
+          title: 'Checking quote status...'
+        };
+        break;
+      case 'already_collected':
+        badge = {
+          text: '✓',
+          color: '#4CAF50', // Green
+          title: `Already in your collection: "${preview}..."`
+        };
+        break;
+      case 'exists_not_collected':
+        badge = {
+          text: '+',
+          color: '#FF9800', // Orange - exists but not in your collection
+          title: `In Quotosaurus (not in your collection): "${preview}..."`
+        };
+        break;
+      case 'new_quote':
+        badge = {
+          text: '★',
+          color: '#4CAF50', // Green - new quote to add
+          title: `New quote: "${preview}..."`
+        };
+        break;
+    }
+
+    chrome.action.setBadgeText({ tabId: targetTabId, text: badge.text });
+    chrome.action.setBadgeBackgroundColor({ tabId: targetTabId, color: badge.color });
+    chrome.action.setTitle({ tabId: targetTabId, title: badge.title });
+
+    debugLog(`Badge updated for tab ${targetTabId}: ${state}`, badge);
+  } catch (error) {
+    console.error('Error updating collection badge:', error);
   }
 }
 
@@ -443,18 +648,18 @@ function getCollectionBadgeConfig(badgeInfo: import('../types/chrome').Collectio
         title: `Already collected: ${quote}`
       };
     
-    case 'should_collect':
+    case 'exists_not_collected':
       return {
-        text: '●',
-        color: '#4CAF50', // Green dot
-        title: `Collect this: ${quote}`
+        text: '+',
+        color: '#FF9800', // Orange - exists but not in your collection
+        title: `In Quotosaurus (not collected): ${quote}`
       };
     
     case 'new_quote':
       return {
-        text: '',
-        color: '#1a73e8', // Regular blue - ready to add new quote
-        title: `New quote ready: ${quote}`
+        text: '★',
+        color: '#4CAF50', // Green star - new quote to add
+        title: `New quote: ${quote}`
       };
     
     case 'processing':
@@ -473,5 +678,3 @@ function getCollectionBadgeConfig(badgeInfo: import('../types/chrome').Collectio
       };
   }
 }
-
-debugLog('Service worker initialized');

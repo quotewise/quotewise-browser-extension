@@ -44,7 +44,7 @@ describe('TwitterAdapter extraction', () => {
         <div data-testid="tweetText">
           <span lang="en">Hello world from Twitter</span>
         </div>
-        <time datetime="2023-01-01T00:00:00Z"></time>
+        <a href="https://twitter.com/alice/status/1234567890"><time datetime="2023-01-01T00:00:00Z"></time></a>
         <div data-testid="reply" aria-label="3 Replies"></div>
         <div data-testid="retweet" aria-label="5 Retweets"></div>
         <div data-testid="like" aria-label="7 Likes"></div>
@@ -69,7 +69,6 @@ describe('TwitterAdapter extraction', () => {
 
   test('extracts core tweet data including metrics and author', () => {
     const adapter = new TwitterAdapter();
-    (adapter as any).extractTweetId = jest.fn().mockReturnValue('1234567890');
     const data = (adapter as any).extractFromDom();
 
     expect(data).toBeTruthy();
@@ -92,7 +91,6 @@ describe('TwitterAdapter extraction', () => {
 
   test('handleMessage delegates extract requests', async () => {
     const adapter = new TwitterAdapter();
-    (adapter as any).extractTweetId = jest.fn().mockReturnValue('1234567890');
     const sendResponse = jest.fn();
 
     const handled = await adapter.handleMessage(
