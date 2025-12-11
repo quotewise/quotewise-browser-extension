@@ -173,7 +173,7 @@ describe('HandleLookupDisplay', () => {
           hasLookedUp: true,
           result: 'not_found',
           matchedOriginator: null,
-          createUrl: 'https://quotosaurus.com/originators/create/?suggested_handle=unknownuser',
+          createUrl: 'https://quotewise.io/originators/create/?suggested_handle=unknownuser',
           matchedHandle: 'unknownuser',
           errorMessage: null
         };
@@ -182,8 +182,8 @@ describe('HandleLookupDisplay', () => {
 
         expect(container.classList.contains('hidden')).toBe(false);
         expect(container.innerHTML).toContain('No originator found for @unknownuser');
-        expect(container.innerHTML).toContain('Create on Quotosaurus');
-        expect(container.innerHTML).toContain('href="https://quotosaurus.com/originators/create/?suggested_handle=unknownuser"');
+        expect(container.innerHTML).toContain('Create on Quotewise');
+        expect(container.innerHTML).toContain('href="https://quotewise.io/originators/create/?suggested_handle=unknownuser"');
         expect(container.innerHTML).toContain('Search Manually');
       });
 
@@ -200,7 +200,7 @@ describe('HandleLookupDisplay', () => {
 
         display.updateDisplay(state);
 
-        expect(container.innerHTML).not.toContain('Create on Quotosaurus');
+        expect(container.innerHTML).not.toContain('Create on Quotewise');
         expect(container.innerHTML).toContain('Search Manually');
       });
 
@@ -210,7 +210,7 @@ describe('HandleLookupDisplay', () => {
           hasLookedUp: true,
           result: 'not_found',
           matchedOriginator: null,
-          createUrl: 'https://quotosaurus.com/originators/create/',
+          createUrl: 'https://quotewise.io/originators/create/',
           matchedHandle: 'unknownuser',
           errorMessage: null
         };

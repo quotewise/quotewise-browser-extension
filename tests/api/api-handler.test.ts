@@ -10,7 +10,7 @@ import { QuotewiseApiClientImpl } from '../../src/api/quotewise-api';
 // Mock the API client
 jest.mock('../../src/api/quotewise-api', () => ({
   QuotewiseApiClientImpl: jest.fn().mockImplementation(() => ({
-    baseUrl: 'http://localhost:8001',
+    baseUrl: 'http://api.quotewise.test:8000',
     checkAuthStatus: jest.fn(),
     searchOriginators: jest.fn(),
     checkQuoteDuplicate: jest.fn(),
@@ -23,10 +23,12 @@ jest.mock('../../src/api/quotewise-api', () => ({
 jest.mock('../../src/config/environment', () => ({
   detectEnvironment: jest.fn(() => 'development'),
   getEnvironmentConfig: jest.fn(() => ({
-    apiBaseUrl: 'http://localhost:8001',
+    apiBaseUrl: 'http://api.quotewise.test:8000',
+    webBaseUrl: 'http://quotewise.test:8000',
     sessionCookieName: 'sessionid',
     secure: false
-  }))
+  })),
+  debugLog: jest.fn()
 }));
 
 // Mock Chrome APIs
@@ -59,14 +61,14 @@ describe('ApiHandler', () => {
 
   describe('Initialization', () => {
     test('initializes with correct environment', () => {
-      expect(QuotewiseApiClientImpl).toHaveBeenCalledWith('http://localhost:8001');
+      expect(QuotewiseApiClientImpl).toHaveBeenCalledWith('http://api.quotewise.test:8000');
     });
 
     test('provides environment info', () => {
       const envInfo = apiHandler.getEnvironmentInfo();
       expect(envInfo).toEqual({
         environment: 'development',
-        baseUrl: 'http://localhost:8001'
+        baseUrl: 'http://api.quotewise.test:8000'
       });
     });
   });

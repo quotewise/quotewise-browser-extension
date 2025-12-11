@@ -176,7 +176,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       });
       
       const result = await this.makeRequest<{results: OriginatorSearchResult[]}>(
-        `/api/v1/originators/search/?${params}`
+        `/v1/originators/search/?${params}`
       );
       
       return result.results || [];
@@ -195,7 +195,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
    */
   async checkAuthStatus(): Promise<AuthStatusResult> {
     try {
-      const result = await this.makeRequest<AuthStatusResult>('/api/v1/auth/status/');
+      const result = await this.makeRequest<AuthStatusResult>('/v1/auth/status/');
       return result;
     } catch (error) {
       if (error instanceof Error && error.name === 'AuthenticationError') {
@@ -240,7 +240,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       };
       
       const result = await this.makeRequest<DuplicateCheckResult>(
-        '/api/v1/quotes/check_duplicate/',
+        '/v1/quotes/check_duplicate/',
         {
           method: 'POST',
           body: JSON.stringify(payload)
@@ -289,7 +289,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       }
 
       const result = await this.makeRequest<{ id: string; message?: string }>(
-        '/api/v1/quotes/',
+        '/v1/quotes/',
         {
           method: 'POST',
           body: JSON.stringify(quoteData)
@@ -323,7 +323,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   async listCollections(): Promise<CollectionsListResponse> {
     try {
       const result = await this.makeRequest<CollectionsListResponse>(
-        '/api/v1/collections/',
+        '/v1/collections/',
         { method: 'GET' }
       );
 
@@ -382,7 +382,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       }
 
       const result = await this.makeRequest<ByHandleApiResponse>(
-        `/api/v1/originators/by-handle/?${params}`,
+        `/v1/originators/by-handle/?${params}`,
         { method: 'GET' },
         false  // No CSRF needed for GET
       );

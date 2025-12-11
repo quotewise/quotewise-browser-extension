@@ -94,7 +94,7 @@ export class HandleLookupDisplay {
             <div class="lookup-actions">
               ${createUrl ? `
                 <a href="${this.escapeHtml(createUrl)}" target="_blank" rel="noopener noreferrer" class="lookup-action-btn create-link">
-                  Create on Quotosaurus
+                  Create on Quotewise
                 </a>
               ` : ''}
               <button class="lookup-action-btn dismiss" data-action="dismiss">

@@ -5,7 +5,7 @@
 
 import type { DuplicateCheckResult } from '../types/api';
 import type { DuplicateState } from './duplicate-checker';
-import { debugLog } from '../config/environment';
+import { debugLog, getWebBaseUrl } from '../config/environment';
 
 export interface DuplicateDisplayOptions {
   container: HTMLElement;
@@ -282,8 +282,8 @@ export class DuplicateDisplay {
         e.preventDefault();
         const quoteId = (btn as HTMLElement).dataset.quoteId;
         if (quoteId) {
-          // Open quote detail on quotosaurus.com in new tab
-          const quoteUrl = `https://quotosaurus.com/quotes/${quoteId}/`;
+          // Open quote detail on quotewise.io in new tab
+          const quoteUrl = `${getWebBaseUrl()}/quotes/${quoteId}/`;
           window.open(quoteUrl, '_blank');
           debugLog('View details clicked for quote:', quoteId);
         }

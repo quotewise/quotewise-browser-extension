@@ -124,7 +124,7 @@ describe('HandleLookup', () => {
     });
 
     it('should handle lookup with not found result', async () => {
-      const createUrl = 'https://quotosaurus.com/originators/create/?suggested_handle=unknownuser';
+      const createUrl = 'https://quotewise.io/originators/create/?suggested_handle=unknownuser';
 
       mockSendMessage.mockImplementation((_msg, callback) => {
         callback({

@@ -30,10 +30,12 @@ const mockChrome = {
 jest.mock('../../src/config/environment', () => ({
   detectEnvironment: jest.fn(() => 'development'),
   getEnvironmentConfig: jest.fn(() => ({
-    apiBaseUrl: 'http://localhost:8001',
+    apiBaseUrl: 'http://api.quotewise.test:8000',
+    webBaseUrl: 'http://quotewise.test:8000',
     sessionCookieName: 'sessionid',
     secure: false
-  }))
+  })),
+  debugLog: jest.fn()
 }));
 
 // Get references to the mocked functions
@@ -47,7 +49,8 @@ describe('LoginHandler', () => {
     jest.clearAllMocks();
     mockDetectEnvironment.mockReturnValue('development');
     mockGetEnvironmentConfig.mockReturnValue({
-      apiBaseUrl: 'http://localhost:8001',
+      apiBaseUrl: 'http://api.quotewise.test:8000',
+      webBaseUrl: 'http://quotewise.test:8000',
       sessionCookieName: 'sessionid',
       secure: false
     });
@@ -57,29 +60,30 @@ describe('LoginHandler', () => {
 
   describe('initialization', () => {
     test('creates handler with correct environment configuration', () => {
-      expect(loginHandler.getLoginUrl()).toBe('http://localhost:8001/accounts/login/');
-      expect(loginHandler.getRedirectUrl()).toBe('http://localhost:8001/');
+      expect(loginHandler.getLoginUrl()).toBe('http://quotewise.test:8000/accounts/login/');
+      expect(loginHandler.getRedirectUrl()).toBe('http://quotewise.test:8000/');
     });
 
     test('creates handler with staging environment', () => {
       // Mock the staging config return
       mockGetEnvironmentConfig.mockReturnValueOnce({
-        apiBaseUrl: 'https://staging.quotosaurus.com',
+        apiBaseUrl: 'https://api.staging.quotewise.io',
+        webBaseUrl: 'https://staging.quotewise.io',
         sessionCookieName: 'stagingsessionid',
         secure: true
       });
-      
+
       const stagingHandler = new LoginHandler('staging');
-      
-      expect(stagingHandler.getLoginUrl()).toBe('https://staging.quotosaurus.com/accounts/login/');
-      expect(stagingHandler.getRedirectUrl()).toBe('https://staging.quotosaurus.com/');
+
+      expect(stagingHandler.getLoginUrl()).toBe('https://staging.quotewise.io/accounts/login/');
+      expect(stagingHandler.getRedirectUrl()).toBe('https://staging.quotewise.io/');
     });
   });
 
   describe('openLoginPage', () => {
     test('successfully opens login tab', async () => {
-      const mockTab = { id: 123, url: 'http://localhost:8001/accounts/login/' };
-      
+      const mockTab = { id: 123, url: 'http://quotewise.test:8000/accounts/login/' };
+
       // Mock successful tab creation and immediate redirect
       mockChrome.tabs.create.mockImplementation((createInfo, callback) => {
         callback(mockTab);
@@ -89,18 +93,18 @@ describe('LoginHandler', () => {
       mockChrome.tabs.onUpdated.addListener.mockImplementation((listener) => {
         // Simulate tab update with successful redirect
         setTimeout(() => {
-          listener(123, { status: 'complete' }, { 
-            id: 123, 
-            url: 'http://localhost:8001/' 
+          listener(123, { status: 'complete' }, {
+            id: 123,
+            url: 'http://quotewise.test:8000/'
           });
         }, 10);
       });
 
       const openPromise = loginHandler.openLoginPage();
-      
+
       expect(mockChrome.tabs.create).toHaveBeenCalledWith(
         {
-          url: 'http://localhost:8001/accounts/login/',
+          url: 'http://quotewise.test:8000/accounts/login/',
           active: true
         },
         expect.any(Function)
@@ -123,8 +127,8 @@ describe('LoginHandler', () => {
     });
 
     test('handles missing tab ID', async () => {
-      const mockTab = { url: 'http://localhost:8001/accounts/login/' }; // No ID
-      
+      const mockTab = { url: 'http://quotewise.test:8000/accounts/login/' }; // No ID
+
       mockChrome.tabs.create.mockImplementation((createInfo, callback) => {
         callback(mockTab);
       });
@@ -136,7 +140,7 @@ describe('LoginHandler', () => {
 
     test('resolves when tab is redirected to success URL', async () => {
       const mockTab = { id: 123 };
-      
+
       mockChrome.tabs.create.mockImplementation((createInfo, callback) => {
         callback(mockTab);
       });
@@ -144,9 +148,9 @@ describe('LoginHandler', () => {
       // Mock successful redirect
       mockChrome.tabs.onUpdated.addListener.mockImplementation((listener) => {
         setTimeout(() => {
-          listener(123, { status: 'complete' }, { 
-            id: 123, 
-            url: 'http://localhost:8001/dashboard' // Success redirect
+          listener(123, { status: 'complete' }, {
+            id: 123,
+            url: 'http://quotewise.test:8000/dashboard' // Success redirect
           });
         }, 10);
       });
@@ -191,10 +195,10 @@ describe('LoginHandler', () => {
 
     test('detects successful login redirects', () => {
       const successUrls = [
-        'http://localhost:8001/',
-        'http://localhost:8001/dashboard',
-        'http://localhost:8001/admin',
-        'http://localhost:8001/?login=success'
+        'http://quotewise.test:8000/',
+        'http://quotewise.test:8000/dashboard',
+        'http://quotewise.test:8000/admin',
+        'http://quotewise.test:8000/?login=success'
       ];
 
       successUrls.forEach(url => {
@@ -206,8 +210,8 @@ describe('LoginHandler', () => {
 
     test('does not detect login page as success', () => {
       const loginUrls = [
-        'http://localhost:8001/accounts/login/',
-        'http://localhost:8001/accounts/login/?next=/'
+        'http://quotewise.test:8000/accounts/login/',
+        'http://quotewise.test:8000/accounts/login/?next=/'
       ];
 
       loginUrls.forEach(url => {
@@ -218,8 +222,8 @@ describe('LoginHandler', () => {
 
     test('detects login errors', () => {
       const errorUrls = [
-        'http://localhost:8001/accounts/login/?error=invalid',
-        'http://localhost:8001/accounts/login/?login_failed=1'
+        'http://quotewise.test:8000/accounts/login/?error=invalid',
+        'http://quotewise.test:8000/accounts/login/?login_failed=1'
       ];
 
       errorUrls.forEach(url => {
@@ -233,9 +237,9 @@ describe('LoginHandler', () => {
     test('can open environment-specific login', () => {
       // Test that the method exists and can be called
       expect(typeof loginHandler.openEnvironmentLogin).toBe('function');
-      
+
       // Test login URL getter
-      expect(loginHandler.getLoginUrl()).toBe('http://localhost:8001/accounts/login/');
+      expect(loginHandler.getLoginUrl()).toBe('http://quotewise.test:8000/accounts/login/');
     });
   });
 });

@@ -26,13 +26,13 @@ export async function getCookie(name: string): Promise<string | null> {
             // Get the current environment to determine the correct domain
             const manifestName = chrome.runtime.getManifest().name || '';
             const lowerName = manifestName.toLowerCase();
-            let url = 'https://quotosaurus.com';
+            let url = 'https://api.quotewise.io';
 
             if (lowerName.includes('staging')) {
-                url = 'https://staging.quotosaurus.com';
+                url = 'https://api.staging.quotewise.io';
             } else if (lowerName.includes('dev')) {
-                // Development uses http://127.0.0.1:8000 - must match the API base URL
-                url = 'http://127.0.0.1:8000';
+                // Development uses api.quotewise.test:8000 - must match the API base URL
+                url = 'http://api.quotewise.test:8000';
             }
 
             debugLog(`Getting cookie '${name}' for URL: ${url}`);
@@ -74,7 +74,7 @@ export async function getCSRFToken(apiBaseUrl: string): Promise<string | null> {
         // Use the auth status endpoint which is available and safe to call
         try {
             debugLog('No CSRF token in cookies, making GET request to trigger cookie setting...');
-            const response = await fetch(`${apiBaseUrl}/api/v1/auth/status/`, {
+            const response = await fetch(`${apiBaseUrl}/v1/auth/status/`, {
                 credentials: 'include',
                 method: 'GET'
             });
@@ -172,7 +172,7 @@ export async function getDefaultHeaders(
         // SECURITY: Fail safely - do not proceed without CSRF token
         // This prevents requests that would be rejected by Django anyway
         throw new CSRFTokenError(
-            'CSRF token unavailable. User may need to log in to quotosaurus.com first.'
+            'CSRF token unavailable. User may need to log in to quotewise.io first.'
         );
     }
 
