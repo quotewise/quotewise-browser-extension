@@ -8,15 +8,17 @@ Chrome extension (Manifest V3) for capturing quotes from social media platforms 
 
 ## Build & Development Commands
 
+**Always use Bun instead of npm** for this project.
+
 ```bash
-npm run dev          # Webpack watch build to dist/; reload extension in chrome://extensions
-npm run build        # Production bundle (minified)
-npm run lint         # ESLint for TypeScript sources
-npm run type-check   # tsc --noEmit for static type checking
-npm test             # Jest + ts-jest in jsdom
-npm test -- --coverage          # With coverage report
-npm test -- path/to/file.test.ts  # Run single test file
-npm run clean        # Remove dist/
+bun run dev          # Webpack watch build to dist/; reload extension in chrome://extensions
+bun run build        # Production bundle (minified)
+bun run lint         # ESLint for TypeScript sources
+bun run type-check   # tsc --noEmit for static type checking
+bun run test         # Jest + ts-jest in jsdom
+bun run test -- --coverage          # With coverage report
+bun run test -- path/to/file.test.ts  # Run single test file
+bun run clean        # Remove dist/
 ```
 
 After building, load the unpacked extension from `dist/` in `chrome://extensions` (Developer mode enabled).
@@ -116,8 +118,12 @@ src/
 │       └── overlay-bar.ts # In-page capture UI with originator lookup
 ├── config/
 │   └── environment.ts   # Environment detection and config
-├── duplicate/           # Duplicate checking UI components
-├── lookup/              # Originator lookup UI components
+├── duplicate/           # Duplicate checking components
+│   ├── duplicate-checker.ts  # Duplicate check logic and state
+│   └── duplicate-display.ts  # Duplicate check UI rendering
+├── lookup/              # Originator lookup components
+│   ├── handle-lookup.ts      # Handle lookup logic and state
+│   └── handle-lookup-display.ts # Handle lookup UI rendering
 ├── platforms/           # Platform adapters
 │   ├── types.ts         # PlatformAdapter interface
 │   └── twitter/
