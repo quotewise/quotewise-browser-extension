@@ -9,7 +9,7 @@ import type { AuthStatus, AuthError } from '../../src/types/auth';
 
 // Mock API client
 const mockApiClient = {
-  baseUrl: 'http://localhost:8001',
+  baseUrl: 'http://api.quotewise.test:8000',
   checkAuthStatus: jest.fn(),
   searchOriginators: jest.fn(),
   checkQuoteDuplicate: jest.fn(),

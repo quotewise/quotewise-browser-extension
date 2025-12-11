@@ -9,10 +9,9 @@
     "cookies"
   ],
   "host_permissions": [
-    "https://quotosaurus.com/*",
-    "https://staging.quotosaurus.com/*",
+    "https://*.quotewise.io/*",
+    "http://*.quotewise.test:8000/*",
     "http://localhost:8001/*",
-    "http://127.0.0.1:8000/*",
     "https://twitter.com/*",
     "https://x.com/*"
   ],

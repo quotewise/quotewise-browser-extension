@@ -46,17 +46,20 @@ export function debugLog(...args: unknown[]): void {
 // Environment configurations matching Django settings
 export const ENVIRONMENTS: Record<string, EnvironmentConfig> = {
     development: {
-        apiBaseUrl: 'http://127.0.0.1:8000',
+        apiBaseUrl: 'http://api.quotewise.test:8000',
+        webBaseUrl: 'http://quotewise.test:8000',
         sessionCookieName: 'sessionid',
         secure: false  // Based on settings/test.py:153
     },
     staging: {
-        apiBaseUrl: 'https://staging.quotosaurus.com',
+        apiBaseUrl: 'https://api.staging.quotewise.io',
+        webBaseUrl: 'https://staging.quotewise.io',
         sessionCookieName: 'stagingsessionid',  // settings/staging.py:78
         secure: true  // settings/staging.py:33
     },
     production: {
-        apiBaseUrl: 'https://quotosaurus.com',
+        apiBaseUrl: 'https://api.quotewise.io',
+        webBaseUrl: 'https://quotewise.io',
         sessionCookieName: 'sessionid',
         secure: true  // settings/production.py:120
     }
@@ -134,7 +137,7 @@ export function detectEnvironment(): 'development' | 'staging' | 'production' {
             return 'staging';
         }
         
-        if (hostname === 'quotosaurus.com') {
+        if (hostname === 'quotewise.io' || hostname.endsWith('.quotewise.io')) {
             return 'production';
         }
     }
@@ -202,6 +205,10 @@ export function isProduction(): boolean {
 
 export function getApiBaseUrl(): string {
     return getEnvironmentConfig().apiBaseUrl;
+}
+
+export function getWebBaseUrl(): string {
+    return getEnvironmentConfig().webBaseUrl;
 }
 
 export function getSessionCookieName(): string {

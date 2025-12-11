@@ -32,7 +32,7 @@ describe('QuotewiseApiClient', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    client = new QuotewiseApiClientImpl('http://localhost:8001');
+    client = new QuotewiseApiClientImpl('http://api.quotewise.test:8000');
 
     // Mock for POST/PUT/DELETE requests (with CSRF)
     mockGetDefaultHeaders.mockResolvedValue({
@@ -58,7 +58,7 @@ describe('QuotewiseApiClient', () => {
       await client.checkQuoteDuplicate('test quote');
 
       // POST requests should use getDefaultHeaders which includes CSRF
-      expect(mockGetDefaultHeaders).toHaveBeenCalledWith('http://localhost:8001');
+      expect(mockGetDefaultHeaders).toHaveBeenCalledWith('http://api.quotewise.test:8000');
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -79,7 +79,7 @@ describe('QuotewiseApiClient', () => {
       await client.searchOriginators('test');
 
       // GET requests should use getReadOnlyHeaders (no CSRF required)
-      expect(mockGetReadOnlyHeaders).toHaveBeenCalledWith('http://localhost:8001');
+      expect(mockGetReadOnlyHeaders).toHaveBeenCalledWith('http://api.quotewise.test:8000');
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -184,7 +184,7 @@ describe('QuotewiseApiClient', () => {
       expect(results).toEqual(mockResults);
       // GET requests use read-only headers (no CSRF required)
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8001/api/v1/originators/search/?q=Einstein&limit=5',
+        'http://api.quotewise.test:8000/v1/originators/search/?q=Einstein&limit=5',
         expect.objectContaining({
           credentials: 'include',
           headers: expect.objectContaining({
@@ -237,7 +237,7 @@ describe('QuotewiseApiClient', () => {
 
       expect(result).toEqual(mockAuthResult);
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8001/api/v1/auth/status/',
+        'http://api.quotewise.test:8000/v1/auth/status/',
         expect.objectContaining({
           credentials: 'include'
         })
@@ -297,7 +297,7 @@ describe('QuotewiseApiClient', () => {
 
       expect(result).toEqual(mockDuplicateResult);
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8001/api/v1/quotes/check_duplicate/',
+        'http://api.quotewise.test:8000/v1/quotes/check_duplicate/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({
@@ -381,7 +381,7 @@ describe('QuotewiseApiClient', () => {
       });
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8001/api/v1/quotes/',
+        'http://api.quotewise.test:8000/v1/quotes/',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify(validQuoteData)

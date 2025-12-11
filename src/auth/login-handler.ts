@@ -27,8 +27,8 @@ export class LoginHandler {
     const environmentConfig = getEnvironmentConfig(env);
     
     return {
-      loginUrl: `${environmentConfig.apiBaseUrl}/accounts/login/`,      // Django LOGIN_URL
-      redirectUrl: `${environmentConfig.apiBaseUrl}/`,                  // Django LOGIN_REDIRECT_URL
+      loginUrl: `${environmentConfig.webBaseUrl}/accounts/login/`,      // Django LOGIN_URL
+      redirectUrl: `${environmentConfig.webBaseUrl}/`,                  // Django LOGIN_REDIRECT_URL
       environment: env as 'development' | 'staging' | 'production'
     };
   }

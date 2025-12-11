@@ -498,7 +498,7 @@ describe('DuplicateDisplay', () => {
 
       viewDetailsBtn.click();
 
-      expect(windowOpenSpy).toHaveBeenCalledWith('https://quotosaurus.com/quotes/test-quote-id/', '_blank');
+      expect(windowOpenSpy).toHaveBeenCalledWith('http://quotewise.test:8000/quotes/test-quote-id/', '_blank');
 
       windowOpenSpy.mockRestore();
     });

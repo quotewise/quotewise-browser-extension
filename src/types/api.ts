@@ -178,6 +178,7 @@ export interface SessionConfig {
 // Environment configuration
 export interface EnvironmentConfig {
   apiBaseUrl: string;
+  webBaseUrl: string;
   sessionCookieName: string;
   secure: boolean;
 }
