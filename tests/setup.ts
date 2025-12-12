@@ -56,7 +56,8 @@ const mockChrome = {
 global.fetch = jest.fn();
 
 // Mock DOM APIs that might be used in content scripts
-// JSDOM provides its own location mock, so we don't need to override it
+// Note: JSDOM's window.location is non-configurable, so tests that need
+// to verify URL-dependent behavior should use function parameters instead
 
 // Mock MutationObserver
 global.MutationObserver = class MutationObserver {

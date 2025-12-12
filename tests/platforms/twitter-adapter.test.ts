@@ -11,20 +11,6 @@ jest.mock('../../src/content/common', () => {
 });
 
 describe('TwitterAdapter extraction', () => {
-  const setLocation = (url: string) => {
-    const urlObj = new URL(url);
-    try {
-      (window as any).location.href = urlObj.toString();
-      (window as any).location.pathname = urlObj.pathname;
-      (window as any).location.hostname = urlObj.hostname;
-      (window as any).location.host = urlObj.host;
-      (window as any).location.origin = urlObj.origin;
-      (window as any).location.protocol = urlObj.protocol;
-    } catch {
-      // jsdom may block direct reassignment in some cases; best-effort only
-    }
-  };
-
   const buildTweetDom = () => {
     document.body.innerHTML = `
       <div data-testid="socialContext">
@@ -56,7 +42,6 @@ describe('TwitterAdapter extraction', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    setLocation('https://twitter.com/alice/status/1234567890');
     buildTweetDom();
   });
 
@@ -100,5 +85,172 @@ describe('TwitterAdapter extraction', () => {
 
     expect(handled).toBe(true);
     expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
+
+  test('extracts correct tweet when viewing a reply directly', () => {
+    // Build DOM with parent tweet first (common Twitter layout for reply pages)
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name">
+          <div><span><span>Original Author</span></span></div>
+          <a href="https://twitter.com/original">Original Author</a>
+        </div>
+        <div data-testid="tweetText">
+          <span lang="en">This is the original tweet</span>
+        </div>
+        <a href="https://twitter.com/original/status/1111111111"><time datetime="2023-01-01T00:00:00Z"></time></a>
+      </article>
+      <article data-testid="tweet">
+        <div data-testid="User-Name">
+          <div><span><span>Replier</span></span></div>
+          <a href="https://twitter.com/replier">Replier</a>
+        </div>
+        <div data-testid="tweetText">
+          <span lang="en">This is my reply</span>
+        </div>
+        <a href="https://twitter.com/replier/status/9999999999"><time datetime="2023-01-02T00:00:00Z"></time></a>
+      </article>
+    `;
+
+    const adapter = new TwitterAdapter();
+    const replyUrl = 'https://twitter.com/replier/status/9999999999';
+
+    // Verify URL tweet ID extraction works
+    const urlTweetId = (adapter as any).extractTweetIdFromUrl(replyUrl);
+    expect(urlTweetId).toBe('9999999999');
+
+    // Verify we can find both articles
+    const articles = document.querySelectorAll('article[data-testid="tweet"]');
+    expect(articles.length).toBe(2);
+
+    // Verify we can extract tweet IDs from both articles
+    const firstArticleTweetId = (adapter as any).extractTweetIdFromArticleElement(articles[0]);
+    const secondArticleTweetId = (adapter as any).extractTweetIdFromArticleElement(articles[1]);
+    expect(firstArticleTweetId).toBe('1111111111');
+    expect(secondArticleTweetId).toBe('9999999999');
+
+    // Verify findPrimaryArticle selects the correct one when given the URL
+    const primaryArticle = (adapter as any).findPrimaryArticle(replyUrl);
+    const primaryTweetId = (adapter as any).extractTweetIdFromArticleElement(primaryArticle);
+    expect(primaryTweetId).toBe('9999999999');
+  });
+
+  test('falls back to first article when no tweet ID matches URL', () => {
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name">
+          <div><span><span>Alice</span></span></div>
+          <a href="https://twitter.com/alice">Alice</a>
+        </div>
+        <div data-testid="tweetText">
+          <span lang="en">First tweet in DOM</span>
+        </div>
+        <a href="https://twitter.com/alice/status/1234567890"><time datetime="2023-01-01T00:00:00Z"></time></a>
+      </article>
+    `;
+
+    const adapter = new TwitterAdapter();
+    // URL has a tweet ID that doesn't exist in DOM (edge case)
+    const nonMatchingUrl = 'https://twitter.com/someone/status/9999999999';
+
+    // Should fall back to first article when URL tweet ID doesn't match
+    const primaryArticle = (adapter as any).findPrimaryArticle(nonMatchingUrl);
+    const primaryTweetId = (adapter as any).extractTweetIdFromArticleElement(primaryArticle);
+    expect(primaryTweetId).toBe('1234567890');
+  });
+
+  test('deprioritizes quoted tweets embedded in articles', () => {
+    // Simulate a tweet that contains a quoted tweet
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name">
+          <div><span><span>Main Author</span></span></div>
+          <a href="https://twitter.com/main">Main Author</a>
+        </div>
+        <div data-testid="tweetText">
+          <span lang="en">Check out this tweet</span>
+        </div>
+        <a href="https://twitter.com/main/status/1111111111"><time datetime="2023-01-01T00:00:00Z"></time></a>
+        <div data-testid="quotedTweet">
+          <article data-testid="tweet">
+            <div data-testid="User-Name">
+              <div><span><span>Quoted Author</span></span></div>
+              <a href="https://twitter.com/quoted">Quoted Author</a>
+            </div>
+            <div data-testid="tweetText">
+              <span lang="en">This is the quoted tweet</span>
+            </div>
+            <a href="https://twitter.com/quoted/status/2222222222"><time datetime="2023-01-01T00:00:00Z"></time></a>
+          </article>
+        </div>
+      </article>
+    `;
+
+    const adapter = new TwitterAdapter();
+
+    // Without URL override, should select the main tweet (not the quoted one)
+    const primaryArticle = (adapter as any).findPrimaryArticle();
+    const primaryTweetId = (adapter as any).extractTweetIdFromArticleElement(primaryArticle);
+    expect(primaryTweetId).toBe('1111111111');
+  });
+
+  test('uses primaryColumn positioning when no URL match', () => {
+    // Simulate Twitter layout with primaryColumn
+    document.body.innerHTML = `
+      <div data-testid="sidebarColumn">
+        <article data-testid="tweet">
+          <a href="https://twitter.com/sidebar/status/3333333333"><time datetime="2023-01-01T00:00:00Z"></time></a>
+        </article>
+      </div>
+      <div data-testid="primaryColumn">
+        <article data-testid="tweet">
+          <div data-testid="User-Name">
+            <div><span><span>Primary Author</span></span></div>
+            <a href="https://twitter.com/primary">Primary Author</a>
+          </div>
+          <div data-testid="tweetText">
+            <span lang="en">This is in the primary column</span>
+          </div>
+          <a href="https://twitter.com/primary/status/4444444444"><time datetime="2023-01-01T00:00:00Z"></time></a>
+        </article>
+      </div>
+    `;
+
+    const adapter = new TwitterAdapter();
+
+    // Without URL, should prefer the primary column article
+    const primaryArticle = (adapter as any).findPrimaryArticle();
+    const primaryTweetId = (adapter as any).extractTweetIdFromArticleElement(primaryArticle);
+    expect(primaryTweetId).toBe('4444444444');
+  });
+
+  test('calculates priority scores correctly', () => {
+    document.body.innerHTML = `
+      <div data-testid="primaryColumn">
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet" tabindex="0">
+            <a href="https://twitter.com/user/status/1111111111"><time></time></a>
+          </article>
+        </div>
+        <div data-testid="cellInnerDiv">
+          <article data-testid="tweet">
+            <a href="https://twitter.com/user/status/2222222222"><time></time></a>
+          </article>
+        </div>
+      </div>
+    `;
+
+    const adapter = new TwitterAdapter();
+    const articles = document.querySelectorAll('article[data-testid="tweet"]');
+
+    // First article should have higher priority (primaryColumn first + cellInnerDiv first + tabindex)
+    const firstPriority = (adapter as any).calculateArticlePriority(articles[0], 0, null);
+    const secondPriority = (adapter as any).calculateArticlePriority(articles[1], 1, null);
+
+    expect(firstPriority).toBeGreaterThan(secondPriority);
+
+    // URL match should give highest priority even to second article
+    const secondWithUrlMatch = (adapter as any).calculateArticlePriority(articles[1], 1, '2222222222');
+    expect(secondWithUrlMatch).toBeGreaterThan(firstPriority);
   });
 });
