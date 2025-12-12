@@ -579,8 +579,13 @@ export class OverlayBar {
         'found'
       );
       this.updateSubmitButton(true);
-      // Start duplicate check in background (non-blocking) - check for preloaded first
-      this.checkDuplicate(cached.id);
+      // Check for preloaded duplicate data before making API call
+      try {
+        const storage = await chrome.storage.local.get(['preloadedDuplicateCheck']);
+        this.checkDuplicateWithPreload(cached.id, storage.preloadedDuplicateCheck);
+      } catch {
+        this.checkDuplicate(cached.id);
+      }
       return;
     }
 
@@ -700,7 +705,7 @@ export class OverlayBar {
       this.captureState.duplicateResult = result;
       this.updateDuplicateInfo({ result });
     } else {
-      // Fall back to fresh check
+      // Fall back to fresh check (preload not ready or stale)
       this.checkDuplicate(originatorId);
     }
   }
@@ -745,6 +750,19 @@ export class OverlayBar {
           'success'
         );
         this.updateSubmitButton(false, 'Done!');
+
+        // Update badge based on whether quote was added to a collection
+        // TODO: Once collection selector is added to overlay, update badge based on user's choice
+        // For now, show 'exists_not_collected' since we're not adding to collections yet
+        this.sendMessage({
+          type: MessageType.UPDATE_COLLECTION_BADGE,
+          data: {
+            state: 'exists_not_collected',
+            quoteText: quoteText
+          }
+        }).catch(() => {
+          // Badge update is non-critical
+        });
 
         // Auto-hide after success
         setTimeout(() => this.hide(), 1500);

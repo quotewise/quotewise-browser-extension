@@ -183,6 +183,34 @@ export interface EnvironmentConfig {
   secure: boolean;
 }
 
+// Preflight (combined originator lookup + duplicate check) types
+export interface PreflightRequest {
+  handle: string;
+  platform: string;
+  text: string;
+  source_url: string;
+}
+
+export interface PreflightOriginatorResult {
+  found: boolean;
+  originator?: {
+    id: number;
+    full_name: string;
+    slug: string;
+    social_handles?: Record<string, string>;
+  };
+  handle?: string;
+  platform?: string;
+  match_platform?: string;
+  confidence?: number;
+  create_url?: string;
+}
+
+export interface PreflightResult {
+  originator: PreflightOriginatorResult;
+  duplicate_check: DuplicateCheckResult;
+}
+
 // API client interface
 export interface QuotewiseApiClient {
   baseUrl: string;
@@ -192,6 +220,7 @@ export interface QuotewiseApiClient {
   checkAuthStatus(): Promise<AuthStatusResult>;
   listCollections(): Promise<CollectionsListResponse>;
   lookupOriginatorByHandle(handle: string, platform?: string): Promise<HandleLookupResult>;
+  preflightCheck(handle: string, platform: string, text: string, sourceUrl: string): Promise<PreflightResult>;
 }
 
 // Collections

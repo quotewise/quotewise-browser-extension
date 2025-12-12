@@ -54,6 +54,10 @@ export class ApiHandler {
                     await this.handleLookupOriginatorByHandle(message, sendResponse);
                     break;
 
+                case 'PREFLIGHT_CHECK':
+                    await this.handlePreflightCheck(message, sendResponse);
+                    break;
+
                 default:
                     console.warn('Unknown message type:', message.type);
                     sendResponse({ 
@@ -256,10 +260,60 @@ export class ApiHandler {
     }
 
     /**
-     * Handle tweet data request
-     * Forwards to content script for data extraction
+     * Handle preflight check (combined originator lookup + duplicate check)
+     * Reduces round-trips from 2 API calls to 1 for faster feedback
      */
-    
+    private async handlePreflightCheck(
+        message: ExtensionMessage,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sendResponse: (response: any) => void
+    ): Promise<void> {
+        try {
+            const { handle, platform, text, source_url } = message.data || {};
+
+            if (!handle || typeof handle !== 'string') {
+                sendResponse({
+                    success: false,
+                    error: 'Handle is required'
+                });
+                return;
+            }
+
+            if (!text || typeof text !== 'string') {
+                sendResponse({
+                    success: false,
+                    error: 'Quote text is required'
+                });
+                return;
+            }
+
+            const result = await this.apiClient.preflightCheck(
+                handle,
+                typeof platform === 'string' ? platform : 'twitter',
+                text,
+                typeof source_url === 'string' ? source_url : ''
+            );
+
+            sendResponse({
+                success: true,
+                ...result
+            });
+        } catch (error) {
+            console.error('Error in preflight check:', error);
+            sendResponse({
+                success: false,
+                error: error instanceof Error ? error.message : 'Preflight check failed',
+                originator: { found: false },
+                duplicate_check: {
+                    recommendation: 'new_quote',
+                    confidence: 0.5,
+                    in_quotosaurus: false,
+                    matches: []
+                }
+            });
+        }
+    }
+
     /**
      * Get current environment info for debugging
      */

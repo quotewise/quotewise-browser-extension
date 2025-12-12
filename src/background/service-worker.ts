@@ -319,7 +319,8 @@ async function handleTweetDataExtracted(
 
 /**
  * Check if a quote exists in Quotosaurus and update badge accordingly
- * Also preloads originator lookup for faster overlay display
+ * Uses single preflight API call for both originator lookup and duplicate check
+ * (Reduces round-trips from 2 API calls to 1)
  */
 async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number): Promise<void> {
   try {
@@ -332,68 +333,41 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
     }
 
     const handle = tweetData.author?.username;
-    let originatorId: number | undefined;
 
-    // Step 1: Lookup originator by handle (preload for overlay)
-    if (handle) {
-      debugLog('Looking up originator for handle:', handle);
-      const lookupResponse = await new Promise<{
-        success: boolean;
-        found?: boolean;
-        originator?: { id: number; full_name: string; unique_id: string; sort_name_display: string; confidence: number | null };
-        create_url?: string;
-      }>((resolve) => {
-        apiHandler!.handleMessage(
-          { type: MessageType.LOOKUP_ORIGINATOR_BY_HANDLE, data: { handle, platform: 'twitter' } },
-          {} as chrome.runtime.MessageSender,
-          resolve
-        );
-      });
-
-      if (lookupResponse.success && lookupResponse.found && lookupResponse.originator) {
-        originatorId = lookupResponse.originator.id;
-        debugLog('Originator found:', lookupResponse.originator.full_name);
-
-        // Cache originator result for overlay to use
-        await chrome.storage.local.set({
-          preloadedOriginator: {
-            handle: handle.toLowerCase(),
-            originator: lookupResponse.originator,
-            timestamp: Date.now()
-          }
-        });
-      } else {
-        debugLog('Originator not found for handle:', handle);
-        // Cache not-found result with create_url
-        await chrome.storage.local.set({
-          preloadedOriginator: {
-            handle: handle.toLowerCase(),
-            originator: null,
-            create_url: lookupResponse.create_url,
-            timestamp: Date.now()
-          }
-        });
-      }
+    if (!handle) {
+      debugLog('No handle available for preflight check');
+      await updateCollectionBadgeForTweet('new_quote', tweetData.text, tabId);
+      return;
     }
 
-    // Step 2: Check for duplicates using the API (with originator ID if found, or handle as fallback)
-    debugLog('Checking duplicates with originator_id:', originatorId, 'handle:', handle);
-    const response = await new Promise<{
+    // Single preflight call combines originator lookup + duplicate check
+    debugLog('Running preflight check for handle:', handle);
+    const preflightResponse = await new Promise<{
       success: boolean;
-      in_quotosaurus?: boolean;
-      existing_sightings_for_url?: Array<{ id: number; in_user_collections?: boolean }>;
-      matches?: Array<{ similarity: number; in_user_collections?: boolean }>;
-      recommendation?: string;
-      result?: unknown;
+      originator?: {
+        found: boolean;
+        originator?: { id: number; full_name: string; slug: string; social_handles?: Record<string, string> };
+        handle?: string;
+        platform?: string;
+        match_platform?: string;
+        confidence?: number;
+        create_url?: string;
+      };
+      duplicate_check?: {
+        in_quotosaurus?: boolean;
+        existing_sightings_for_url?: Array<{ id: number; in_user_collections?: boolean }>;
+        matches?: Array<{ similarity: number; in_user_collections?: boolean }>;
+        recommendation?: string;
+      };
     }>((resolve) => {
       apiHandler!.handleMessage(
         {
-          type: MessageType.CHECK_DUPLICATE,
+          type: MessageType.PREFLIGHT_CHECK,
           data: {
+            handle,
+            platform: 'twitter',
             text: tweetData.text,
-            originator_id: originatorId,
-            source_url: tweetData.url,
-            social_handle: handle // Pass handle so backend can lookup originator if ID not found
+            source_url: tweetData.url
           }
         },
         {} as chrome.runtime.MessageSender,
@@ -401,31 +375,72 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
       );
     });
 
-    let status: 'already_collected' | 'exists_not_collected' | 'new_quote' = 'new_quote';
+    if (!preflightResponse.success) {
+      debugLog('Preflight check failed, showing as new quote');
+      await updateCollectionBadgeForTweet('new_quote', tweetData.text, tabId);
+      return;
+    }
 
-    if (!response.success) {
-      debugLog('Duplicate check failed, showing as new quote');
-    } else {
-      debugLog('Duplicate check response:', response);
+    debugLog('Preflight response:', preflightResponse);
 
-      // Cache duplicate check result for overlay to use
+    // Cache originator result for overlay to use
+    const originatorResult = preflightResponse.originator;
+    if (originatorResult) {
+      if (originatorResult.found && originatorResult.originator) {
+        // Transform to match expected overlay format
+        await chrome.storage.local.set({
+          preloadedOriginator: {
+            handle: handle.toLowerCase(),
+            originator: {
+              id: originatorResult.originator.id,
+              full_name: originatorResult.originator.full_name,
+              unique_id: originatorResult.originator.slug,
+              sort_name_display: originatorResult.originator.full_name,
+              confidence: originatorResult.confidence ?? 1.0
+            },
+            timestamp: Date.now()
+          }
+        });
+        debugLog('Originator found:', originatorResult.originator.full_name);
+      } else {
+        // Cache not-found result with create_url
+        await chrome.storage.local.set({
+          preloadedOriginator: {
+            handle: handle.toLowerCase(),
+            originator: null,
+            create_url: originatorResult.create_url,
+            timestamp: Date.now()
+          }
+        });
+        debugLog('Originator not found for handle:', handle);
+      }
+    }
+
+    // Cache duplicate check result for overlay to use
+    const duplicateResult = preflightResponse.duplicate_check;
+    if (duplicateResult) {
       await chrome.storage.local.set({
         preloadedDuplicateCheck: {
           url: tweetData.url,
-          result: response,
+          result: duplicateResult,
           timestamp: Date.now()
         }
       });
+    }
 
+    // Determine badge status from duplicate check result
+    let status: 'already_collected' | 'exists_not_collected' | 'new_quote' = 'new_quote';
+
+    if (duplicateResult) {
       // Check for exact URL matches first (sighting already exists for this URL)
-      const existingSightings = response.existing_sightings_for_url || [];
+      const existingSightings = duplicateResult.existing_sightings_for_url || [];
       if (existingSightings.length > 0) {
         // URL already captured - check if in user's collections
         const inUserCollections = existingSightings.some(s => s.in_user_collections);
         status = inUserCollections ? 'already_collected' : 'exists_not_collected';
       } else {
         // No exact URL match - check text similarity matches (must be high similarity)
-        const matches = response.matches || [];
+        const matches = duplicateResult.matches || [];
         const highSimilarityMatch = matches.find(m => m.similarity >= 85);
 
         if (highSimilarityMatch?.in_user_collections) {
