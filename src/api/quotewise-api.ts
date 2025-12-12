@@ -12,6 +12,7 @@ import type {
   AuthStatusResult,
   CollectionsListResponse,
   HandleLookupResult,
+  PreflightResult,
   AuthenticationError,
   ApiError
 } from '../types/api';
@@ -426,6 +427,67 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         handle: cleanHandle,
         platform,
         create_url: undefined
+      };
+    }
+  }
+
+  /**
+   * Combined originator lookup + duplicate check (preflight)
+   * Reduces round-trips from 2 API calls to 1 for faster feedback
+   */
+  async preflightCheck(
+    handle: string,
+    platform: string = 'twitter',
+    text: string,
+    sourceUrl: string
+  ): Promise<PreflightResult> {
+    // Normalize handle - strip @ prefix if present
+    const cleanHandle = handle.trim().replace(/^@/, '');
+
+    try {
+      const result = await this.makeRequest<PreflightResult>(
+        '/v1/quotes/preflight/',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            handle: cleanHandle,
+            platform,
+            text,
+            source_url: sourceUrl
+          })
+        }
+      );
+
+      debugLog('Preflight check result:', {
+        originator_found: result.originator?.found,
+        recommendation: result.duplicate_check?.recommendation
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Error in preflight check:', error);
+
+      // Re-throw auth errors
+      if (error instanceof Error && error.name === 'AuthenticationError') {
+        throw error;
+      }
+
+      // Return default result for other errors to allow graceful degradation
+      return {
+        originator: {
+          found: false,
+          handle: cleanHandle,
+          platform,
+          create_url: undefined
+        },
+        duplicate_check: {
+          recommendation: 'new_quote',
+          confidence: 0.5,
+          in_quotosaurus: false,
+          matches: [],
+          reasoning: 'Error occurred during preflight check',
+          search_metadata: { error: true }
+        }
       };
     }
   }
