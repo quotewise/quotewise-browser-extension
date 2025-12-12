@@ -214,7 +214,10 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     return twitterData;
   }
 
-  private findPrimaryArticle(): HTMLElement | null {
+  private findPrimaryArticle(urlOverride?: string): HTMLElement | null {
+    // Get the tweet ID from the current URL - this is the tweet we want to capture
+    const urlTweetId = this.extractTweetIdFromUrl(urlOverride ?? window.location.href);
+
     const selectors = [
       'article[data-testid="tweet"]',
       'article[role="article"]',
@@ -222,9 +225,110 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       '[data-testid="primaryColumn"] article'
     ];
 
+    // Collect all unique candidate articles
+    const allArticles: HTMLElement[] = [];
     for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (el) return el as HTMLElement;
+      document.querySelectorAll(selector).forEach(el => {
+        if (!allArticles.includes(el as HTMLElement)) {
+          allArticles.push(el as HTMLElement);
+        }
+      });
+    }
+
+    if (allArticles.length === 0) {
+      return null;
+    }
+
+    // Score each article based on multiple signals
+    const scored = allArticles.map((article, index) => ({
+      element: article,
+      tweetId: this.extractTweetIdFromArticleElement(article),
+      priority: this.calculateArticlePriority(article, index, urlTweetId)
+    }));
+
+    // Sort by priority (highest first)
+    scored.sort((a, b) => b.priority - a.priority);
+
+    const winner = scored[0];
+    debugLog(`TwitterAdapter: Selected article with priority ${winner.priority} (tweet ID: ${winner.tweetId})`);
+
+    return winner.element;
+  }
+
+  /**
+   * Calculate priority score for an article based on multiple signals.
+   * Higher score = more likely to be the focal tweet.
+   */
+  private calculateArticlePriority(article: HTMLElement, index: number, urlTweetId: string | null): number {
+    let priority = 0;
+    const articleTweetId = this.extractTweetIdFromArticleElement(article);
+
+    // HIGHEST PRIORITY: URL tweet ID match (most reliable signal)
+    if (urlTweetId && articleTweetId === urlTweetId) {
+      priority += 1000;
+    }
+
+    // HIGH PRIORITY: Position in primaryColumn
+    const primaryColumn = document.querySelector('[data-testid="primaryColumn"]');
+    if (primaryColumn?.contains(article)) {
+      // First article in primary column gets bonus
+      const primaryArticles = primaryColumn.querySelectorAll('article[data-testid="tweet"]');
+      if (primaryArticles[0] === article) {
+        priority += 100;
+      }
+    }
+
+    // MEDIUM PRIORITY: First cellInnerDiv (Twitter's internal cell structure)
+    const cellInnerDiv = article.closest('[data-testid="cellInnerDiv"]');
+    if (cellInnerDiv) {
+      const allCells = document.querySelectorAll('[data-testid="cellInnerDiv"]');
+      if (allCells[0] === cellInnerDiv) {
+        priority += 50;
+      }
+    }
+
+    // LOW PRIORITY: Tabindex="0" indicates focused/primary element
+    if (article.getAttribute('tabindex') === '0') {
+      priority += 25;
+    }
+
+    // SLIGHT PRIORITY: Earlier in DOM order (tiebreaker)
+    priority += Math.max(0, 10 - index);
+
+    // NEGATIVE: Inside a quoted tweet container (embedded quote, not the main tweet)
+    if (article.closest('[data-testid="quotedTweet"]')) {
+      priority -= 500;
+    }
+
+    // NEGATIVE: Has social context sibling (indicates retweet context)
+    const prevSibling = article.parentElement?.previousElementSibling;
+    if (prevSibling?.querySelector('[data-testid="socialContext"]')) {
+      priority -= 50;
+    }
+
+    return priority;
+  }
+
+  /**
+   * Extract tweet ID from an article element without side effects
+   * Used for matching articles to URL tweet IDs
+   */
+  private extractTweetIdFromArticleElement(article: Element): string | null {
+    // Try to get tweet ID from the timestamp link within the article
+    const timeLink = article.querySelector('a[href*="/status/"] time')?.parentElement as HTMLAnchorElement | null;
+    if (timeLink?.href) {
+      const match = timeLink.href.match(/status\/(\d+)/);
+      if (match) return match[1];
+    }
+
+    // Also try other links that might contain the tweet status URL
+    const statusLinks = article.querySelectorAll('a[href*="/status/"]');
+    for (const link of statusLinks) {
+      const href = (link as HTMLAnchorElement).href;
+      // Skip links to quoted tweets or other embedded content
+      if (href.includes('/photo/') || href.includes('/video/')) continue;
+      const match = href.match(/status\/(\d+)/);
+      if (match) return match[1];
     }
 
     return null;
@@ -379,23 +483,9 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
    * Extract tweet ID from the article element (timestamp link) or fall back to URL
    */
   private extractTweetIdFromArticle(article: Element): string | null {
-    // Try to get tweet ID from the timestamp link within the article
-    // This is more reliable for reply threads where URL is the parent tweet
-    const timeLink = article.querySelector('a[href*="/status/"] time')?.parentElement as HTMLAnchorElement | null;
-    if (timeLink?.href) {
-      const match = timeLink.href.match(/status\/(\d+)/);
-      if (match) return match[1];
-    }
-
-    // Also try other links that might contain the tweet status URL
-    const statusLinks = article.querySelectorAll('a[href*="/status/"]');
-    for (const link of statusLinks) {
-      const href = (link as HTMLAnchorElement).href;
-      // Skip links to quoted tweets or other embedded content
-      if (href.includes('/photo/') || href.includes('/video/')) continue;
-      const match = href.match(/status\/(\d+)/);
-      if (match) return match[1];
-    }
+    // Try to extract from the article element first
+    const articleTweetId = this.extractTweetIdFromArticleElement(article);
+    if (articleTweetId) return articleTweetId;
 
     // Fall back to URL-based extraction
     return this.extractTweetIdFromUrl(window.location.href);
