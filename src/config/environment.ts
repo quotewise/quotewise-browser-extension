@@ -91,24 +91,27 @@ export function detectEnvironment(): 'development' | 'staging' | 'production' {
     // Check if we're in a Chrome extension context
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getManifest) {
         const manifest = chrome.runtime.getManifest();
-        
+
         // Check manifest for environment indicators
         if (manifest.name?.includes('dev') || manifest.name?.includes('Dev')) {
             return 'development';
         }
-        
+
         if (manifest.name?.includes('staging') || manifest.name?.includes('Staging')) {
             return 'staging';
         }
-        
+
         // Check version for development builds (e.g., "1.0.0-dev")
         if (manifest.version?.includes('-dev') || manifest.version?.includes('-alpha')) {
             return 'development';
         }
-        
+
         if (manifest.version?.includes('-staging') || manifest.version?.includes('-beta')) {
             return 'staging';
         }
+
+        // No dev/staging indicators in manifest = production
+        return 'production';
     }
     
     // Check process.env if available (webpack builds)
