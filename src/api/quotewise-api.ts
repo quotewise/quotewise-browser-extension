@@ -1,5 +1,5 @@
 /**
- * Quotewise API client with Django session authentication
+ * Quotewise API client with OAuth 2.0 Bearer token authentication
  * Follows exact patterns from quotewise/rest_api.py and quote_collection.js
  */
 
@@ -16,44 +16,57 @@ import type {
   AuthenticationError,
   ApiError
 } from '../types/api';
-import { getDefaultHeaders, getReadOnlyHeaders, CSRFTokenError } from './csrf-utils';
 import { getEnvironmentConfig, debugLog } from '../config/environment';
+import { getAccessToken } from '../auth/token-storage';
+import { attemptTokenRefresh } from '../auth/token-refresh';
 
 /**
- * Main API client implementation with Django session support
+ * Main API client implementation with OAuth 2.0 Bearer token support
  * Following patterns from quotewise/rest_api.py and quote_collection.js
  */
 export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   public readonly baseUrl: string;
-  
+  private isRetrying: boolean = false;
+
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || getEnvironmentConfig().apiBaseUrl;
   }
 
   /**
-   * Make authenticated request to Django API
-   * Includes CSRF tokens and session cookies automatically
+   * Get headers for API requests with Bearer token authentication
+   */
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    const accessToken = await getAccessToken();
+    if (accessToken) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    return headers;
+  }
+
+  /**
+   * Make authenticated request to API using Bearer token
+   * Automatically refreshes token on 401 and retries once
    * @param endpoint API endpoint path
    * @param options Fetch options
-   * @param requireCSRF Whether CSRF token is required (default: true for POST/PUT/DELETE)
+   * @param _requireCSRF Deprecated - kept for backwards compatibility
    */
   private async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {},
-    requireCSRF: boolean = true
+    _requireCSRF: boolean = true
   ): Promise<T> {
     try {
-      // Determine if CSRF is required based on method
       const method = (options.method || 'GET').toUpperCase();
-      const needsCSRF = requireCSRF && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
 
-      // Get headers - use read-only headers for GET requests, default headers for others
-      const headers = needsCSRF
-        ? await getDefaultHeaders(this.baseUrl)
-        : await getReadOnlyHeaders(this.baseUrl);
+      // Get headers with Bearer token
+      const headers = await this.getAuthHeaders();
 
       const requestOptions: RequestInit = {
-        credentials: 'include',  // Include session cookies
         headers: { ...headers, ...(options.headers || {}) },
         ...options
       };
@@ -61,7 +74,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       // Log full request details for debugging
       const bodyForLog = options.body ? JSON.parse(options.body as string) : 'None';
       debugLog(`Making ${method} request to ${endpoint}`, {
-        headers: requestOptions.headers,
+        hasAuth: !!headers['Authorization'],
         body: bodyForLog
       });
 
@@ -69,23 +82,34 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
 
       debugLog(`API Response: ${response.status} for ${endpoint}`, {
         status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
+        statusText: response.statusText
       });
 
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          console.error(`Authentication failed: ${response.status} ${response.statusText}`);
+        // Handle 401 Unauthorized - attempt token refresh and retry
+        if (response.status === 401 && !this.isRetrying) {
+          debugLog('Got 401, attempting token refresh');
 
-          // Try to get the error response body for more details
-          try {
-            const errorText = await response.text();
-            console.error('Error response body:', errorText);
-          } catch (e) {
-            console.error('Could not read error response body');
+          const refreshResult = await attemptTokenRefresh();
+          if (refreshResult.success) {
+            // Retry the request with new token
+            this.isRetrying = true;
+            try {
+              return await this.makeRequest<T>(endpoint, options, _requireCSRF);
+            } finally {
+              this.isRetrying = false;
+            }
           }
 
+          // Refresh failed - throw auth error
           const authError = new Error('Authentication required') as Error & { name: string };
+          authError.name = 'AuthenticationError';
+          throw authError as AuthenticationError;
+        }
+
+        if (response.status === 403) {
+          console.error(`Authorization failed: ${response.status} ${response.statusText}`);
+          const authError = new Error('Insufficient permissions') as Error & { name: string };
           authError.name = 'AuthenticationError';
           throw authError as AuthenticationError;
         }
@@ -138,17 +162,9 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       // Re-throw known error types
       if (error instanceof Error && (
         error.name === 'AuthenticationError' ||
-        error.name === 'ApiError' ||
-        error.name === 'CSRFTokenError'
+        error.name === 'ApiError'
       )) {
         throw error;
-      }
-
-      // Handle CSRF token errors specifically
-      if (error instanceof CSRFTokenError) {
-        const authError = new Error(error.message) as Error & { name: string };
-        authError.name = 'AuthenticationError';
-        throw authError as AuthenticationError;
       }
 
       // Handle network errors and other exceptions

@@ -1,6 +1,6 @@
 /**
  * Background authentication monitoring for Quotewise Chrome extension
- * Monitors session status and updates extension badge
+ * Monitors OAuth token status and updates extension badge
  */
 
 import { AuthChecker } from '../auth/auth-checker';

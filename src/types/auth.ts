@@ -1,15 +1,16 @@
 /**
  * Authentication types for Quotewise Chrome extension
- * Matches Django session authentication patterns
+ * Uses OAuth 2.0 token-based authentication
  */
 
-// Authentication status interface matching Django user model
+// Authentication status interface
 export interface AuthStatus {
   isAuthenticated: boolean;
-  isStaff: boolean;           // Required for quote submission (user.is_staff)
+  isStaff: boolean;           // Required for quote submission (derived from quotes:write scope)
   username?: string;
-  sessionAge?: number;        // Time until session expires in seconds
-  sessionExpiry?: string;     // ISO date string for session expiration
+  sessionAge?: number;        // Time until access token expires in seconds
+  sessionExpiry?: string;     // ISO date string for token expiration (deprecated, use sessionAge)
+  scopes?: string[];          // OAuth scopes granted to the token
 }
 
 // Authentication error types

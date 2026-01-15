@@ -14,21 +14,31 @@ const mockChrome = {
     onInstalled: {
       addListener: jest.fn()
     },
+    onStartup: {
+      addListener: jest.fn()
+    },
     getManifest: jest.fn(() => ({
       name: 'Quotewise [DEV]',
-      version: '1.1.1'
-    }))
+      version: '1.3.0'
+    })),
+    id: 'test-extension-id'
   },
   storage: {
     local: {
-      get: jest.fn(),
-      set: jest.fn(),
-      remove: jest.fn()
+      get: jest.fn().mockResolvedValue({}),
+      set: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn().mockResolvedValue(undefined)
+    },
+    session: {
+      get: jest.fn().mockResolvedValue({}),
+      set: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn().mockResolvedValue(undefined)
     }
   },
   tabs: {
     create: jest.fn(),
     get: jest.fn(),
+    query: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn(),
     onUpdated: {
       addListener: jest.fn()
@@ -36,16 +46,24 @@ const mockChrome = {
   },
   action: {
     setIcon: jest.fn(),
-    setTitle: jest.fn(),
+    setTitle: jest.fn().mockResolvedValue(undefined),
+    setBadgeText: jest.fn().mockResolvedValue(undefined),
+    setBadgeBackgroundColor: jest.fn().mockResolvedValue(undefined),
+    getBadgeText: jest.fn().mockResolvedValue(''),
+    openPopup: jest.fn().mockResolvedValue(undefined),
     onClicked: {
       addListener: jest.fn()
     }
   },
   alarms: {
     create: jest.fn(),
+    clear: jest.fn().mockResolvedValue(true),
     onAlarm: {
       addListener: jest.fn()
     }
+  },
+  identity: {
+    launchWebAuthFlow: jest.fn()
   }
 };
 

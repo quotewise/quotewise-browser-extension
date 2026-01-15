@@ -47,7 +47,11 @@ export enum MessageType {
   // UI control
   OPEN_POPUP = 'OPEN_POPUP',
   SHOW_OVERLAY = 'SHOW_OVERLAY',
-  
+
+  // OAuth authentication
+  OAUTH_LOGIN = 'OAUTH_LOGIN',
+  OAUTH_LOGOUT = 'OAUTH_LOGOUT',
+
   // General responses
   SUCCESS = 'SUCCESS',
   ERROR = 'ERROR'

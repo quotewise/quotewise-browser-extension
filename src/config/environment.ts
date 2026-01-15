@@ -4,6 +4,7 @@
  */
 
 import type { EnvironmentConfig, SessionConfig } from '../types/api';
+import type { OAuthConfig } from '../types/oauth';
 
 /**
  * Debug mode flag - enables console logging in non-production environments
@@ -213,4 +214,57 @@ export function getWebBaseUrl(): string {
 
 export function getSessionCookieName(): string {
     return getEnvironmentConfig().sessionCookieName;
+}
+
+// OAuth Configuration
+// Pre-registered OAuth client ID (UUID) - same for all environments
+// This client is seeded via migration 0090_seed_chrome_extension_oauth_client.py
+// The redirect_uri pattern "https://*.chromiumapp.org/callback" allows any extension ID
+const OAUTH_CLIENT_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+
+/**
+ * OAuth scopes required by the extension
+ */
+export const OAUTH_SCOPES = [
+    'quotes:read',
+    'quotes:write',
+    'collections:read',
+    'collections:write',
+];
+
+/**
+ * Get OAuth configuration for current environment
+ */
+export function getOAuthConfig(): OAuthConfig {
+    const envConfig = getEnvironmentConfig();
+
+    // Get extension ID for redirect URI
+    // In development, chrome.runtime.id may be undefined
+    const extensionId = typeof chrome !== 'undefined' && chrome.runtime?.id
+        ? chrome.runtime.id
+        : 'development-extension-id';
+
+    return {
+        clientId: OAUTH_CLIENT_ID,
+        authorizeUrl: `${envConfig.apiBaseUrl}/oauth/authorize`,
+        tokenUrl: `${envConfig.apiBaseUrl}/oauth/token`,
+        redirectUri: `https://${extensionId}.chromiumapp.org/callback`,
+        scopes: OAUTH_SCOPES,
+    };
+}
+
+/**
+ * Get OAuth authorize URL with all parameters
+ */
+export function getAuthorizeUrl(): string {
+    const config = getOAuthConfig();
+    return config.authorizeUrl;
+}
+
+/**
+ * Get OAuth token URL
+ */
+export function getTokenUrl(): string {
+    const config = getOAuthConfig();
+    return config.tokenUrl;
 }
