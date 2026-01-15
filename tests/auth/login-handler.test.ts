@@ -1,245 +1,255 @@
 /**
  * Unit tests for LoginHandler
- * Tests login redirect flow and tab management
+ * Tests OAuth 2.0 Authorization Code flow with PKCE
  */
 
 import { LoginHandler } from '../../src/auth/login-handler';
 
 // Mock Chrome APIs
 const mockChrome = {
-  tabs: {
-    create: jest.fn(),
-    get: jest.fn(),
-    onUpdated: {
-      addListener: jest.fn(),
-      removeListener: jest.fn()
+  storage: {
+    session: {
+      get: jest.fn().mockResolvedValue({}),
+      set: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn().mockResolvedValue(undefined)
     },
-    onRemoved: {
-      addListener: jest.fn(),
-      removeListener: jest.fn()
+    local: {
+      get: jest.fn().mockResolvedValue({}),
+      set: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn().mockResolvedValue(undefined)
     }
   },
+  identity: {
+    launchWebAuthFlow: jest.fn()
+  },
   runtime: {
-    lastError: null as any
+    lastError: null as chrome.runtime.LastError | null,
+    id: 'test-extension-id'
+  },
+  alarms: {
+    create: jest.fn(),
+    clear: jest.fn().mockResolvedValue(true)
   }
 };
 
 (global as any).chrome = mockChrome;
 
-// Mock environment detection
+// Mock auth-flow module
+jest.mock('../../src/auth/auth-flow', () => ({
+  initiateOAuthFlow: jest.fn(),
+  logout: jest.fn(),
+  OAuthFlowError: class OAuthFlowError extends Error {
+    recoverable: boolean;
+    constructor(message: string, recoverable = true) {
+      super(message);
+      this.name = 'OAuthFlowError';
+      this.recoverable = recoverable;
+    }
+  }
+}));
+
+// Mock token-storage module
+jest.mock('../../src/auth/token-storage', () => ({
+  hasValidRefreshToken: jest.fn()
+}));
+
+// Mock environment
 jest.mock('../../src/config/environment', () => ({
-  detectEnvironment: jest.fn(() => 'development'),
-  getEnvironmentConfig: jest.fn(() => ({
-    apiBaseUrl: 'http://api.quotewise.test:8000',
-    webBaseUrl: 'http://quotewise.test:8000',
-    sessionCookieName: 'sessionid',
-    secure: false
-  })),
   debugLog: jest.fn()
 }));
 
 // Get references to the mocked functions
-const { detectEnvironment: mockDetectEnvironment, getEnvironmentConfig: mockGetEnvironmentConfig } = 
-  require('../../src/config/environment');
+const { initiateOAuthFlow, logout, OAuthFlowError } = require('../../src/auth/auth-flow');
+const { hasValidRefreshToken } = require('../../src/auth/token-storage');
 
 describe('LoginHandler', () => {
   let loginHandler: LoginHandler;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockDetectEnvironment.mockReturnValue('development');
-    mockGetEnvironmentConfig.mockReturnValue({
-      apiBaseUrl: 'http://api.quotewise.test:8000',
-      webBaseUrl: 'http://quotewise.test:8000',
-      sessionCookieName: 'sessionid',
-      secure: false
-    });
-    loginHandler = new LoginHandler('development');
+    loginHandler = new LoginHandler();
     mockChrome.runtime.lastError = null;
   });
 
   describe('initialization', () => {
-    test('creates handler with correct environment configuration', () => {
-      expect(loginHandler.getLoginUrl()).toBe('http://quotewise.test:8000/accounts/login/');
-      expect(loginHandler.getRedirectUrl()).toBe('http://quotewise.test:8000/');
+    test('creates handler instance', () => {
+      expect(loginHandler).toBeInstanceOf(LoginHandler);
     });
 
-    test('creates handler with staging environment', () => {
-      // Mock the staging config return
-      mockGetEnvironmentConfig.mockReturnValueOnce({
-        apiBaseUrl: 'https://api.staging.quotewise.io',
-        webBaseUrl: 'https://staging.quotewise.io',
-        sessionCookieName: 'stagingsessionid',
-        secure: true
-      });
-
-      const stagingHandler = new LoginHandler('staging');
-
-      expect(stagingHandler.getLoginUrl()).toBe('https://staging.quotewise.io/accounts/login/');
-      expect(stagingHandler.getRedirectUrl()).toBe('https://staging.quotewise.io/');
+    test('isLoggingIn returns false initially', () => {
+      expect(loginHandler.isLoggingIn()).toBe(false);
     });
   });
 
-  describe('openLoginPage', () => {
-    test('successfully opens login tab', async () => {
-      const mockTab = { id: 123, url: 'http://quotewise.test:8000/accounts/login/' };
+  describe('login', () => {
+    test('successfully completes OAuth login flow', async () => {
+      const mockTokens = {
+        accessToken: 'test-access-token',
+        refreshToken: 'test-refresh-token',
+        accessTokenExpiresAt: Date.now() + 3600000,
+        refreshTokenExpiresAt: Date.now() + 86400000,
+        scopes: ['quotes:read', 'quotes:write']
+      };
 
-      // Mock successful tab creation and immediate redirect
-      mockChrome.tabs.create.mockImplementation((createInfo, callback) => {
-        callback(mockTab);
-      });
+      initiateOAuthFlow.mockResolvedValue(mockTokens);
 
-      // Mock tab update listener to simulate immediate success redirect
-      mockChrome.tabs.onUpdated.addListener.mockImplementation((listener) => {
-        // Simulate tab update with successful redirect
-        setTimeout(() => {
-          listener(123, { status: 'complete' }, {
-            id: 123,
-            url: 'http://quotewise.test:8000/'
-          });
-        }, 10);
-      });
+      const result = await loginHandler.login();
 
-      const openPromise = loginHandler.openLoginPage();
-
-      expect(mockChrome.tabs.create).toHaveBeenCalledWith(
-        {
-          url: 'http://quotewise.test:8000/accounts/login/',
-          active: true
-        },
-        expect.any(Function)
-      );
-
-      await expect(openPromise).resolves.toBeUndefined();
-      expect(loginHandler.hasActiveLoginTabs()).toBe(false); // Should be cleaned up
+      expect(result.success).toBe(true);
+      expect(result.tokens).toEqual(mockTokens);
+      expect(result.error).toBeUndefined();
+      expect(initiateOAuthFlow).toHaveBeenCalledTimes(1);
     });
 
-    test('handles tab creation error', async () => {
-      mockChrome.runtime.lastError = { message: 'Tab creation failed' };
-      
-      mockChrome.tabs.create.mockImplementation((createInfo, callback) => {
-        callback(null);
-      });
+    test('handles OAuthFlowError with recoverable flag', async () => {
+      const oauthError = new OAuthFlowError('User cancelled', true);
+      initiateOAuthFlow.mockRejectedValue(oauthError);
 
-      await expect(loginHandler.openLoginPage())
-        .rejects
-        .toThrow('Tab creation failed');
+      const result = await loginHandler.login();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('User cancelled');
+      expect(result.recoverable).toBe(true);
     });
 
-    test('handles missing tab ID', async () => {
-      const mockTab = { url: 'http://quotewise.test:8000/accounts/login/' }; // No ID
+    test('handles OAuthFlowError with non-recoverable flag', async () => {
+      const oauthError = new OAuthFlowError('Invalid client', false);
+      initiateOAuthFlow.mockRejectedValue(oauthError);
 
-      mockChrome.tabs.create.mockImplementation((createInfo, callback) => {
-        callback(mockTab);
-      });
+      const result = await loginHandler.login();
 
-      await expect(loginHandler.openLoginPage())
-        .rejects
-        .toThrow('Login tab created but no tab ID received');
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Invalid client');
+      expect(result.recoverable).toBe(false);
     });
 
-    test('resolves when tab is redirected to success URL', async () => {
-      const mockTab = { id: 123 };
+    test('handles generic Error', async () => {
+      const error = new Error('Network error');
+      initiateOAuthFlow.mockRejectedValue(error);
 
-      mockChrome.tabs.create.mockImplementation((createInfo, callback) => {
-        callback(mockTab);
-      });
+      const result = await loginHandler.login();
 
-      // Mock successful redirect
-      mockChrome.tabs.onUpdated.addListener.mockImplementation((listener) => {
-        setTimeout(() => {
-          listener(123, { status: 'complete' }, {
-            id: 123,
-            url: 'http://quotewise.test:8000/dashboard' // Success redirect
-          });
-        }, 10);
-      });
-
-      await expect(loginHandler.openLoginPage()).resolves.toBeUndefined();
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Network error');
+      expect(result.recoverable).toBe(true);
     });
 
-    test('handles tab closure', async () => {
-      const mockTab = { id: 123 };
-      
-      mockChrome.tabs.create.mockImplementation((createInfo, callback) => {
-        callback(mockTab);
-      });
+    test('handles unknown error type', async () => {
+      initiateOAuthFlow.mockRejectedValue('string error');
 
-      // Mock tab removal - need to call listener immediately not in setTimeout
-      mockChrome.tabs.onRemoved.addListener.mockImplementation((listener) => {
-        // Call immediately to simulate tab being closed
-        listener(123);
-      });
+      const result = await loginHandler.login();
 
-      await expect(loginHandler.openLoginPage())
-        .rejects
-        .toThrow('Login tab was closed by user');
-    });
-  });
-
-  describe('tab monitoring', () => {
-    test('tracks active login tabs', () => {
-      expect(loginHandler.hasActiveLoginTabs()).toBe(false);
-      expect(loginHandler.getActiveLoginTabs()).toHaveLength(0);
+      expect(result.success).toBe(false);
+      expect(result.error).toBe('Unknown login error');
+      expect(result.recoverable).toBe(true);
     });
 
-    test('can force cleanup specific tab', () => {
-      loginHandler.forceCleanupTab(123);
-      // Should not throw error even if tab doesn't exist
-      expect(loginHandler.hasActiveLoginTabs()).toBe(false);
+    test('prevents concurrent login attempts', async () => {
+      // Start first login (will hang)
+      initiateOAuthFlow.mockImplementation(() => new Promise(() => {}));
+
+      const firstLogin = loginHandler.login();
+
+      // Attempt second login while first is in progress
+      const secondLogin = await loginHandler.login();
+
+      expect(secondLogin.success).toBe(false);
+      expect(secondLogin.error).toBe('Login already in progress');
+      expect(secondLogin.recoverable).toBe(true);
+      expect(initiateOAuthFlow).toHaveBeenCalledTimes(1);
+    });
+
+    test('resets isLoggingIn after successful login', async () => {
+      initiateOAuthFlow.mockResolvedValue({
+        accessToken: 'token',
+        refreshToken: 'refresh',
+        accessTokenExpiresAt: Date.now() + 3600000,
+        refreshTokenExpiresAt: Date.now() + 86400000,
+        scopes: []
+      });
+
+      expect(loginHandler.isLoggingIn()).toBe(false);
+
+      await loginHandler.login();
+
+      expect(loginHandler.isLoggingIn()).toBe(false);
+    });
+
+    test('resets isLoggingIn after failed login', async () => {
+      initiateOAuthFlow.mockRejectedValue(new Error('Failed'));
+
+      expect(loginHandler.isLoggingIn()).toBe(false);
+
+      await loginHandler.login();
+
+      expect(loginHandler.isLoggingIn()).toBe(false);
     });
   });
 
-  describe('URL detection', () => {
-    const handler = new LoginHandler('development');
+  describe('logout', () => {
+    test('calls logout from auth-flow', async () => {
+      logout.mockResolvedValue(undefined);
 
-    test('detects successful login redirects', () => {
-      const successUrls = [
-        'http://quotewise.test:8000/',
-        'http://quotewise.test:8000/dashboard',
-        'http://quotewise.test:8000/admin',
-        'http://quotewise.test:8000/?login=success'
-      ];
+      await loginHandler.logout();
 
-      successUrls.forEach(url => {
-        // Access private method for testing
-        const isSuccess = (handler as any).isSuccessfulLoginRedirect(url);
-        expect(isSuccess).toBe(true);
-      });
+      expect(logout).toHaveBeenCalledTimes(1);
     });
 
-    test('does not detect login page as success', () => {
-      const loginUrls = [
-        'http://quotewise.test:8000/accounts/login/',
-        'http://quotewise.test:8000/accounts/login/?next=/'
-      ];
+    test('handles logout errors gracefully', async () => {
+      logout.mockRejectedValue(new Error('Logout failed'));
 
-      loginUrls.forEach(url => {
-        const isSuccess = (handler as any).isSuccessfulLoginRedirect(url);
-        expect(isSuccess).toBe(false);
-      });
-    });
-
-    test('detects login errors', () => {
-      const errorUrls = [
-        'http://quotewise.test:8000/accounts/login/?error=invalid',
-        'http://quotewise.test:8000/accounts/login/?login_failed=1'
-      ];
-
-      errorUrls.forEach(url => {
-        const isError = (handler as any).isLoginError(url);
-        expect(isError).toBe(true);
-      });
+      // Should not throw
+      await expect(loginHandler.logout()).rejects.toThrow('Logout failed');
     });
   });
 
-  describe('environment-specific login', () => {
-    test('can open environment-specific login', () => {
-      // Test that the method exists and can be called
-      expect(typeof loginHandler.openEnvironmentLogin).toBe('function');
+  describe('isAuthenticated', () => {
+    test('returns true when valid refresh token exists', async () => {
+      hasValidRefreshToken.mockResolvedValue(true);
 
-      // Test login URL getter
-      expect(loginHandler.getLoginUrl()).toBe('http://quotewise.test:8000/accounts/login/');
+      const result = await loginHandler.isAuthenticated();
+
+      expect(result).toBe(true);
+      expect(hasValidRefreshToken).toHaveBeenCalledTimes(1);
+    });
+
+    test('returns false when no valid refresh token exists', async () => {
+      hasValidRefreshToken.mockResolvedValue(false);
+
+      const result = await loginHandler.isAuthenticated();
+
+      expect(result).toBe(false);
+    });
+  });
+
+  describe('isLoggingIn', () => {
+    test('returns true during login process', async () => {
+      let resolveLogin: (value: unknown) => void;
+      const loginPromise = new Promise(resolve => {
+        resolveLogin = resolve;
+      });
+
+      initiateOAuthFlow.mockImplementation(() => loginPromise);
+
+      // Start login but don't await
+      const loginResult = loginHandler.login();
+
+      // Should be in progress
+      expect(loginHandler.isLoggingIn()).toBe(true);
+
+      // Complete login
+      resolveLogin!({
+        accessToken: 'token',
+        refreshToken: 'refresh',
+        accessTokenExpiresAt: Date.now() + 3600000,
+        refreshTokenExpiresAt: Date.now() + 86400000,
+        scopes: []
+      });
+
+      await loginResult;
+
+      // Should be complete
+      expect(loginHandler.isLoggingIn()).toBe(false);
     });
   });
 });

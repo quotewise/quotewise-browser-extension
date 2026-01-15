@@ -12,6 +12,8 @@ import { AuthenticationMonitor } from './auth-monitor';
 import { initializeStorageCleanup } from './storage-cleanup';
 import { validateTwitterData, ValidationError } from '../utils/validators';
 import { debugLog } from '../config/environment';
+import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
+import { initiateOAuthFlow, logout } from '../auth/auth-flow';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -40,12 +42,11 @@ async function ensureServicesInitialized(): Promise<void> {
   authMonitor = new AuthenticationMonitor();
   storageCleanup = initializeStorageCleanup();
 
-  // Restore auth state from storage if available
+  // Initialize OAuth token refresh (restores state from storage)
   try {
-    await chrome.storage.local.get('lastAuthCheck');
-    // AuthMonitor will pick up the cached state on next check
+    await initializeTokenRefresh();
   } catch (error) {
-    console.warn('Failed to restore auth state:', error);
+    console.warn('Failed to initialize token refresh:', error);
   }
 
   // Start periodic cleanup (quiet mode - no startup logs)
@@ -73,6 +74,14 @@ chrome.runtime.onInstalled.addListener(async (details) => {
 // Initialize services on startup
 chrome.runtime.onStartup.addListener(async () => {
   await ensureServicesInitialized();
+});
+
+// Handle alarms for token refresh
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name === 'token-refresh') {
+    debugLog('Token refresh alarm triggered');
+    await handleTokenRefreshAlarm();
+  }
 });
 
 // Toolbar icon click: show overlay bar in active tab
@@ -154,6 +163,41 @@ chrome.runtime.onMessage.addListener((
         }).catch(error => {
           console.error('Error opening popup:', error);
           sendResponse({ success: false, error: error?.message || 'Failed to open popup' });
+        });
+        break;
+
+      case MessageType.OAUTH_LOGIN:
+        // Initiate OAuth login flow
+        initiateOAuthFlow().then(tokens => {
+          debugLog('OAuth login successful');
+          // Clear any auth required state
+          chrome.storage.local.remove(['authRequired', 'authMessage']);
+          // Update badge to show authenticated
+          chrome.action.setBadgeText({ text: '' });
+          chrome.action.setTitle({ title: 'Quotewise - Authenticated' });
+          sendResponse({ success: true, scopes: tokens.scopes });
+        }).catch(error => {
+          console.error('OAuth login failed:', error);
+          sendResponse({
+            success: false,
+            error: error.message || 'Login failed',
+            recoverable: error.recoverable ?? true
+          });
+        });
+        break;
+
+      case MessageType.OAUTH_LOGOUT:
+        // Logout and clear tokens
+        logout().then(() => {
+          debugLog('OAuth logout successful');
+          // Update badge to show unauthenticated
+          chrome.action.setBadgeText({ text: '!' });
+          chrome.action.setBadgeBackgroundColor({ color: '#9E9E9E' });
+          chrome.action.setTitle({ title: 'Quotewise - Login required' });
+          sendResponse({ success: true });
+        }).catch(error => {
+          console.error('OAuth logout failed:', error);
+          sendResponse({ success: false, error: error.message });
         });
         break;
 

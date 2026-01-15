@@ -496,34 +496,38 @@ class SimpleQuotewisePopup {
 
   private async handleLogin(): Promise<void> {
     debugLog('Login button clicked');
-    
+
     try {
       this.stateManager.setState({
         auth: { loginInProgress: true },
-        ui: { 
+        ui: {
           currentView: 'login-in-progress',
-          loadingMessage: 'Opening login page...'
+          loadingMessage: 'Opening login...'
         }
       });
 
-      // Open login page
-      await this.loginHandler.openLoginPage();
+      // Initiate OAuth login flow
+      const result = await this.loginHandler.login();
 
-      this.stateManager.setState({
-        ui: { loadingMessage: 'Waiting for login...' }
-      });
+      if (!result.success) {
+        throw new Error(result.error || 'Login failed');
+      }
 
-      // Wait for authentication to complete
-      const authStatus = await this.authChecker.waitForAuthChange(60000); // 1 minute timeout
+      debugLog('OAuth login completed successfully');
 
-      debugLog('Login completed, auth status:', authStatus);
-      
-      // Handle the authentication result
-      this.handleAuthSuccess(authStatus);
+      // Check auth status to get full details
+      const authStatus = await this.authChecker.checkAuthStatus();
+
+      if ('isAuthenticated' in authStatus && authStatus.isAuthenticated) {
+        // Handle the authentication result
+        this.handleAuthSuccess(authStatus);
+      } else {
+        throw new Error('Login completed but authentication check failed');
+      }
 
     } catch (error) {
       console.error('Login error:', error);
-      
+
       this.stateManager.setState({
         auth: {
           loginInProgress: false,
@@ -533,7 +537,7 @@ class SimpleQuotewisePopup {
             requiresLogin: true
           }
         },
-        ui: { 
+        ui: {
           currentView: 'auth-required',
           loadingMessage: undefined
         }

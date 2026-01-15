@@ -1,76 +1,51 @@
 /**
  * Unit tests for QuotewiseApiClient
- * Tests CSRF token handling, session authentication, and API integration
+ * Tests OAuth 2.0 Bearer token authentication and API integration
  */
 
 import { QuotewiseApiClientImpl } from '../../src/api/quotewise-api';
-import * as csrfUtils from '../../src/api/csrf-utils';
 import type { QuoteSubmissionRequest } from '../../src/types/api';
 
 // Mock fetch globally
 global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>;
 
-// Mock CSRF utilities
-jest.mock('../../src/api/csrf-utils', () => ({
-  getDefaultHeaders: jest.fn(),
-  getReadOnlyHeaders: jest.fn(),
-  getCookie: jest.fn(),
-  getCSRFToken: jest.fn(),
-  CSRFTokenError: class CSRFTokenError extends Error {
-    constructor(message: string) {
-      super(message);
-      this.name = 'CSRFTokenError';
-    }
-  }
+// Mock token-storage module
+jest.mock('../../src/auth/token-storage', () => ({
+  getAccessToken: jest.fn()
 }));
+
+// Mock token-refresh module
+jest.mock('../../src/auth/token-refresh', () => ({
+  attemptTokenRefresh: jest.fn()
+}));
+
+// Mock environment module
+jest.mock('../../src/config/environment', () => ({
+  getEnvironmentConfig: jest.fn(() => ({
+    apiBaseUrl: 'http://api.quotewise.test:8000',
+    webBaseUrl: 'http://quotewise.test:8000'
+  })),
+  debugLog: jest.fn()
+}));
+
+// Get references to mocked functions
+const { getAccessToken } = require('../../src/auth/token-storage');
+const { attemptTokenRefresh } = require('../../src/auth/token-refresh');
 
 describe('QuotewiseApiClient', () => {
   let client: QuotewiseApiClientImpl;
   const mockFetch = fetch as jest.MockedFunction<typeof fetch>;
-  const mockGetDefaultHeaders = csrfUtils.getDefaultHeaders as jest.MockedFunction<typeof csrfUtils.getDefaultHeaders>;
-  const mockGetReadOnlyHeaders = (csrfUtils as any).getReadOnlyHeaders as jest.MockedFunction<typeof csrfUtils.getDefaultHeaders>;
 
   beforeEach(() => {
     jest.clearAllMocks();
     client = new QuotewiseApiClientImpl('http://api.quotewise.test:8000');
 
-    // Mock for POST/PUT/DELETE requests (with CSRF)
-    mockGetDefaultHeaders.mockResolvedValue({
-      'Content-Type': 'application/json',
-      'X-CSRFToken': 'test-csrf-token',
-      'X-Requested-With': 'XMLHttpRequest'
-    });
-
-    // Mock for GET requests (no CSRF required)
-    mockGetReadOnlyHeaders.mockResolvedValue({
-      'Content-Type': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest'
-    });
+    // Default: authenticated with valid token
+    getAccessToken.mockResolvedValue('test-access-token');
   });
 
-  describe('CSRF Token Handling', () => {
-    test('includes CSRF token in POST requests', async () => {
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ recommendation: 'new_quote', confidence: 1.0, matches: [], in_quotosaurus: false, reasoning: '', search_metadata: {} })
-      } as Response);
-
-      await client.checkQuoteDuplicate('test quote');
-
-      // POST requests should use getDefaultHeaders which includes CSRF
-      expect(mockGetDefaultHeaders).toHaveBeenCalledWith('http://api.quotewise.test:8000');
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'X-CSRFToken': 'test-csrf-token'
-          })
-        })
-      );
-    });
-
-    test('uses read-only headers for GET requests', async () => {
+  describe('Bearer Token Authentication', () => {
+    test('includes Bearer token in request headers', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ results: [] })
@@ -78,19 +53,20 @@ describe('QuotewiseApiClient', () => {
 
       await client.searchOriginators('test');
 
-      // GET requests should use getReadOnlyHeaders (no CSRF required)
-      expect(mockGetReadOnlyHeaders).toHaveBeenCalledWith('http://api.quotewise.test:8000');
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
           headers: expect.objectContaining({
+            'Authorization': 'Bearer test-access-token',
             'Content-Type': 'application/json'
           })
         })
       );
     });
 
-    test('includes credentials for session cookies', async () => {
+    test('makes requests without Authorization header when no token', async () => {
+      getAccessToken.mockResolvedValue(null);
+
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ results: [] })
@@ -101,44 +77,115 @@ describe('QuotewiseApiClient', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
+          headers: expect.not.objectContaining({
+            'Authorization': expect.any(String)
+          })
+        })
+      );
+    });
+
+    test('does not include credentials (cookies) in requests', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ results: [] })
+      } as Response);
+
+      await client.searchOriginators('test');
+
+      // Should NOT have credentials: 'include' - we use Bearer tokens now
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.not.objectContaining({
           credentials: 'include'
         })
       );
     });
   });
 
+  describe('Token Refresh on 401', () => {
+    test('attempts token refresh on 401 and retries request', async () => {
+      // First call returns 401
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized'
+        } as Response)
+        // Second call (after refresh) succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ results: [{ id: 1, full_name: 'Test' }] })
+        } as Response);
+
+      attemptTokenRefresh.mockResolvedValue({ success: true });
+      getAccessToken
+        .mockResolvedValueOnce('old-token')
+        .mockResolvedValueOnce('new-token');
+
+      const result = await client.searchOriginators('test');
+
+      expect(attemptTokenRefresh).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(1);
+    });
+
+    test('throws AuthenticationError when refresh fails', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized'
+      } as Response);
+
+      attemptTokenRefresh.mockResolvedValue({ success: false, error: 'revoked' });
+
+      await expect(client.checkQuoteDuplicate('test'))
+        .rejects
+        .toMatchObject({
+          name: 'AuthenticationError',
+          message: 'Authentication required'
+        });
+    });
+  });
+
   describe('Error Handling', () => {
-    test('returns empty array on 401 response for searchOriginators', async () => {
-      // searchOriginators gracefully handles auth errors by returning empty array
+    test('throws AuthenticationError on 401 for searchOriginators', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 401
       } as Response);
 
-      const result = await client.searchOriginators('test');
-      expect(result).toEqual([]);
+      attemptTokenRefresh.mockResolvedValue({ success: false });
+
+      // searchOriginators now re-throws auth errors
+      await expect(client.searchOriginators('test'))
+        .rejects
+        .toMatchObject({
+          name: 'AuthenticationError'
+        });
     });
 
-    test('returns empty array on 403 response for searchOriginators', async () => {
-      // searchOriginators gracefully handles auth errors by returning empty array
+    test('throws AuthenticationError on 403 for searchOriginators', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 403
       } as Response);
 
-      const result = await client.searchOriginators('test');
-      expect(result).toEqual([]);
+      // searchOriginators now re-throws auth errors
+      await expect(client.searchOriginators('test'))
+        .rejects
+        .toMatchObject({
+          name: 'AuthenticationError'
+        });
     });
 
     test('throws AuthenticationError on 401 for checkQuoteDuplicate', async () => {
-      // checkQuoteDuplicate re-throws auth errors (unlike searchOriginators which returns empty array)
       mockFetch.mockResolvedValue({
         ok: false,
         status: 401,
-        statusText: 'Unauthorized',
-        text: () => Promise.resolve('Unauthorized'),
-        headers: new Headers({ 'content-type': 'application/json' })
+        statusText: 'Unauthorized'
       } as Response);
+
+      attemptTokenRefresh.mockResolvedValue({ success: false });
 
       await expect(client.checkQuoteDuplicate('test'))
         .rejects
@@ -151,7 +198,6 @@ describe('QuotewiseApiClient', () => {
     test('handles network errors gracefully in auth check', async () => {
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      // checkAuthStatus catches errors and returns unauthenticated with full structure
       const result = await client.checkAuthStatus();
       expect(result).toEqual({
         authenticated: false,
@@ -182,13 +228,11 @@ describe('QuotewiseApiClient', () => {
       const results = await client.searchOriginators('Einstein', 5);
 
       expect(results).toEqual(mockResults);
-      // GET requests use read-only headers (no CSRF required)
       expect(mockFetch).toHaveBeenCalledWith(
         'http://api.quotewise.test:8000/v1/originators/search/?q=Einstein&limit=5',
         expect.objectContaining({
-          credentials: 'include',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json'
+            'Authorization': 'Bearer test-access-token'
           })
         })
       );
@@ -207,7 +251,7 @@ describe('QuotewiseApiClient', () => {
       } as Response);
 
       const results = await client.searchOriginators('test');
-      expect(results).toEqual([]); // Should return empty array, not throw
+      expect(results).toEqual([]);
     });
   });
 
@@ -239,7 +283,9 @@ describe('QuotewiseApiClient', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         'http://api.quotewise.test:8000/v1/auth/status/',
         expect.objectContaining({
-          credentials: 'include'
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer test-access-token'
+          })
         })
       );
     });
@@ -249,6 +295,8 @@ describe('QuotewiseApiClient', () => {
         ok: false,
         status: 401
       } as Response);
+
+      attemptTokenRefresh.mockResolvedValue({ success: false });
 
       const result = await client.checkAuthStatus();
 
@@ -384,14 +432,17 @@ describe('QuotewiseApiClient', () => {
         'http://api.quotewise.test:8000/v1/quotes/',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify(validQuoteData)
+          body: JSON.stringify(validQuoteData),
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer test-access-token'
+          })
         })
       );
     });
 
     test('validates required fields', async () => {
       const invalidData = { ...validQuoteData, text: '' };
-      
+
       const result = await client.submitQuote(invalidData);
 
       expect(result).toEqual({
@@ -417,6 +468,54 @@ describe('QuotewiseApiClient', () => {
     });
   });
 
+  describe('lookupOriginatorByHandle', () => {
+    test('returns found originator for existing handle', async () => {
+      const mockApiResponse = {
+        found: true,
+        originator: {
+          id: 123,
+          full_name: 'Test Person',
+          slug: 'test-person'
+        },
+        confidence: 0.95,
+        match_platform: 'twitter'
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockApiResponse)
+      } as Response);
+
+      const result = await client.lookupOriginatorByHandle('testhandle', 'twitter');
+
+      expect(result.found).toBe(true);
+      expect(result.originator).toBeDefined();
+      expect(result.originator?.id).toBe(123);
+      expect(result.originator?.full_name).toBe('Test Person');
+    });
+
+    test('strips @ prefix from handle', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ found: false })
+      } as Response);
+
+      await client.lookupOriginatorByHandle('@testhandle', 'twitter');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://api.quotewise.test:8000/v1/originators/by-handle/?handle=testhandle&platform=twitter',
+        expect.any(Object)
+      );
+    });
+
+    test('returns not found for empty handle', async () => {
+      const result = await client.lookupOriginatorByHandle('', 'twitter');
+
+      expect(result.found).toBe(false);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Environment Integration', () => {
     test('uses provided base URL', () => {
       const customClient = new QuotewiseApiClientImpl('https://custom.api.com');
@@ -424,7 +523,6 @@ describe('QuotewiseApiClient', () => {
     });
 
     test('falls back to environment config when no URL provided', () => {
-      // The constructor should use getEnvironmentConfig() when no baseUrl provided
       const defaultClient = new QuotewiseApiClientImpl();
       expect(defaultClient.baseUrl).toBeDefined();
     });

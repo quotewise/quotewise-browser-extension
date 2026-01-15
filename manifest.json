@@ -6,7 +6,9 @@
   "permissions": [
     "activeTab",
     "storage",
-    "cookies"
+    "cookies",
+    "identity",
+    "alarms"
   ],
   "host_permissions": [
     "https://*.quotewise.io/*",

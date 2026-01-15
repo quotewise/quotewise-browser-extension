@@ -1,31 +1,40 @@
 /**
  * Authentication status checker for Quotewise Chrome extension
- * Integrates with Django session authentication patterns
+ * Uses OAuth 2.0 token-based authentication
  */
 
 import type { QuotewiseApiClient } from '../types/api';
 import type { AuthStatus, AuthError } from '../types/auth';
 import { debugLog } from '../config/environment';
+import {
+  getStoredTokens,
+  isAccessTokenValid,
+  hasValidRefreshToken,
+  getAccessTokenExpiresIn,
+  hasScope,
+} from './token-storage';
+import { attemptTokenRefresh } from './token-refresh';
 
 /**
- * Checks authentication status against Django backend
- * Handles session validation and staff privilege checking
+ * Checks authentication status using OAuth tokens
+ * Provides fast local validation with optional backend verification
  */
 export class AuthChecker {
   constructor(private apiClient: QuotewiseApiClient) {}
 
   /**
-   * Check current authentication status with Django backend
-   * Uses /api/v1/auth/status/ endpoint (matches Django patterns)
+   * Check current authentication status
+   * Fast path: Uses local token validation
+   * Falls back to API check if needed
    */
   async checkAuthStatus(): Promise<AuthStatus | AuthError> {
     try {
       debugLog('Checking authentication status...');
-      
-      // Call Django auth status endpoint
-      const response = await this.apiClient.checkAuthStatus();
-      
-      if (!response.authenticated) {
+
+      // Fast path: Check if we have valid tokens locally
+      const tokens = await getStoredTokens();
+
+      if (!tokens || !tokens.refreshToken) {
         return {
           type: 'not_authenticated',
           message: 'Please log in to Quotewise',
@@ -33,27 +42,44 @@ export class AuthChecker {
         };
       }
 
-      // Convert API response to AuthStatus
-      const authStatus: AuthStatus = {
-        isAuthenticated: response.authenticated,
-        isStaff: response.is_admin || false, // Map is_admin to isStaff
-        username: response.user?.username,
-        sessionExpiry: response.sessionExpiry
-      };
+      // Check if access token is valid
+      const hasValidAccess = await isAccessTokenValid();
 
-      // Calculate session age if expiry provided
-      if (response.sessionExpiry) {
-        const expiryTime = new Date(response.sessionExpiry).getTime();
-        const currentTime = Date.now();
-        authStatus.sessionAge = Math.max(0, Math.floor((expiryTime - currentTime) / 1000));
+      if (!hasValidAccess) {
+        // Try to refresh the token
+        debugLog('Access token expired, attempting refresh');
+        const refreshResult = await attemptTokenRefresh();
+
+        if (!refreshResult.success) {
+          return {
+            type: refreshResult.error === 'revoked' ? 'session_expired' : 'not_authenticated',
+            message: refreshResult.message || 'Please log in to Quotewise',
+            requiresLogin: true
+          };
+        }
       }
+
+      // Derive permissions from scopes
+      const canWrite = await hasScope('quotes:write');
+
+      // Get token expiry info
+      const expiresInMs = await getAccessTokenExpiresIn();
+      const expiresInSeconds = Math.floor(expiresInMs / 1000);
+
+      const authStatus: AuthStatus = {
+        isAuthenticated: true,
+        isStaff: canWrite, // quotes:write scope implies staff-level access
+        username: undefined, // Token doesn't contain username, could fetch from API if needed
+        sessionAge: expiresInSeconds,
+        scopes: tokens.scopes
+      };
 
       debugLog('Authentication status:', authStatus);
       return authStatus;
 
     } catch (error) {
       console.error('Error checking authentication status:', error);
-      
+
       if (error instanceof Error && error.name === 'AuthenticationError') {
         return {
           type: 'not_authenticated',
@@ -71,20 +97,30 @@ export class AuthChecker {
   }
 
   /**
-   * Wait for authentication changes after login redirect
-   * Polls for authentication status with configurable timeout
+   * Quick check if user is authenticated (no network call)
+   */
+  async isAuthenticated(): Promise<boolean> {
+    return await hasValidRefreshToken();
+  }
+
+  /**
+   * Wait for authentication changes after OAuth flow
+   * Polls local storage for token presence
    */
   async waitForAuthChange(timeout = 30000): Promise<AuthStatus> {
     debugLog('Waiting for authentication change...');
     const startTime = Date.now();
-    const pollInterval = 1000; // Check every second
+    const pollInterval = 500; // Check every 500ms
 
     while (Date.now() - startTime < timeout) {
-      const status = await this.checkAuthStatus();
+      const hasRefresh = await hasValidRefreshToken();
 
-      if ('isAuthenticated' in status && status.isAuthenticated) {
-        debugLog('Authentication detected:', status);
-        return status;
+      if (hasRefresh) {
+        const status = await this.checkAuthStatus();
+        if ('isAuthenticated' in status && status.isAuthenticated) {
+          debugLog('Authentication detected:', status);
+          return status;
+        }
       }
 
       // Wait before next check
@@ -109,12 +145,12 @@ export class AuthChecker {
     if (!authStatus.isStaff) {
       return {
         type: 'insufficient_privileges',
-        message: 'Administrator privileges required for quote submission',
+        message: 'Quote submission permission required',
         requiresLogin: false
       };
     }
 
-    // Check session expiration
+    // Check token expiration
     if (authStatus.sessionAge !== undefined && authStatus.sessionAge <= 0) {
       return {
         type: 'session_expired',
@@ -127,11 +163,11 @@ export class AuthChecker {
   }
 
   /**
-   * Check if session is near expiration (within 10 minutes)
+   * Check if token is near expiration (within 10 minutes)
    */
   isSessionNearExpiry(authStatus: AuthStatus): boolean {
     if (!authStatus.sessionAge) return false;
-    
+
     const tenMinutes = 10 * 60; // 10 minutes in seconds
     return authStatus.sessionAge <= tenMinutes;
   }
@@ -141,8 +177,8 @@ export class AuthChecker {
    */
   getUserDisplayName(authStatus: AuthStatus): string {
     if (!authStatus.isAuthenticated) return 'Not logged in';
-    
-    return authStatus.username || 'Unknown user';
+
+    return authStatus.username || 'Authenticated user';
   }
 
   /**
@@ -159,12 +195,12 @@ export class AuthChecker {
     }
 
     if (!authStatus.isStaff) {
-      return 'Logged in (no admin access)';
+      return 'Logged in (read-only access)';
     }
 
     const username = authStatus.username || 'user';
-    const sessionInfo = authStatus.sessionAge 
-      ? ` (session expires in ${Math.floor(authStatus.sessionAge / 60)}m)`
+    const sessionInfo = authStatus.sessionAge
+      ? ` (token expires in ${Math.floor(authStatus.sessionAge / 60)}m)`
       : '';
 
     return `Logged in as ${username}${sessionInfo}`;
