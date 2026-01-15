@@ -3,7 +3,8 @@ const CopyWebpackPlugin = require('copy-webpack-plugin');
 
 module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production';
-  
+  const manifestFile = isProduction ? 'manifest.prod.json' : 'manifest.dev.json';
+
   return {
     mode: isProduction ? 'production' : 'development',
     devtool: isProduction ? false : 'cheap-module-source-map',
@@ -57,7 +58,7 @@ module.exports = (env, argv) => {
       new CopyWebpackPlugin({
         patterns: [
           {
-            from: 'manifest.json',
+            from: manifestFile,
             to: 'manifest.json'
           },
           {

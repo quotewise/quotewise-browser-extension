@@ -4,6 +4,7 @@
   "description": "Chrome extension for capturing quotes from web sources",
   "scripts": {
     "build": "webpack --mode production",
+    "build:dev": "webpack --mode development",
     "dev": "webpack --mode development --watch",
     "bump-version": "node scripts/bump-version.js",
     "test": "jest",
