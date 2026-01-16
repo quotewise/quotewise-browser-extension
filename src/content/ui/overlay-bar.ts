@@ -438,6 +438,13 @@ export class OverlayBar {
   private async expandCapture(): Promise<void> {
     if (!this.shadow || !this.currentData) return;
 
+    // Check authentication FIRST before doing any API calls
+    const authStatus = await this.checkAuthStatus();
+    if (!authStatus.isAuthenticated) {
+      this.showLoginRequired();
+      return;
+    }
+
     // Check for text selection on the page before expanding
     const selectedText = this.getPageSelection();
     this.captureState.selectedText = selectedText;
@@ -456,6 +463,52 @@ export class OverlayBar {
     } else {
       this.updateOriginatorInfo('No author handle available', 'error');
     }
+  }
+
+  /**
+   * Check if user is authenticated via service worker
+   */
+  private async checkAuthStatus(): Promise<{ isAuthenticated: boolean }> {
+    try {
+      const response = await this.sendMessage({ type: MessageType.CHECK_AUTH_STATUS });
+      return { isAuthenticated: response.isAuthenticated === true };
+    } catch {
+      return { isAuthenticated: false };
+    }
+  }
+
+  /**
+   * Show login required message with button to open popup for OAuth flow
+   */
+  private showLoginRequired(): void {
+    const captureRow = this.shadow?.getElementById('capture-row');
+    captureRow?.classList.add('expanded');
+    this.captureState.expanded = true;
+
+    // Update quote preview to show the captured text
+    this.updateQuotePreview();
+
+    // Show login message in originator section
+    const originatorInfo = this.shadow?.getElementById('originator-info');
+    if (originatorInfo) {
+      originatorInfo.innerHTML = `
+        <span class="badge warning">!</span>
+        <span>Login required to capture quotes</span>
+        <button class="primary" id="login-btn">Login to Quotewise</button>
+      `;
+
+      // Wire up login button to open popup (which has the OAuth flow)
+      const loginBtn = this.shadow?.getElementById('login-btn');
+      loginBtn?.addEventListener('click', () => {
+        this.sendMessage({ type: MessageType.OPEN_POPUP }).catch(() => {
+          // Fallback: open quotewise.io in new tab if popup fails
+          window.open('https://quotewise.io/login/', '_blank');
+        });
+      });
+    }
+
+    // Disable submit button when not authenticated
+    this.updateSubmitButton(false);
   }
 
   /**
@@ -892,6 +945,7 @@ export class OverlayBar {
     error?: string;
     message?: string;
     result?: DuplicateCheckResult;
+    isAuthenticated?: boolean;
   }> {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, (response) => {
