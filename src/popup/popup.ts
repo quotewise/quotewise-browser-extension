@@ -3,9 +3,9 @@
  * State-managed UI with component architecture
  */
 
-import { 
-  MessageType, 
-  TwitterData, 
+import {
+  MessageType,
+  TwitterData,
   ExtensionMessage,
   QuoteSubmissionRequest,
   AttributionType
@@ -22,6 +22,7 @@ import { DuplicateDisplay } from '../duplicate/duplicate-display';
 import { HandleLookup, HandleLookupState } from '../lookup/handle-lookup';
 import { HandleLookupDisplay } from '../lookup/handle-lookup-display';
 import { debugLog } from '../config/environment';
+import { AuthState, AuthStateData } from '../auth/auth-state-machine';
 
 // State Management Interfaces
 interface AuthenticationState {
@@ -429,6 +430,69 @@ class SimpleQuotewisePopup {
     window.addEventListener('beforeunload', () => {
       this.destroy();
     });
+
+    // Listen for auth state changes from AuthStateManager
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === MessageType.AUTH_STATE_CHANGED) {
+        this.handleAuthStateChanged(message.data as AuthStateData);
+      }
+    });
+  }
+
+  /**
+   * Handle auth state change broadcast from AuthStateManager
+   */
+  private handleAuthStateChanged(stateData: AuthStateData): void {
+    debugLog('Received AUTH_STATE_CHANGED:', stateData.state);
+
+    switch (stateData.state) {
+      case AuthState.AUTHENTICATED:
+        this.handleAuthSuccess({
+          isAuthenticated: true,
+          isStaff: stateData.scopes?.includes('quotes:write') ?? false,
+          username: stateData.username,
+          scopes: stateData.scopes,
+        });
+        break;
+
+      case AuthState.UNAUTHENTICATED:
+      case AuthState.SESSION_EXPIRED:
+        this.handleAuthError({
+          type: stateData.state === AuthState.SESSION_EXPIRED ? 'session_expired' : 'not_authenticated',
+          message: stateData.error || 'Please log in to Quotewise',
+          requiresLogin: true,
+        });
+        break;
+
+      case AuthState.INSUFFICIENT_PRIVILEGES:
+        this.stateManager.setState({
+          auth: {
+            isAuthenticated: true,
+            isStaff: false,
+            checkInProgress: false,
+          },
+          ui: { currentView: 'insufficient-privileges' },
+        });
+        break;
+
+      case AuthState.AUTHENTICATING:
+        this.stateManager.setState({
+          auth: { loginInProgress: true },
+          ui: { currentView: 'login-in-progress', loadingMessage: 'Logging in...' },
+        });
+        break;
+
+      case AuthState.CHECKING:
+        this.stateManager.setState({
+          auth: { checkInProgress: true },
+          ui: { currentView: 'loading', loadingMessage: 'Checking authentication...' },
+        });
+        break;
+
+      // UNKNOWN state - do nothing, wait for next state
+      default:
+        break;
+    }
   }
 
   private initializeOriginatorSearch(): void {

@@ -1,15 +1,24 @@
 /**
  * Background authentication monitoring for Quotewise Chrome extension
- * Monitors OAuth token status and updates extension badge
+ *
+ * NOTE: This class is being deprecated in favor of AuthStateManager.
+ * AuthStateManager is now the single source of truth for auth state.
+ * This class remains for backwards compatibility with existing code
+ * that calls getCurrentAuthStatus() or forceAuthCheck().
+ *
+ * @deprecated Use AuthStateManager instead
  */
 
 import { AuthChecker } from '../auth/auth-checker';
 import { apiClient } from '../api/quotewise-api';
 import type { AuthStatus, AuthError, AuthChangeEvent, AuthBadgeState, AuthMonitoringConfig } from '../types/auth';
 import { debugLog } from '../config/environment';
+import { AuthStateManager } from '../auth/auth-state-manager';
+import { AuthState } from '../auth/auth-state-machine';
 
 /**
  * Manages background authentication monitoring and badge updates
+ * @deprecated Use AuthStateManager instead - this is kept for backwards compatibility
  */
 export class AuthenticationMonitor {
   private authChecker: AuthChecker;
@@ -21,46 +30,36 @@ export class AuthenticationMonitor {
   constructor(config: Partial<AuthMonitoringConfig> = {}) {
     this.authChecker = new AuthChecker(apiClient);
     this.config = {
-      checkInterval: config.checkInterval || 1800000, // 30 minutes (reduced from 5 minutes)
+      checkInterval: config.checkInterval || 1800000, // 30 minutes
       maxRetries: config.maxRetries || 3,
       timeoutDuration: config.timeoutDuration || 10000 // 10 seconds
     };
 
-    this.setupMessageListeners();
-    // Only start monitoring when explicitly needed
-    // this.startMonitoring();
+    // Note: Message listeners are now handled by AuthStateManager
+    // Note: Periodic monitoring is now handled by AuthStateManager
+    debugLog('AuthenticationMonitor initialized (deprecated - use AuthStateManager)');
   }
 
   /**
    * Start periodic authentication monitoring
+   * @deprecated AuthStateManager handles periodic monitoring now
    */
   startMonitoring(): void {
-    debugLog('Starting authentication monitoring...');
-    
-    // Do initial check
-    this.checkAuthenticationStatus();
-
-    // Set up periodic monitoring
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
+    debugLog('startMonitoring() called - delegating to AuthStateManager');
+    // AuthStateManager handles periodic monitoring via alarms
+    // Just trigger an initial check
+    if (AuthStateManager.isInitialized()) {
+      AuthStateManager.getInstance().checkAuthState();
     }
-
-    this.monitoringInterval = setInterval(() => {
-      this.checkAuthenticationStatus();
-    }, this.config.checkInterval);
-
-    debugLog(`Authentication monitoring started with ${this.config.checkInterval / 1000}s interval`);
   }
 
   /**
    * Stop authentication monitoring
+   * @deprecated AuthStateManager handles monitoring now
    */
   stopMonitoring(): void {
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
-      this.monitoringInterval = null;
-      debugLog('Authentication monitoring stopped');
-    }
+    debugLog('stopMonitoring() called - no-op (AuthStateManager handles monitoring)');
+    // No-op - AuthStateManager manages its own alarms
   }
 
   /**
@@ -309,8 +308,25 @@ export class AuthenticationMonitor {
 
   /**
    * Get current authentication status (for external access)
+   * @deprecated Use AuthStateManager.getInstance().getStateData() instead
    */
   getCurrentAuthStatus(): AuthStatus | null {
+    // Delegate to AuthStateManager if available
+    if (AuthStateManager.isInitialized()) {
+      const stateData = AuthStateManager.getInstance().getStateData();
+      if (stateData.state === AuthState.AUTHENTICATED) {
+        return {
+          isAuthenticated: true,
+          isStaff: stateData.scopes?.includes('quotes:write') ?? false,
+          username: stateData.username,
+          scopes: stateData.scopes,
+        };
+      }
+      return {
+        isAuthenticated: false,
+        isStaff: false,
+      };
+    }
     return this.lastAuthStatus;
   }
 

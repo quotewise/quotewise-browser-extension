@@ -52,6 +52,11 @@ export enum MessageType {
   OAUTH_LOGIN = 'OAUTH_LOGIN',
   OAUTH_LOGOUT = 'OAUTH_LOGOUT',
 
+  // Auth state management (centralized)
+  AUTH_STATE_GET = 'AUTH_STATE_GET',           // Request current auth state
+  AUTH_STATE_CHANGED = 'AUTH_STATE_CHANGED',   // Broadcast state change to all listeners
+  AUTH_STATE_SUBSCRIBE = 'AUTH_STATE_SUBSCRIBE', // Subscribe to state changes (content scripts)
+
   // General responses
   SUCCESS = 'SUCCESS',
   ERROR = 'ERROR'

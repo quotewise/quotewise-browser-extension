@@ -249,8 +249,8 @@ export function getOAuthConfig(): OAuthConfig {
 
     return {
         clientId: OAUTH_CLIENT_ID,
-        authorizeUrl: `${envConfig.apiBaseUrl}/oauth/authorize`,
-        tokenUrl: `${envConfig.apiBaseUrl}/oauth/token`,
+        authorizeUrl: `${envConfig.webBaseUrl}/oauth/authorize`,
+        tokenUrl: `${envConfig.webBaseUrl}/oauth/token`,
         redirectUri: `https://${extensionId}.chromiumapp.org/callback`,
         scopes: OAUTH_SCOPES,
     };

@@ -1,6 +1,8 @@
 import type { TwitterData } from '../../types';
 import { MessageType } from '../../types';
 import type { DuplicateCheckResult, OriginatorSearchResult } from '../../types/api';
+import { AuthState } from '../../auth/auth-state-machine';
+import type { AuthStateData } from '../../auth/auth-state-machine';
 
 type DataProvider = () => Promise<TwitterData | null>;
 
@@ -433,6 +435,43 @@ export class OverlayBar {
     refreshBtn?.addEventListener('click', () => this.refresh());
     closeBtn?.addEventListener('click', () => this.hide());
     submitBtn?.addEventListener('click', () => this.submitQuote());
+
+    // Listen for auth state changes from AuthStateManager
+    chrome.runtime.onMessage.addListener((message) => {
+      if (message.type === MessageType.AUTH_STATE_CHANGED) {
+        this.handleAuthStateChanged(message.data as AuthStateData);
+      }
+    });
+  }
+
+  /**
+   * Handle auth state change broadcast from AuthStateManager
+   * Reactively update overlay when user logs in/out
+   */
+  private handleAuthStateChanged(stateData: AuthStateData): void {
+    // If we're showing login required and user just authenticated, retry capture
+    if (
+      stateData.state === AuthState.AUTHENTICATED &&
+      this.captureState.expanded &&
+      !this.captureState.originator
+    ) {
+      // User just logged in while overlay is showing login required
+      // Re-attempt the capture flow
+      this.collapseCapture();
+      this.expandCapture();
+    }
+
+    // If user logged out while overlay is showing, show login required
+    if (
+      stateData.state === AuthState.UNAUTHENTICATED &&
+      this.captureState.expanded &&
+      this.captureState.originator
+    ) {
+      // User logged out - show login required
+      this.captureState.originator = null;
+      this.captureState.lookupResult = null;
+      this.showLoginRequired();
+    }
   }
 
   private async expandCapture(): Promise<void> {
@@ -497,13 +536,39 @@ export class OverlayBar {
         <button class="primary" id="login-btn">Login to Quotewise</button>
       `;
 
-      // Wire up login button to open popup (which has the OAuth flow)
+      // Wire up login button to trigger OAuth flow directly
       const loginBtn = this.shadow?.getElementById('login-btn');
-      loginBtn?.addEventListener('click', () => {
-        this.sendMessage({ type: MessageType.OPEN_POPUP }).catch(() => {
-          // Fallback: open quotewise.io in new tab if popup fails
+      loginBtn?.addEventListener('click', async () => {
+        // Update button to show loading state
+        if (loginBtn) {
+          loginBtn.textContent = 'Logging in...';
+          (loginBtn as HTMLButtonElement).disabled = true;
+        }
+
+        try {
+          const response = await this.sendMessage({ type: MessageType.OAUTH_LOGIN });
+          if (response.success) {
+            // Login successful - retry the capture flow
+            this.collapseCapture();
+            await this.expandCapture();
+          } else {
+            // Show error
+            if (originatorInfo) {
+              originatorInfo.innerHTML = `
+                <span class="badge error">!</span>
+                <span>Login failed: ${this.escapeHtml(response.error || 'Unknown error')}</span>
+                <button class="primary" id="login-btn">Try Again</button>
+              `;
+              // Re-wire the button for retry
+              this.shadow?.getElementById('login-btn')?.addEventListener('click', () => {
+                this.showLoginRequired();
+              });
+            }
+          }
+        } catch (error) {
+          // Fallback: open quotewise.io in new tab if OAuth fails
           window.open('https://quotewise.io/login/', '_blank');
-        });
+        }
       });
     }
 
@@ -946,6 +1011,7 @@ export class OverlayBar {
     message?: string;
     result?: DuplicateCheckResult;
     isAuthenticated?: boolean;
+    scopes?: string[];
   }> {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, (response) => {
