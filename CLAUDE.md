@@ -23,6 +23,21 @@ bun run clean        # Remove dist/
 
 After building, load the unpacked extension from `dist/` in `chrome://extensions` (Developer mode enabled).
 
+## Version Bumping
+
+**Production releases**: Only update `manifest.prod.json` (webpack copies this to `dist/manifest.json`).
+
+```bash
+# Patch bump for production
+# Edit manifest.prod.json version field, then:
+bun run build
+```
+
+Other version files (for reference only):
+- `manifest.dev.json` - dev builds only
+- `package.json` - npm metadata, keep in sync manually
+- `manifest.json` - unused by webpack
+
 ## Architecture
 
 ### Data Flow on Tweet Page Load

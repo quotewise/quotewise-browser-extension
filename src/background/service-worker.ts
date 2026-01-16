@@ -14,11 +14,13 @@ import { validateTwitterData, ValidationError } from '../utils/validators';
 import { debugLog } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
 import { initiateOAuthFlow, logout } from '../auth/auth-flow';
+import { initializeAuthStateManager, AuthStateManager } from '../auth/auth-state-manager';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
 let authMonitor: AuthenticationMonitor | null = null;
 let storageCleanup: ReturnType<typeof initializeStorageCleanup> | null = null;
+let authStateManager: AuthStateManager | null = null;
 
 // Track initialization state
 let servicesInitialized = false;
@@ -33,8 +35,16 @@ const pendingDuplicateChecks = new Map<string, Promise<void>>();
  * Called before any message handling to recover from service worker termination
  */
 async function ensureServicesInitialized(): Promise<void> {
-  if (servicesInitialized && apiHandler && authMonitor && storageCleanup) {
+  if (servicesInitialized && apiHandler && authMonitor && storageCleanup && authStateManager) {
     return;
+  }
+
+  // Initialize AuthStateManager FIRST - single source of truth for auth state
+  // This must happen before other services that might check auth
+  try {
+    authStateManager = await initializeAuthStateManager();
+  } catch (error) {
+    console.error('Failed to initialize AuthStateManager:', error);
   }
 
   // Initialize services
@@ -114,13 +124,27 @@ chrome.runtime.onMessage.addListener((
         handleGetTweetData(sender.tab?.id, sendResponse);
         break;
 
-      // Delegate API messages to API handler
+      // CHECK_AUTH_STATUS is now handled by AuthStateManager's message listener
+      // (via AUTH_STATE_GET which returns the same info in a cleaner format)
+      // The AuthStateManager listener responds synchronously before we get here,
+      // but for backwards compatibility we also handle it here
       case MessageType.CHECK_AUTH_STATUS:
-        // Start auth monitoring when user first requests auth status
-        if (authMonitor && !authMonitor.getCurrentAuthStatus()) {
-          authMonitor.startMonitoring();
+        // AuthStateManager handles this message, but if it somehow gets here,
+        // delegate to ensure we return a response
+        if (authStateManager) {
+          const stateData = authStateManager.getStateData();
+          sendResponse({
+            isAuthenticated: authStateManager.isAuthenticated(),
+            scopes: stateData.scopes,
+            username: stateData.username,
+          });
+        } else {
+          // Fallback if AuthStateManager not ready
+          sendResponse({ isAuthenticated: false });
         }
-        // Fall through to delegate to API handler
+        break;
+
+      // Delegate API messages to API handler
       case MessageType.SEARCH_ORIGINATORS:
       case MessageType.CHECK_DUPLICATE:
       case MessageType.SUBMIT_QUOTE:
@@ -168,16 +192,19 @@ chrome.runtime.onMessage.addListener((
 
       case MessageType.OAUTH_LOGIN:
         // Initiate OAuth login flow
-        initiateOAuthFlow().then(tokens => {
+        // Notify AuthStateManager that we're starting authentication
+        authStateManager?.startAuthenticating();
+        initiateOAuthFlow().then(async tokens => {
           debugLog('OAuth login successful');
           // Clear any auth required state
           chrome.storage.local.remove(['authRequired', 'authMessage']);
-          // Update badge to show authenticated
-          chrome.action.setBadgeText({ text: '' });
-          chrome.action.setTitle({ title: 'Quotewise - Authenticated' });
+          // Notify AuthStateManager of successful auth (handles badge)
+          await authStateManager?.onAuthSuccess(undefined, tokens.scopes);
           sendResponse({ success: true, scopes: tokens.scopes });
-        }).catch(error => {
+        }).catch(async error => {
           console.error('OAuth login failed:', error);
+          // Notify AuthStateManager of failed auth
+          await authStateManager?.onAuthFailure(error.message);
           sendResponse({
             success: false,
             error: error.message || 'Login failed',
@@ -188,12 +215,10 @@ chrome.runtime.onMessage.addListener((
 
       case MessageType.OAUTH_LOGOUT:
         // Logout and clear tokens
-        logout().then(() => {
+        logout().then(async () => {
           debugLog('OAuth logout successful');
-          // Update badge to show unauthenticated
-          chrome.action.setBadgeText({ text: '!' });
-          chrome.action.setBadgeBackgroundColor({ color: '#9E9E9E' });
-          chrome.action.setTitle({ title: 'Quotewise - Login required' });
+          // Notify AuthStateManager of logout (handles badge)
+          await authStateManager?.onLogout();
           sendResponse({ success: true });
         }).catch(error => {
           console.error('OAuth logout failed:', error);
