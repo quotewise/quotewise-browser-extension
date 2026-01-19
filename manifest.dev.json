@@ -8,7 +8,9 @@
     "storage",
     "cookies",
     "identity",
-    "alarms"
+    "alarms",
+    "webNavigation",
+    "scripting"
   ],
   "host_permissions": [
     "https://*.quotewise.io/*",
