@@ -301,11 +301,11 @@ async function clearTweetPageIcon(tabId: number): Promise<void> {
   }
 }
 
-// Handle tab updates to detect tweet pages
+// Handle tab updates to detect tweet pages (full page loads)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     const isTweetPage = /https:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(tab.url);
-    
+
     if (isTweetPage) {
       // Show analyzing state initially
       await updateExtensionIconForTweetPage();
@@ -315,6 +315,34 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     }
   }
 });
+
+// Handle SPA navigations (Twitter uses History API for client-side routing)
+// This catches navigations from feed to tweet that don't trigger tabs.onUpdated
+chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
+  // Only process main frame navigations
+  if (details.frameId !== 0) return;
+
+  const isTweetPage = /https:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(details.url);
+
+  if (isTweetPage) {
+    debugLog('SPA navigation detected to tweet page:', details.url);
+
+    // Show analyzing state
+    await updateExtensionIconForTweetPage();
+
+    // Programmatically inject content script (may already be running)
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: details.tabId },
+        files: ['content/index.js']
+      });
+      debugLog('Content script injected for SPA navigation');
+    } catch (error) {
+      // Script may already be injected or tab may not be accessible - that's OK
+      debugLog('Content script injection skipped (likely already running):', error);
+    }
+  }
+}, { url: [{ hostSuffix: 'twitter.com' }, { hostSuffix: 'x.com' }] });
 
 /**
  * Handle tweet data extracted from content script
