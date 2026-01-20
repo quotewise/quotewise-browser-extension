@@ -41,7 +41,7 @@ export interface DuplicateCheckResult {
   recommendation: 'duplicate' | 'new_version' | 'new_quote' | 'attribution_conflict' |
                   'new_quote_known_author' | 'duplicate_known_author' | 'new_version_known_author' | 'attribution_conflict_resolved';
   confidence: number;
-  in_quotosaurus: boolean;
+  in_quotewise: boolean;
   social_originator?: {
     id: number;
     full_name: string;
@@ -61,6 +61,9 @@ export interface DuplicateCheckResult {
     originator: Originator;
     workflow_status: string;
     likes_count: number;
+    // Sighting status for platform awareness
+    sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
+    platform_sighting_url?: string | null;
   }>;
   existing_sightings_for_url?: Array<{
     id: number;
@@ -167,19 +170,10 @@ export type AttributionType =
   | 'FAMILY_TRADITION'
   | 'COMMUNITY_TRADITION';
 
-// Session configuration matching Django settings
-export interface SessionConfig {
-  cookieName: string;        // "sessionid" or "stagingsessionid" 
-  maxAge: number;           // 1814400 seconds (3 weeks)
-  secure: boolean;          // true in production, false in development
-  httpOnly: boolean;        // true
-}
-
 // Environment configuration
 export interface EnvironmentConfig {
   apiBaseUrl: string;
   webBaseUrl: string;
-  sessionCookieName: string;
   secure: boolean;
 }
 
