@@ -108,10 +108,11 @@ export function isAuthenticated(state: AuthState): boolean {
 
 /**
  * Check if state is an error/problem state
+ * Note: UNAUTHENTICATED is NOT an error - it's an expected state for users who haven't logged in.
+ * Only SESSION_EXPIRED (token issues) and INSUFFICIENT_PRIVILEGES are actual errors.
  */
 export function isErrorState(state: AuthState): boolean {
   return (
-    state === AuthState.UNAUTHENTICATED ||
     state === AuthState.SESSION_EXPIRED ||
     state === AuthState.INSUFFICIENT_PRIVILEGES
   );
@@ -138,11 +139,11 @@ export function getStateMessage(state: AuthState): string {
     case AuthState.CHECKING:
       return 'Verifying credentials...';
     case AuthState.AUTHENTICATED:
-      return 'Authenticated';
+      return 'Ready to capture quotes';
     case AuthState.UNAUTHENTICATED:
-      return 'Login required';
+      return 'Click to log in';  // Friendly prompt, not error
     case AuthState.SESSION_EXPIRED:
-      return 'Session expired, please log in again';
+      return 'Session expired, please log in again';  // Actual error
     case AuthState.AUTHENTICATING:
       return 'Logging in...';
     case AuthState.INSUFFICIENT_PRIVILEGES:
@@ -158,8 +159,9 @@ export function getStateBadgeText(state: AuthState): string {
     case AuthState.AUTHENTICATED:
       return '';  // No badge when authenticated
     case AuthState.UNAUTHENTICATED:
+      return '';  // Not an error, just inactive - grey badge with no text
     case AuthState.SESSION_EXPIRED:
-      return '!';
+      return '!';  // Actual error requiring action
     case AuthState.INSUFFICIENT_PRIVILEGES:
       return '?';
     case AuthState.CHECKING:
@@ -177,8 +179,9 @@ export function getStateBadgeColor(state: AuthState): string {
     case AuthState.AUTHENTICATED:
       return '#4CAF50';  // Green
     case AuthState.UNAUTHENTICATED:
+      return '#9AA0A6';  // Grey - not an error, just inactive
     case AuthState.SESSION_EXPIRED:
-      return '#F44336';  // Red
+      return '#F44336';  // Red - actual error requiring action
     case AuthState.INSUFFICIENT_PRIVILEGES:
       return '#FF9800';  // Orange
     case AuthState.CHECKING:

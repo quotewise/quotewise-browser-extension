@@ -313,7 +313,7 @@ describe('QuotewiseApiClient', () => {
       const mockDuplicateResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: '123',
           version_id: 1,
@@ -362,7 +362,7 @@ describe('QuotewiseApiClient', () => {
       expect(result).toEqual({
         recommendation: 'new_quote',
         confidence: 1.0,
-        in_quotosaurus: false,
+        in_quotewise: false,
         matches: [],
         reasoning: 'No quote text provided',
         search_metadata: {}
@@ -381,7 +381,7 @@ describe('QuotewiseApiClient', () => {
       expect(result).toEqual({
         recommendation: 'new_quote',
         confidence: 0.5,
-        in_quotosaurus: false,
+        in_quotewise: false,
         matches: [],
         reasoning: 'Error occurred during duplicate check, proceeding as new quote',
         search_metadata: { error: true }

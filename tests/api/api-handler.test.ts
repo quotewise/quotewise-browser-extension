@@ -25,7 +25,6 @@ jest.mock('../../src/config/environment', () => ({
   getEnvironmentConfig: jest.fn(() => ({
     apiBaseUrl: 'http://api.quotewise.test:8000',
     webBaseUrl: 'http://quotewise.test:8000',
-    sessionCookieName: 'sessionid',
     secure: false
   })),
   debugLog: jest.fn()
@@ -80,29 +79,7 @@ describe('ApiHandler', () => {
       mockSendResponse = jest.fn();
     });
 
-    test('handles CHECK_AUTH_STATUS message', async () => {
-      const mockAuthResult = {
-        authenticated: true,
-        is_admin: false,
-        user: { id: 1, username: 'testuser', email: 'test@example.com' },
-        permissions: { can_submit_quotes: true, can_review_quotes: false }
-      };
-      mockApiClient.checkAuthStatus.mockResolvedValue(mockAuthResult);
-
-      const message: ExtensionMessage = {
-        type: 'CHECK_AUTH_STATUS' as MessageType
-      };
-
-      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
-
-      expect(mockApiClient.checkAuthStatus).toHaveBeenCalled();
-      // ApiHandler transforms the response to match AuthChecker format
-      expect(mockSendResponse).toHaveBeenCalledWith({
-        isAuthenticated: true,
-        isStaff: false,
-        username: 'testuser'
-      });
-    });
+    // Note: CHECK_AUTH_STATUS is now handled by AuthStateManager, not ApiHandler
 
     test('handles SEARCH_ORIGINATORS message', async () => {
       const mockResults = [
@@ -143,7 +120,7 @@ describe('ApiHandler', () => {
       const mockDuplicateResult = {
         recommendation: 'new_quote' as const,
         confidence: 0.9,
-        in_quotosaurus: false,
+        in_quotewise: false,
         matches: [],
         reasoning: 'No duplicates found',
         search_metadata: {}
@@ -226,19 +203,19 @@ describe('ApiHandler', () => {
 
     test('handles API errors gracefully', async () => {
       const error = new Error('API request failed');
-      mockApiClient.checkAuthStatus.mockRejectedValue(error);
+      mockApiClient.searchOriginators.mockRejectedValue(error);
 
       const message: ExtensionMessage = {
-        type: 'CHECK_AUTH_STATUS' as MessageType
+        type: 'SEARCH_ORIGINATORS' as MessageType,
+        data: { query: 'test' }
       };
 
       await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
 
-      // ApiHandler.handleCheckAuthStatus catches errors and returns transformed error
       expect(mockSendResponse).toHaveBeenCalledWith({
-        isAuthenticated: false,
-        isStaff: false,
-        error: 'API request failed'
+        success: false,
+        error: 'API request failed',
+        results: []
       });
     });
   });

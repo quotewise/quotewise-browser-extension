@@ -3,7 +3,7 @@
  * Handles periodic cleanup of stale data in chrome.storage.local
  */
 
-import { getSessionConfig, detectEnvironment, debugLog } from '../config/environment';
+import { debugLog } from '../config/environment';
 
 interface StoredTweetData {
   data: Record<string, unknown>;
@@ -35,10 +35,9 @@ export class StorageCleanupService {
   private config: StorageCleanupConfig;
   
   constructor(config?: Partial<StorageCleanupConfig>) {
-    // Get session max age from environment config (3 weeks = 1814400 seconds)
-    const sessionConfig = getSessionConfig(detectEnvironment());
-    const maxAgeMs = sessionConfig.maxAge * 1000; // Convert to milliseconds
-    
+    // 3 weeks in milliseconds (matches typical session/token lifetime)
+    const threeWeeksMs = 3 * 7 * 24 * 60 * 60 * 1000;
+
     this.config = {
       // Run cleanup every 6 hours
       cleanupInterval: 6 * 60 * 60 * 1000,
@@ -47,8 +46,8 @@ export class StorageCleanupService {
         tweets: 24 * 60 * 60 * 1000,
         // Auth checks expire after 1 hour (auth status changes)
         authChecks: 60 * 60 * 1000,
-        // Search history expires after session max age (3 weeks)
-        searchHistory: maxAgeMs
+        // Search history expires after 3 weeks
+        searchHistory: threeWeeksMs
       },
       ...config
     };

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Chrome extension (Manifest V3) for capturing quotes from social media platforms (currently Twitter/X) and submitting them to the Quotewise/Quotosaurus backend. Uses Django session authentication via existing quotosaurus.com login.
+Chrome extension (Manifest V3) for capturing quotes from social media platforms (currently Twitter/X) and submitting them to the Quotewise backend (api.quotewise.io). Uses OAuth authentication.
 
 ## Build & Development Commands
 
