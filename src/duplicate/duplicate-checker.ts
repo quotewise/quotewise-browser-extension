@@ -74,8 +74,22 @@ export class DuplicateChecker {
       return false;
     }
 
+    // Check sighting status on top match (if any)
+    const topMatch = this.state.result.matches[0];
+    if (topMatch) {
+      // Block entirely if exact URL already captured
+      if (topMatch.sighting_status === 'exact_url') {
+        return false;
+      }
+
+      // Require confirmation if platform sighting exists
+      if (topMatch.sighting_status === 'has_platform_sighting' && !this.state.userOverride) {
+        return false;
+      }
+    }
+
     // Allow submission for new_quote and new_version
-    if (this.state.result.recommendation === 'new_quote' || 
+    if (this.state.result.recommendation === 'new_quote' ||
         this.state.result.recommendation === 'new_version') {
       return true;
     }
@@ -86,6 +100,27 @@ export class DuplicateChecker {
     }
 
     return false;
+  }
+
+  /**
+   * Get the sighting status of the top match (if any)
+   */
+  getTopMatchSightingStatus(): string | undefined {
+    return this.state.result?.matches[0]?.sighting_status;
+  }
+
+  /**
+   * Check if the top match blocks submission due to exact URL
+   */
+  isExactUrlMatch(): boolean {
+    return this.getTopMatchSightingStatus() === 'exact_url';
+  }
+
+  /**
+   * Check if the top match requires confirmation due to platform sighting
+   */
+  requiresPlatformConfirmation(): boolean {
+    return this.getTopMatchSightingStatus() === 'has_platform_sighting' && !this.state.userOverride;
   }
 
   /**
@@ -277,7 +312,7 @@ export class DuplicateChecker {
         result: {
           recommendation: 'new_quote',
           confidence: 0.5,
-          in_quotosaurus: false,
+          in_quotewise: false,
           matches: [],
           reasoning: 'Error occurred during duplicate check, proceeding as new quote',
           search_metadata: { error: true }

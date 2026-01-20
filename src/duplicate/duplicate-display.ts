@@ -19,6 +19,7 @@ export class DuplicateDisplay {
   private onOverride?: () => void;
   private onEditQuote?: () => void;
   private onChangeOriginator?: () => void;
+  private lastResult: DuplicateCheckResult | null = null;
 
   constructor(options: DuplicateDisplayOptions) {
     this.container = options.container;
@@ -57,6 +58,7 @@ export class DuplicateDisplay {
    * Render duplicate check results
    */
   private renderResults(result: DuplicateCheckResult, userOverride: boolean): void {
+    this.lastResult = result;  // Store for renderActions access
     const display = this.getRecommendationDisplay(result.recommendation);
     if (!display) {
       this.renderEmpty();
@@ -120,6 +122,7 @@ export class DuplicateDisplay {
   private renderMatch(match: DuplicateCheckResult['matches'][0]): string {
     const similarityPercentage = Math.round(match.similarity * 100);
     const similarityClass = this.getSimilarityClass(similarityPercentage);
+    const sightingBadge = this.renderSightingStatusBadge(match);
 
     return `
       <div class="duplicate-match">
@@ -131,8 +134,9 @@ export class DuplicateDisplay {
           <span class="workflow-status ${match.workflow_status.toLowerCase()}">
             ${this.formatWorkflowStatus(match.workflow_status)}
           </span>
+          ${sightingBadge}
         </div>
-        
+
         <div class="match-content">
           <div class="match-text">
             "${this.escapeHtml(this.truncateText(match.text, 150))}"
@@ -144,7 +148,7 @@ export class DuplicateDisplay {
             ` : ''}
           </div>
         </div>
-        
+
         <div class="match-actions">
           <button class="view-details-btn" data-action="view-details" data-quote-id="${match.quote_id}">
             View Details
@@ -155,9 +159,100 @@ export class DuplicateDisplay {
   }
 
   /**
-   * Render action buttons based on recommendation
+   * Render sighting status badge for platform awareness
+   */
+  private renderSightingStatusBadge(match: DuplicateCheckResult['matches'][0]): string {
+    const status = match.sighting_status;
+    if (!status || status === 'unknown') {
+      return '';
+    }
+
+    switch (status) {
+      case 'exact_url':
+        return `
+          <span class="sighting-badge sighting-exact" title="This exact URL is already captured">
+            🟢 Already captured
+          </span>
+        `;
+      case 'has_platform_sighting':
+        return `
+          <span class="sighting-badge sighting-platform" title="Quote has a sighting from this platform">
+            🟡 Platform sighting exists
+            ${match.platform_sighting_url ? `
+              <a href="${this.escapeHtml(match.platform_sighting_url)}" target="_blank" class="sighting-link">↗</a>
+            ` : ''}
+          </span>
+        `;
+      case 'no_platform_sighting':
+        return `
+          <span class="sighting-badge sighting-new" title="Quote exists but no sighting from this platform">
+            🔵 Add sighting
+          </span>
+        `;
+      default:
+        return '';
+    }
+  }
+
+  /**
+   * Render action buttons based on recommendation and sighting status
    */
   private renderActions(recommendation: string, userOverride: boolean): string {
+    // Get top match sighting status for platform awareness
+    const topMatch = this.lastResult?.matches[0];
+    const sightingStatus = topMatch?.sighting_status;
+
+    // Handle sighting-specific cases first
+    if (sightingStatus === 'exact_url') {
+      return `
+        <div class="duplicate-actions blocked">
+          <div class="action-message">
+            🟢 This exact URL is already captured in Quotewise. No action needed.
+          </div>
+          ${topMatch?.platform_sighting_url ? `
+            <div class="action-link">
+              <a href="${this.escapeHtml(topMatch.platform_sighting_url)}" target="_blank">
+                View existing sighting ↗
+              </a>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    if (sightingStatus === 'has_platform_sighting' && !userOverride) {
+      return `
+        <div class="duplicate-actions warning">
+          <div class="action-message">
+            🟡 This quote already has a sighting from this platform.
+          </div>
+          ${topMatch?.platform_sighting_url ? `
+            <div class="action-link">
+              <a href="${this.escapeHtml(topMatch.platform_sighting_url)}" target="_blank">
+                View existing sighting ↗
+              </a>
+            </div>
+          ` : ''}
+          <div class="action-buttons">
+            <button class="override-btn" data-action="override">
+              Add Anyway
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (sightingStatus === 'no_platform_sighting') {
+      return `
+        <div class="duplicate-actions info">
+          <div class="action-message">
+            🔵 Quote exists but no sighting from this platform. Adding this sighting is encouraged!
+          </div>
+        </div>
+      `;
+    }
+
+    // Fall back to recommendation-based actions
     switch (recommendation) {
       case 'new_quote':
         return `
