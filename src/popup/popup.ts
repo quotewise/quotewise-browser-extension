@@ -1028,47 +1028,49 @@ class SimpleQuotewisePopup {
 
   private async checkAuthStatus(): Promise<void> {
     debugLog('checkAuthStatus: Starting auth check');
-    
+
     this.stateManager.setState({
       auth: { checkInProgress: true },
-      ui: { 
+      ui: {
         currentView: 'loading',
-        loadingMessage: 'Checking authentication...' 
+        loadingMessage: 'Checking authentication...'
       }
     });
 
     try {
-      debugLog('checkAuthStatus: Sending CHECK_AUTH_STATUS message to service worker');
-      
+      debugLog('checkAuthStatus: Sending AUTH_STATE_GET message to service worker');
+
       // Set a reasonable timeout for auth check
-      const authPromise = chrome.runtime.sendMessage({ type: 'CHECK_AUTH_STATUS' });
-      const timeoutPromise = new Promise((_, reject) => 
+      const authPromise = chrome.runtime.sendMessage({ type: 'AUTH_STATE_GET' });
+      const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Auth check timeout')), 10000)
       );
-      
+
       const response = await Promise.race([authPromise, timeoutPromise]);
-      
+
       debugLog('checkAuthStatus: Received response from service worker:', response);
-      
+
       if (chrome.runtime.lastError) {
         console.error('checkAuthStatus: Chrome runtime error:', chrome.runtime.lastError);
         throw new Error(chrome.runtime.lastError.message);
       }
 
-      // More robust response validation
-      if (response && typeof response === 'object' && 'isAuthenticated' in response) {
-        if (response.isAuthenticated === true) {
+      // Validate AUTH_STATE_GET response format
+      if (response && typeof response === 'object' && response.success && response.data) {
+        const authState = response.data.state;
+
+        if (authState === 'AUTHENTICATED') {
           debugLog('checkAuthStatus: User is authenticated, calling handleAuthSuccess');
           this.handleAuthSuccess({
-            isAuthenticated: response.isAuthenticated,
-            isStaff: response.isStaff || false,
-            username: response.username
+            isAuthenticated: true,
+            isStaff: false, // OAuth doesn't provide staff status
+            username: response.data.username
           });
         } else {
-          debugLog('checkAuthStatus: User is not authenticated, calling handleAuthError');
+          debugLog('checkAuthStatus: User is not authenticated (state: ' + authState + '), calling handleAuthError');
           this.handleAuthError({
             type: 'not_authenticated',
-            message: 'Please log in to Quotewise',
+            message: response.data.error || 'Please log in to Quotewise',
             requiresLogin: true
           });
         }
@@ -1080,7 +1082,7 @@ class SimpleQuotewisePopup {
 
     } catch (error) {
       console.error('checkAuthStatus: Error occurred:', error);
-      
+
       // For timeout or network errors, try direct API fallback
       if (error instanceof Error && (error.message.includes('timeout') || error.message.includes('network'))) {
         debugLog('checkAuthStatus: Attempting direct API fallback due to network/timeout error');
@@ -1535,17 +1537,17 @@ class SimpleQuotewisePopup {
       };
     }
 
-    // Check if quote exists in Quotosaurus but not in user collections
+    // Check if quote exists in Quotewise but not in user collections
     const exactMatchExists = result.matches.some(match => match.similarity >= 95);
-    
-    if (result.in_quotosaurus || exactMatchExists) {
+
+    if (result.in_quotewise || exactMatchExists) {
       return {
         state: 'exists_not_collected',
         quoteText: tweet?.text?.substring(0, 50)
       };
     }
 
-    // New quote not in Quotosaurus
+    // New quote not in Quotewise
     return {
       state: 'new_quote',
       quoteText: tweet?.text?.substring(0, 50)

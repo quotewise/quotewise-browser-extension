@@ -38,7 +38,7 @@ quotewise-chrome-extension/
 ## Authentication
 
 The extension requires:
-1. An active session on quotosaurus.com
+1. An active session on quotewise.io
 2. Admin privileges for quote creation
 
 ## API Integration
@@ -75,7 +75,7 @@ See the [Product Backlog](./docs/delivery/backlog.md) for planned features and i
 - No storage of user credentials
 - All API calls use existing session authentication
 - Minimal permissions requested
-- Data transmitted only to quotosaurus.com
+- Data transmitted only to api.quotewise.io
 
 ## License
 

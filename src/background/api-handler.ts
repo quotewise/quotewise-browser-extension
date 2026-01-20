@@ -34,10 +34,6 @@ export class ApiHandler {
         try {
             
             switch (message.type) {
-                case 'CHECK_AUTH_STATUS':
-                    await this.handleCheckAuthStatus(message, sendResponse);
-                    break;
-                    
                 case 'SEARCH_ORIGINATORS':
                     await this.handleSearchOriginators(message, sendResponse);
                     break;
@@ -70,34 +66,6 @@ export class ApiHandler {
             sendResponse({
                 success: false,
                 error: error instanceof Error ? error.message : 'API request failed'
-            });
-        }
-    }
-    
-    /**
-     * Handle authentication status check
-     */
-    private async handleCheckAuthStatus(
-        _message: ExtensionMessage,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        sendResponse: (response: any) => void
-    ): Promise<void> {
-        try {
-            const authResult = await this.apiClient.checkAuthStatus();
-            
-            // Transform API response to match AuthChecker format (used by AuthenticationMonitor)
-            const transformedStatus = {
-                isAuthenticated: authResult.authenticated,
-                isStaff: authResult.is_admin || false,
-                username: authResult.user?.username
-            };
-            sendResponse(transformedStatus);
-        } catch (error) {
-            console.error('Error checking auth status:', error);
-            sendResponse({
-                isAuthenticated: false,
-                isStaff: false,
-                error: error instanceof Error ? error.message : 'Auth check failed'
             });
         }
     }
@@ -300,14 +268,22 @@ export class ApiHandler {
             });
         } catch (error) {
             console.error('Error in preflight check:', error);
+
+            // Check if this is an authentication error (401)
+            const isAuthError = error instanceof Error &&
+                (error.name === 'AuthenticationError' ||
+                 error.message.includes('401') ||
+                 error.message.includes('Authentication'));
+
             sendResponse({
                 success: false,
+                authRequired: isAuthError,  // Flag for caller to handle auth state
                 error: error instanceof Error ? error.message : 'Preflight check failed',
                 originator: { found: false },
                 duplicate_check: {
                     recommendation: 'new_quote',
                     confidence: 0.5,
-                    in_quotosaurus: false,
+                    in_quotewise: false,
                     matches: []
                 }
             });

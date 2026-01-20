@@ -241,7 +241,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       return {
         recommendation: 'new_quote',
         confidence: 1.0,
-        in_quotosaurus: false,
+        in_quotewise: false,
         matches: [],
         reasoning: 'No quote text provided',
         search_metadata: {}
@@ -275,7 +275,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       return {
         recommendation: 'new_quote',
         confidence: 0.5,
-        in_quotosaurus: false,
+        in_quotewise: false,
         matches: [],
         reasoning: 'Error occurred during duplicate check, proceeding as new quote',
         search_metadata: { error: true }
@@ -499,7 +499,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         duplicate_check: {
           recommendation: 'new_quote',
           confidence: 0.5,
-          in_quotosaurus: false,
+          in_quotewise: false,
           matches: [],
           reasoning: 'Error occurred during preflight check',
           search_metadata: { error: true }

@@ -15,6 +15,7 @@ import { debugLog } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
 import { initiateOAuthFlow, logout } from '../auth/auth-flow';
 import { initializeAuthStateManager, AuthStateManager } from '../auth/auth-state-manager';
+import { AuthState } from '../auth/auth-state-machine';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -226,6 +227,22 @@ chrome.runtime.onMessage.addListener((
         });
         break;
 
+      case MessageType.AUTH_STATE_GET:
+      case MessageType.AUTH_STATE_SUBSCRIBE:
+        // Return current auth state from AuthStateManager
+        if (authStateManager) {
+          sendResponse({
+            success: true,
+            data: authStateManager.getStateData()
+          });
+        } else {
+          sendResponse({
+            success: false,
+            error: 'Auth state manager not initialized'
+          });
+        }
+        break;
+
       default:
         console.warn('Unknown message type:', message.type);
         sendResponse({ error: 'Unknown message type' });
@@ -240,30 +257,58 @@ chrome.runtime.onMessage.addListener((
 
 /**
  * Update extension icon and title for tweet pages
- * Badge system:
- * - Green ✓: Tweet successfully processed and ready to capture
- * - Blue ○: Analyzing tweet data
- * - Regular icon: Authenticated (set by AuthenticationMonitor)
- * - Grey icon: Not authenticated (set by AuthenticationMonitor) 
- * - Orange ?: Insufficient privileges
+ * Badge system (auth-aware priority):
+ * 1. Auth errors (SESSION_EXPIRED) → Red "!" (don't override)
+ * 2. Insufficient privileges → Orange "?" (don't override)
+ * 3. Not authenticated → Grey (prompt in title, not alarming)
+ * 4. Authenticated + tweet processing → Show ★/✓/+/○
+ *
+ * Key insight: "Not logged in" is not an error - only use red for actual errors.
  */
 async function updateExtensionIconForTweetPage(tweetData?: TwitterData): Promise<void> {
   try {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tabs.length === 0) return;
-    
+
     const tabId = tabs[0].id;
     if (!tabId) return;
-    
+
+    // Check auth state first - auth badges take priority
+    if (authStateManager) {
+      const authState = authStateManager.getState();
+
+      // For SESSION_EXPIRED (actual error), don't override with processing badge
+      if (authState === AuthState.SESSION_EXPIRED) {
+        return;
+      }
+
+      // For INSUFFICIENT_PRIVILEGES, don't override
+      if (authState === AuthState.INSUFFICIENT_PRIVILEGES) {
+        return;
+      }
+
+      // For UNAUTHENTICATED, set grey badge with helpful tweet-page-specific title
+      if (authState === AuthState.UNAUTHENTICATED) {
+        chrome.action.setBadgeText({ tabId, text: '' });
+        chrome.action.setBadgeBackgroundColor({ tabId, color: '#9AA0A6' });
+        chrome.action.setTitle({
+          tabId,
+          title: 'Quotewise - Log in to capture this quote'
+        });
+        return;
+      }
+    }
+
+    // Only show tweet processing badges when authenticated
     if (tweetData) {
       // Tweet data extracted - show green check for successful processing
-      chrome.action.setBadgeText({ 
-        tabId: tabId, 
-        text: '✓' 
+      chrome.action.setBadgeText({
+        tabId: tabId,
+        text: '✓'
       });
-      chrome.action.setBadgeBackgroundColor({ 
-        tabId: tabId, 
-        color: '#4CAF50' 
+      chrome.action.setBadgeBackgroundColor({
+        tabId: tabId,
+        color: '#4CAF50'
       });
       chrome.action.setTitle({
         tabId: tabId,
@@ -271,13 +316,13 @@ async function updateExtensionIconForTweetPage(tweetData?: TwitterData): Promise
       });
     } else {
       // Tweet page detected but no data yet - show analyzing state
-      chrome.action.setBadgeText({ 
-        tabId: tabId, 
-        text: '○' 
+      chrome.action.setBadgeText({
+        tabId: tabId,
+        text: '○'
       });
-      chrome.action.setBadgeBackgroundColor({ 
-        tabId: tabId, 
-        color: '#2196F3' 
+      chrome.action.setBadgeBackgroundColor({
+        tabId: tabId,
+        color: '#2196F3'
       });
       chrome.action.setTitle({
         tabId: tabId,
@@ -307,7 +352,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     const isTweetPage = /https:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(tab.url);
 
     if (isTweetPage) {
-      // Show analyzing state initially
+      // Ensure services are initialized before checking auth state
+      await ensureServicesInitialized();
+      // Show analyzing state (or grey badge if unauthenticated)
       await updateExtensionIconForTweetPage();
     } else {
       // Clear tweet-specific icons on non-tweet pages
@@ -327,7 +374,9 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
   if (isTweetPage) {
     debugLog('SPA navigation detected to tweet page:', details.url);
 
-    // Show analyzing state
+    // Ensure services are initialized before checking auth state
+    await ensureServicesInitialized();
+    // Show analyzing state (or grey badge if unauthenticated)
     await updateExtensionIconForTweetPage();
 
     // Programmatically inject content script (may already be running)
@@ -384,6 +433,11 @@ async function handleTweetDataExtracted(
 
     debugLog('Tweet data stored:', validatedData.text.substring(0, 50) + '...');
 
+    // Clear stale preloaded caches to prevent race conditions
+    // This ensures overlay won't read outdated originator/duplicate data
+    // while new preflight is in progress
+    await chrome.storage.local.remove(['preloadedOriginator', 'preloadedDuplicateCheck']);
+
     const cacheKey = validatedData.url;
 
     // Check if there's already a pending request for this URL (prevent race conditions)
@@ -397,7 +451,7 @@ async function handleTweetDataExtracted(
     // Show processing state while we check for duplicates
     await updateCollectionBadgeForTweet('processing', validatedData.text, tabId);
 
-    // Check if quote already exists in Quotosaurus (async, don't block response)
+    // Check if quote already exists in Quotewise (async, don't block response)
     const checkPromise = checkQuoteCollectionStatus(validatedData, tabId).finally(() => {
       pendingDuplicateChecks.delete(cacheKey);
     });
@@ -415,7 +469,7 @@ async function handleTweetDataExtracted(
 }
 
 /**
- * Check if a quote exists in Quotosaurus and update badge accordingly
+ * Check if a quote exists in Quotewise and update badge accordingly
  * Uses single preflight API call for both originator lookup and duplicate check
  * (Reduces round-trips from 2 API calls to 1)
  */
@@ -426,6 +480,14 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
 
     if (!apiHandler) {
       debugLog('API handler not available for collection check');
+      return;
+    }
+
+    // Check auth state FIRST - only show collection badges when authenticated
+    // Being unauthenticated is NOT an error - just skip collection checking
+    // The badge update functions already handle showing grey badge for unauthenticated
+    if (authStateManager && !authStateManager.isAuthenticated()) {
+      debugLog('User not authenticated, skipping collection check (grey badge shown)');
       return;
     }
 
@@ -441,6 +503,7 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
     debugLog('Running preflight check for handle:', handle);
     const preflightResponse = await new Promise<{
       success: boolean;
+      authRequired?: boolean;  // True when 401/authentication error occurred
       originator?: {
         found: boolean;
         originator?: { id: number; full_name: string; slug: string; social_handles?: Record<string, string> };
@@ -451,7 +514,7 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         create_url?: string;
       };
       duplicate_check?: {
-        in_quotosaurus?: boolean;
+        in_quotewise?: boolean;
         existing_sightings_for_url?: Array<{ id: number; in_user_collections?: boolean }>;
         matches?: Array<{ similarity: number; in_user_collections?: boolean }>;
         recommendation?: string;
@@ -473,6 +536,18 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
     });
 
     if (!preflightResponse.success) {
+      // Check if this is an authentication error
+      if (preflightResponse.authRequired) {
+        debugLog('Preflight failed: authentication required');
+        // Notify AuthStateManager - it will set the "!" badge (per spec FR-005)
+        if (authStateManager) {
+          await authStateManager.onAuthFailure('Authentication required');
+        }
+        // DON'T call updateCollectionBadgeForTweet - let auth badge take precedence
+        return;
+      }
+
+      // Non-auth failure - show as new quote
       debugLog('Preflight check failed, showing as new quote');
       await updateCollectionBadgeForTweet('new_quote', tweetData.text, tabId);
       return;
@@ -546,7 +621,7 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
           // High similarity match exists but not in user's collection
           status = 'exists_not_collected';
         }
-        // Otherwise stays as 'new_quote' - in_quotosaurus alone doesn't mean THIS quote exists
+        // Otherwise stays as 'new_quote' - in_quotewise alone doesn't mean THIS quote exists
       }
     }
 
@@ -561,6 +636,7 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
 
 /**
  * Update badge for tweet collection status
+ * Only shows collection badges when authenticated - auth badges take priority
  */
 async function updateCollectionBadgeForTweet(
   state: 'processing' | 'already_collected' | 'exists_not_collected' | 'new_quote',
@@ -577,6 +653,33 @@ async function updateCollectionBadgeForTweet(
     }
     if (!targetTabId) return;
 
+    // Check auth state first - auth badges take priority over collection badges
+    if (authStateManager) {
+      const authState = authStateManager.getState();
+
+      // For SESSION_EXPIRED (actual error), don't override with collection badge
+      if (authState === AuthState.SESSION_EXPIRED) {
+        return;
+      }
+
+      // For INSUFFICIENT_PRIVILEGES, don't override
+      if (authState === AuthState.INSUFFICIENT_PRIVILEGES) {
+        return;
+      }
+
+      // For UNAUTHENTICATED, set grey badge (not collection badges)
+      if (authState === AuthState.UNAUTHENTICATED) {
+        chrome.action.setBadgeText({ tabId: targetTabId, text: '' });
+        chrome.action.setBadgeBackgroundColor({ tabId: targetTabId, color: '#9AA0A6' });
+        chrome.action.setTitle({
+          tabId: targetTabId,
+          title: 'Quotewise - Log in to capture this quote'
+        });
+        return;
+      }
+    }
+
+    // Only show collection badges when authenticated
     const preview = quoteText.substring(0, 50);
     let badge: { text: string; color: string; title: string };
 
@@ -599,7 +702,7 @@ async function updateCollectionBadgeForTweet(
         badge = {
           text: '+',
           color: '#FF9800', // Orange - exists but not in your collection
-          title: `In Quotosaurus (not in your collection): "${preview}..."`
+          title: `In Quotewise (not in your collection): "${preview}..."`
         };
         break;
       case 'new_quote':
@@ -764,7 +867,7 @@ function getCollectionBadgeConfig(badgeInfo: import('../types/chrome').Collectio
       return {
         text: '+',
         color: '#FF9800', // Orange - exists but not in your collection
-        title: `In Quotosaurus (not collected): ${quote}`
+        title: `In Quotewise (not collected): ${quote}`
       };
     
     case 'new_quote':

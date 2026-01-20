@@ -25,10 +25,7 @@ import { MessageType } from '../types/chrome';
 import {
   getStoredTokens,
   hasValidRefreshToken,
-  hasScope,
-  getAccessTokenExpiresIn,
 } from './token-storage';
-import { attemptTokenRefresh } from './token-refresh';
 
 /**
  * Singleton AuthStateManager for the service worker
@@ -95,11 +92,13 @@ export class AuthStateManager {
         this.stateData = storedState;
         debugLog('Restored auth state from storage:', storedState.state);
 
-        // If we were in a transitional state, re-check
+        // Re-check if state is transitional OR if we claim to be authenticated
+        // (need to re-validate tokens on service worker restart to catch expired sessions)
         if (
           storedState.state === AuthState.CHECKING ||
           storedState.state === AuthState.AUTHENTICATING ||
-          storedState.state === AuthState.UNKNOWN
+          storedState.state === AuthState.UNKNOWN ||
+          storedState.state === AuthState.AUTHENTICATED
         ) {
           await this.checkAuthState();
         }
@@ -203,7 +202,6 @@ export class AuthStateManager {
 
       // AuthStatus returned - authenticated
       const tokens = await getStoredTokens();
-      const expiresIn = await getAccessTokenExpiresIn();
 
       await this.transitionTo(AuthState.AUTHENTICATED, {
         username: authResult.username,
@@ -306,6 +304,8 @@ export class AuthStateManager {
 
   /**
    * Update the extension badge based on current state
+   * For error states (SESSION_EXPIRED), also update all tab-specific badges
+   * so the red "!" shows through everywhere, overriding any tweet-page badges.
    */
   private async updateBadge(): Promise<void> {
     const text = getStateBadgeText(this.stateData.state);
@@ -313,9 +313,23 @@ export class AuthStateManager {
     const title = `Quotewise - ${getStateMessage(this.stateData.state)}`;
 
     try {
+      // Set global badge
       await chrome.action.setBadgeText({ text });
       await chrome.action.setBadgeBackgroundColor({ color });
       await chrome.action.setTitle({ title });
+
+      // For SESSION_EXPIRED (actual error), also clear tab-specific badges
+      // so the red "!" shows through everywhere (overrides any tweet-page badges)
+      if (this.stateData.state === AuthState.SESSION_EXPIRED) {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.id) {
+            await chrome.action.setBadgeText({ tabId: tab.id, text });
+            await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color });
+            await chrome.action.setTitle({ tabId: tab.id, title });
+          }
+        }
+      }
     } catch (error) {
       // Badge update may fail if no active tabs
       debugLog('Badge update error:', error);

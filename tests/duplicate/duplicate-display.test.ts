@@ -96,7 +96,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_quote',
         confidence: 0.9,
-        in_quotosaurus: false,
+        in_quotewise: false,
         matches: [],
         reasoning: 'No similar quotes found',
         search_metadata: {}
@@ -125,7 +125,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
@@ -171,7 +171,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
@@ -219,7 +219,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
@@ -298,7 +298,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches,
         reasoning: 'Multiple similar quotes found',
         search_metadata: {}
@@ -332,7 +332,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [],
         reasoning: 'Duplicate found',
         search_metadata: {}
@@ -367,7 +367,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [],
         reasoning: 'Duplicate found',
         search_metadata: {}
@@ -397,7 +397,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [],
         reasoning: 'Similar quote found',
         search_metadata: {}
@@ -427,7 +427,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.9,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [],
         reasoning: 'Duplicate found',
         search_metadata: {}
@@ -459,7 +459,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: 'test-quote-id',
           version_id: 1,
@@ -526,7 +526,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches,
         reasoning: 'Multiple matches found',
         search_metadata: {}
@@ -566,7 +566,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'duplicate',
         confidence: 0.95,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
@@ -608,7 +608,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.85,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
@@ -654,7 +654,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: '1',
           version_id: 1,
@@ -700,7 +700,7 @@ describe('DuplicateDisplay', () => {
       const mockResult: DuplicateCheckResult = {
         recommendation: 'new_version',
         confidence: 0.8,
-        in_quotosaurus: true,
+        in_quotewise: true,
         matches: [{
           quote_id: '1',
           version_id: 1,

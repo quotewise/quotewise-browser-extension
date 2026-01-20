@@ -505,12 +505,12 @@ export class OverlayBar {
   }
 
   /**
-   * Check if user is authenticated via service worker
+   * Check if user is authenticated via AuthStateManager
    */
   private async checkAuthStatus(): Promise<{ isAuthenticated: boolean }> {
     try {
-      const response = await this.sendMessage({ type: MessageType.CHECK_AUTH_STATUS });
-      return { isAuthenticated: response.isAuthenticated === true };
+      const response = await this.sendMessage({ type: MessageType.AUTH_STATE_GET });
+      return { isAuthenticated: response.data?.state === 'AUTHENTICATED' };
     } catch {
       return { isAuthenticated: false };
     }
@@ -566,8 +566,18 @@ export class OverlayBar {
             }
           }
         } catch (error) {
-          // Fallback: open quotewise.io in new tab if OAuth fails
-          window.open('https://quotewise.io/login/', '_blank');
+          // Show error message if OAuth flow fails to start
+          console.error('OAuth login error:', error);
+          if (originatorInfo) {
+            originatorInfo.innerHTML = `
+              <span class="badge error">!</span>
+              <span>Unable to start login. Please reload the page and try again.</span>
+              <button class="primary" id="login-btn">Retry</button>
+            `;
+            this.shadow?.getElementById('login-btn')?.addEventListener('click', () => {
+              this.showLoginRequired();
+            });
+          }
         }
       });
     }
@@ -733,7 +743,7 @@ export class OverlayBar {
           this.captureState.lookupResult = 'not_found';
           this.captureState.createUrl = preloaded.create_url || null;
           const createLink = preloaded.create_url
-            ? `<a href="${this.escapeHtml(preloaded.create_url)}" target="_blank" rel="noopener" class="create-link">Create on Quotosaurus</a>`
+            ? `<a href="${this.escapeHtml(preloaded.create_url)}" target="_blank" rel="noopener" class="create-link">Create on Quotewise</a>`
             : '';
           this.updateOriginatorInfo(
             `<span class="badge warning">?</span>
@@ -778,7 +788,7 @@ export class OverlayBar {
         this.captureState.lookupResult = 'not_found';
         this.captureState.createUrl = response.create_url || null;
         const createLink = response.create_url
-          ? `<a href="${this.escapeHtml(response.create_url)}" target="_blank" rel="noopener" class="create-link">Create on Quotosaurus</a>`
+          ? `<a href="${this.escapeHtml(response.create_url)}" target="_blank" rel="noopener" class="create-link">Create on Quotewise</a>`
           : '';
         this.updateOriginatorInfo(
           `<span class="badge warning">?</span>
@@ -830,6 +840,15 @@ export class OverlayBar {
 
   private async submitQuote(): Promise<void> {
     if (!this.currentData || !this.captureState.originator) return;
+
+    // Block submission for exact_url matches (this URL is already captured)
+    const duplicateResult = this.captureState.duplicateResult;
+    const sightingStatus = duplicateResult?.matches?.[0]?.sighting_status;
+    if (sightingStatus === 'exact_url') {
+      // Submission should already be blocked via UI, but double-check here
+      this.updateSubmitButton(false, 'Already Captured');
+      return;
+    }
 
     this.captureState.isSubmitting = true;
     this.updateSubmitButton(false, 'Submitting...');
@@ -912,11 +931,25 @@ export class OverlayBar {
     const submitBtn = this.shadow?.getElementById('submit-btn') as HTMLButtonElement | null;
     if (submitBtn) {
       submitBtn.disabled = !enabled;
+      // Reset to default success style
+      submitBtn.className = 'success';
       if (text) {
         submitBtn.textContent = text;
       } else {
         submitBtn.textContent = 'Submit Quote';
       }
+    }
+  }
+
+  /**
+   * Update submit button with warning style (for platform sighting confirmation)
+   */
+  private updateSubmitButtonWarning(enabled: boolean, text: string): void {
+    const submitBtn = this.shadow?.getElementById('submit-btn') as HTMLButtonElement | null;
+    if (submitBtn) {
+      submitBtn.disabled = !enabled;
+      submitBtn.className = 'warning';
+      submitBtn.textContent = text;
     }
   }
 
@@ -961,6 +994,7 @@ export class OverlayBar {
 
   /**
    * Update duplicate info display (informational badge in quote preview row)
+   * Also updates submit button state based on sighting status
    */
   private updateDuplicateInfo(state: { checking: true } | { result: DuplicateCheckResult } | null): void {
     const quotePreviewRow = this.shadow?.querySelector('.quote-preview-row');
@@ -980,7 +1014,32 @@ export class OverlayBar {
       badge.title = 'Checking for duplicates...';
     } else {
       const { result } = state;
-      if (result.recommendation === 'duplicate') {
+
+      // Check sighting status from first match (takes priority over recommendation)
+      const firstMatch = result.matches?.[0];
+      const sightingStatus = firstMatch?.sighting_status;
+
+      if (sightingStatus === 'exact_url') {
+        // Exact URL match - submission should be blocked
+        badge.className += ' badge success';
+        badge.innerHTML = '🟢 Already captured';
+        badge.title = 'This exact URL is already in Quotewise';
+        // Block submission for exact URL matches
+        this.updateSubmitButton(false, 'Already Captured');
+      } else if (sightingStatus === 'has_platform_sighting') {
+        // Platform sighting exists - warn but allow override
+        badge.className += ' badge warning';
+        badge.innerHTML = '🟡 Platform sighting exists';
+        badge.title = 'A Twitter sighting exists for this quote - you can add another if needed';
+        // Keep submit enabled but change to warning style
+        this.updateSubmitButtonWarning(true, 'Add Another Sighting');
+      } else if (sightingStatus === 'no_platform_sighting') {
+        // Quote exists but no platform sighting - encourage adding
+        badge.className += ' badge info';
+        badge.innerHTML = '🔵 Add sighting';
+        badge.title = 'Quote exists but no Twitter sighting yet - adding this will create one';
+        // Keep submit enabled
+      } else if (result.recommendation === 'duplicate') {
         badge.className += ' badge warning';
         badge.innerHTML = '⚠️ Duplicate';
         badge.title = result.reasoning || 'This quote may already exist';
@@ -988,9 +1047,9 @@ export class OverlayBar {
         badge.className += ' badge info';
         badge.innerHTML = 'ℹ️ New version';
         badge.title = result.reasoning || 'Similar quote exists - will create new version';
-      } else if (result.in_quotosaurus) {
+      } else if (result.in_quotewise) {
         badge.className += ' badge success';
-        badge.innerHTML = '✓ In Quotosaurus';
+        badge.innerHTML = '✓ In Quotewise';
         badge.title = 'Quote already in collection';
       }
       // Don't show badge for new_quote - that's the expected case
@@ -1012,6 +1071,7 @@ export class OverlayBar {
     result?: DuplicateCheckResult;
     isAuthenticated?: boolean;
     scopes?: string[];
+    data?: { state?: string; username?: string; error?: string };
   }> {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, (response) => {

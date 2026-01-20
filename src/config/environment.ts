@@ -3,7 +3,7 @@
  * Supports multiple environments matching Django settings
  */
 
-import type { EnvironmentConfig, SessionConfig } from '../types/api';
+import type { EnvironmentConfig } from '../types/api';
 import type { OAuthConfig } from '../types/oauth';
 
 /**
@@ -49,35 +49,19 @@ export const ENVIRONMENTS: Record<string, EnvironmentConfig> = {
     development: {
         apiBaseUrl: 'http://api.quotewise.test:8000',
         webBaseUrl: 'http://quotewise.test:8000',
-        sessionCookieName: 'sessionid',
         secure: false  // Based on settings/test.py:153
     },
     staging: {
         apiBaseUrl: 'https://api.staging.quotewise.io',
         webBaseUrl: 'https://staging.quotewise.io',
-        sessionCookieName: 'stagingsessionid',  // settings/staging.py:78
         secure: true  // settings/staging.py:33
     },
     production: {
         apiBaseUrl: 'https://api.quotewise.io',
         webBaseUrl: 'https://quotewise.io',
-        sessionCookieName: 'sessionid',
         secure: true  // settings/production.py:120
     }
 };
-
-/**
- * Get session configuration for environment
- * Based on Django settings in quotewise/settings/deploy.py (lines 216-220)
- */
-export function getSessionConfig(environment: 'development' | 'staging' | 'production'): SessionConfig {
-    return {
-        cookieName: environment === 'staging' ? 'stagingsessionid' : 'sessionid',
-        maxAge: 1814400, // 3 weeks in seconds
-        secure: environment !== 'development',
-        httpOnly: true
-    };
-}
 
 /**
  * Detect current environment based on extension context
@@ -173,12 +157,7 @@ export function validateEnvironmentConfig(config: EnvironmentConfig): boolean {
         console.error('Environment config missing apiBaseUrl');
         return false;
     }
-    
-    if (!config.sessionCookieName) {
-        console.error('Environment config missing sessionCookieName');
-        return false;
-    }
-    
+
     // Validate URL format
     try {
         new URL(config.apiBaseUrl);
@@ -186,7 +165,7 @@ export function validateEnvironmentConfig(config: EnvironmentConfig): boolean {
         console.error('Invalid apiBaseUrl in environment config:', config.apiBaseUrl);
         return false;
     }
-    
+
     return true;
 }
 
@@ -213,10 +192,6 @@ export function getApiBaseUrl(): string {
 
 export function getWebBaseUrl(): string {
     return getEnvironmentConfig().webBaseUrl;
-}
-
-export function getSessionCookieName(): string {
-    return getEnvironmentConfig().sessionCookieName;
 }
 
 // OAuth Configuration

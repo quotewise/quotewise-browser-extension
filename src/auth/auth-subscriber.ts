@@ -14,7 +14,7 @@
  *   subscriber.unsubscribe();
  */
 
-import { AuthState, AuthStateData, getStateMessage, isAuthenticated, requiresLogin } from './auth-state-machine';
+import { AuthState, AuthStateData, getStateMessage, requiresLogin } from './auth-state-machine';
 import { MessageType } from '../types/chrome';
 import { debugLog } from '../config/environment';
 
