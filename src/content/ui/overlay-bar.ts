@@ -361,7 +361,7 @@ export class OverlayBar {
                 </div>
               </div>
               <div class="section right">
-                <button class="success" id="submit-btn" disabled>Submit Quote</button>
+                <!-- Action button inserted dynamically by updateActionButton() -->
               </div>
             </div>
           </div>
@@ -430,11 +430,9 @@ export class OverlayBar {
     if (!this.shadow) return;
     const refreshBtn = this.shadow.getElementById('refresh-btn');
     const closeBtn = this.shadow.getElementById('close-btn');
-    const submitBtn = this.shadow.getElementById('submit-btn');
 
     refreshBtn?.addEventListener('click', () => this.refresh());
     closeBtn?.addEventListener('click', () => this.hide());
-    submitBtn?.addEventListener('click', () => this.submitQuote());
 
     // Listen for auth state changes from AuthStateManager
     chrome.runtime.onMessage.addListener((message) => {
@@ -495,6 +493,9 @@ export class OverlayBar {
     // Update the quote preview to show selected text if any
     this.updateQuotePreview();
 
+    // Initialize action button based on current auth state
+    this.updateActionButton(true); // We know we're authenticated at this point
+
     // Start originator lookup by handle
     const handle = this.currentData.author?.username;
     if (handle) {
@@ -533,57 +534,11 @@ export class OverlayBar {
       originatorInfo.innerHTML = `
         <span class="badge warning">!</span>
         <span>Login required to capture quotes</span>
-        <button class="primary" id="login-btn">Login to Quotewise</button>
       `;
 
-      // Wire up login button to trigger OAuth flow directly
-      const loginBtn = this.shadow?.getElementById('login-btn');
-      loginBtn?.addEventListener('click', async () => {
-        // Update button to show loading state
-        if (loginBtn) {
-          loginBtn.textContent = 'Logging in...';
-          (loginBtn as HTMLButtonElement).disabled = true;
-        }
-
-        try {
-          const response = await this.sendMessage({ type: MessageType.OAUTH_LOGIN });
-          if (response.success) {
-            // Login successful - retry the capture flow
-            this.collapseCapture();
-            await this.expandCapture();
-          } else {
-            // Show error
-            if (originatorInfo) {
-              originatorInfo.innerHTML = `
-                <span class="badge error">!</span>
-                <span>Login failed: ${this.escapeHtml(response.error || 'Unknown error')}</span>
-                <button class="primary" id="login-btn">Try Again</button>
-              `;
-              // Re-wire the button for retry
-              this.shadow?.getElementById('login-btn')?.addEventListener('click', () => {
-                this.showLoginRequired();
-              });
-            }
-          }
-        } catch (error) {
-          // Show error message if OAuth flow fails to start
-          console.error('OAuth login error:', error);
-          if (originatorInfo) {
-            originatorInfo.innerHTML = `
-              <span class="badge error">!</span>
-              <span>Unable to start login. Please reload the page and try again.</span>
-              <button class="primary" id="login-btn">Retry</button>
-            `;
-            this.shadow?.getElementById('login-btn')?.addEventListener('click', () => {
-              this.showLoginRequired();
-            });
-          }
-        }
-      });
+      // Create Login button in right section
+      this.updateActionButton(false);
     }
-
-    // Disable submit button when not authenticated
-    this.updateSubmitButton(false);
   }
 
   /**
@@ -929,15 +884,19 @@ export class OverlayBar {
 
   private updateSubmitButton(enabled: boolean, text?: string): void {
     const submitBtn = this.shadow?.getElementById('submit-btn') as HTMLButtonElement | null;
-    if (submitBtn) {
-      submitBtn.disabled = !enabled;
-      // Reset to default success style
-      submitBtn.className = 'success';
-      if (text) {
-        submitBtn.textContent = text;
-      } else {
-        submitBtn.textContent = 'Submit Quote';
-      }
+
+    // Button might not exist if user is not authenticated
+    if (!submitBtn) {
+      return;
+    }
+
+    submitBtn.disabled = !enabled;
+    // Reset to default success style
+    submitBtn.className = 'success';
+    if (text) {
+      submitBtn.textContent = text;
+    } else {
+      submitBtn.textContent = 'Submit Quote';
     }
   }
 
@@ -946,10 +905,87 @@ export class OverlayBar {
    */
   private updateSubmitButtonWarning(enabled: boolean, text: string): void {
     const submitBtn = this.shadow?.getElementById('submit-btn') as HTMLButtonElement | null;
-    if (submitBtn) {
-      submitBtn.disabled = !enabled;
-      submitBtn.className = 'warning';
-      submitBtn.textContent = text;
+
+    // Button might not exist if user is not authenticated
+    if (!submitBtn) {
+      return;
+    }
+
+    submitBtn.disabled = !enabled;
+    submitBtn.className = 'warning';
+    submitBtn.textContent = text;
+  }
+
+  /**
+   * Updates the action button in the right section based on authentication state
+   * Shows Login button when not authenticated, Submit button when authenticated
+   */
+  private updateActionButton(isAuthenticated: boolean): void {
+    const rightSection = this.shadow?.querySelector('.originator-row .section.right');
+    if (!rightSection) return;
+
+    // Remove any existing action button
+    const existingButton = rightSection.querySelector('button');
+    if (existingButton) {
+      existingButton.remove();
+    }
+
+    if (!isAuthenticated) {
+      // Create Login button
+      const loginButton = document.createElement('button');
+      loginButton.className = 'primary';
+      loginButton.id = 'login-btn';
+      loginButton.textContent = 'Login to Quotewise';
+
+      loginButton.addEventListener('click', async () => {
+        loginButton.textContent = 'Logging in...';
+        loginButton.disabled = true;
+
+        try {
+          const response = await this.sendMessage({ type: MessageType.OAUTH_LOGIN });
+          if (response.success) {
+            // Login successful - retry the capture flow
+            this.collapseCapture();
+            await this.expandCapture();
+          } else {
+            // Show error in center section
+            const originatorInfo = this.shadow?.getElementById('originator-info');
+            if (originatorInfo) {
+              originatorInfo.innerHTML = `
+                <span class="badge error">!</span>
+                <span>Login failed: ${this.escapeHtml(response.error || 'Unknown error')}</span>
+              `;
+            }
+            // Re-enable login button for retry
+            loginButton.textContent = 'Retry Login';
+            loginButton.disabled = false;
+          }
+        } catch (error) {
+          console.error('OAuth login error:', error);
+          const originatorInfo = this.shadow?.getElementById('originator-info');
+          if (originatorInfo) {
+            originatorInfo.innerHTML = `
+              <span class="badge error">!</span>
+              <span>Unable to start login. Please reload the page and try again.</span>
+            `;
+          }
+          loginButton.textContent = 'Retry Login';
+          loginButton.disabled = false;
+        }
+      });
+
+      rightSection.appendChild(loginButton);
+    } else {
+      // Create Submit button
+      const submitButton = document.createElement('button');
+      submitButton.className = 'success';
+      submitButton.id = 'submit-btn';
+      submitButton.textContent = 'Submit Quote';
+      submitButton.disabled = true;
+
+      submitButton.addEventListener('click', () => this.submitQuote());
+
+      rightSection.appendChild(submitButton);
     }
   }
 
