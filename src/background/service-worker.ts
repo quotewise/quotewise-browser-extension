@@ -575,15 +575,8 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         });
         debugLog('Originator found:', originatorResult.originator.full_name);
       } else {
-        // Cache not-found result with create_url
-        await chrome.storage.local.set({
-          preloadedOriginator: {
-            handle: handle.toLowerCase(),
-            originator: null,
-            create_url: originatorResult.create_url,
-            timestamp: Date.now()
-          }
-        });
+        // Don't cache not-found results - we want fresh lookups each time
+        // in case the user creates the originator between visits
         debugLog('Originator not found for handle:', handle);
       }
     }
