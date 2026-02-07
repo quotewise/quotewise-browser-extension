@@ -202,6 +202,16 @@ chrome.runtime.onMessage.addListener((
           // Notify AuthStateManager of successful auth (handles badge)
           await authStateManager?.onAuthSuccess(undefined, tokens.scopes);
           sendResponse({ success: true, scopes: tokens.scopes });
+
+          // Re-check collection status for current tweet now that we're authenticated
+          // Without this, the badge stays green/empty after login instead of ★/✓/+
+          const stored = await chrome.storage.local.get('currentTweet');
+          if (stored.currentTweet?.data) {
+            const tabId = sender.tab?.id;
+            checkQuoteCollectionStatus(stored.currentTweet.data as TwitterData, tabId).catch(error => {
+              console.error('Error re-checking collection status after login:', error);
+            });
+          }
         }).catch(async error => {
           console.error('OAuth login failed:', error);
           // Notify AuthStateManager of failed auth

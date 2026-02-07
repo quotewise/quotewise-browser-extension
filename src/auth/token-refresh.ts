@@ -29,6 +29,18 @@ const MAX_RETRY_ATTEMPTS = 3;
 const RETRY_DELAY_MULTIPLIER = 2;
 
 /**
+ * Mutex for token refresh: prevents concurrent refresh attempts.
+ * When multiple code paths try to refresh simultaneously (e.g., alarm handler
+ * + service worker init + API 401 retry), only the first makes a server call.
+ * Subsequent callers wait for and reuse the in-flight result.
+ *
+ * This is critical because Django OAuth Toolkit rotates refresh tokens on use.
+ * A second concurrent refresh with the now-rotated old token gets invalid_grant,
+ * which would incorrectly trigger token clearing and log the user out.
+ */
+let refreshInFlight: Promise<TokenRefreshResult> | null = null;
+
+/**
  * Schedule a token refresh alarm
  * @param accessTokenExpiresAt Unix timestamp when access token expires
  */
@@ -59,6 +71,10 @@ export async function cancelTokenRefresh(): Promise<void> {
 export async function handleTokenRefreshAlarm(): Promise<void> {
   debugLog('Token refresh alarm triggered');
 
+  // Snapshot the current refresh token BEFORE attempting refresh
+  // so we can check if another path refreshed tokens while we were waiting
+  const preRefreshToken = await getRefreshToken();
+
   const result = await attemptTokenRefresh();
 
   if (result.success) {
@@ -74,9 +90,26 @@ export async function handleTokenRefreshAlarm(): Promise<void> {
       await clearTokens();
       notifyAuthRequired('Your session was revoked. Please log in again.');
     } else if (result.error === 'expired') {
-      // Refresh token expired
-      await clearTokens();
-      notifyAuthRequired('Your session has expired. Please log in again.');
+      // Before clearing tokens, check if another code path already refreshed
+      // successfully (which would have stored a new refresh token).
+      // This prevents a race condition where:
+      //   Path A refreshes successfully → stores new tokens
+      //   Path B (this alarm) tried with the old token → got invalid_grant
+      //   Path B clears ALL tokens, including Path A's fresh ones
+      const currentRefreshToken = await getRefreshToken();
+      if (currentRefreshToken && currentRefreshToken !== preRefreshToken) {
+        // Tokens were refreshed by another path - don't clear them
+        debugLog('Tokens were refreshed by another path, skipping clear');
+        // Schedule next refresh based on current tokens
+        const currentExpiresIn = await getAccessTokenExpiresIn();
+        if (currentExpiresIn > 0) {
+          scheduleTokenRefresh(Date.now() + currentExpiresIn);
+        }
+      } else {
+        // Refresh token hasn't changed - it's genuinely expired
+        await clearTokens();
+        notifyAuthRequired('Your session has expired. Please log in again.');
+      }
     } else {
       // Network error - retry with backoff
       scheduleRetry(1);
@@ -85,9 +118,34 @@ export async function handleTokenRefreshAlarm(): Promise<void> {
 }
 
 /**
- * Attempt to refresh the access token
+ * Attempt to refresh the access token.
+ * Uses a mutex to ensure only one refresh is in-flight at a time.
+ * Concurrent callers wait for and reuse the in-flight result.
  */
 export async function attemptTokenRefresh(retryCount = 0): Promise<TokenRefreshResult> {
+  // For initial calls (not retries), use the mutex
+  if (retryCount === 0 && refreshInFlight) {
+    debugLog('Token refresh already in-flight, waiting for result');
+    return refreshInFlight;
+  }
+
+  const refreshPromise = doAttemptTokenRefresh(retryCount);
+
+  // Only set the mutex for the initial call (retries are internal)
+  if (retryCount === 0) {
+    refreshInFlight = refreshPromise;
+    refreshPromise.finally(() => {
+      refreshInFlight = null;
+    });
+  }
+
+  return refreshPromise;
+}
+
+/**
+ * Internal token refresh implementation (no mutex)
+ */
+async function doAttemptTokenRefresh(retryCount: number): Promise<TokenRefreshResult> {
   // Check if we're online
   if (!navigator.onLine) {
     debugLog('Offline - skipping token refresh');
@@ -144,7 +202,7 @@ export async function attemptTokenRefresh(retryCount = 0): Promise<TokenRefreshR
       debugLog(`Retry ${retryCount + 1}/${MAX_RETRY_ATTEMPTS} for token refresh`);
       const delay = MIN_REFRESH_INTERVAL_MS * Math.pow(RETRY_DELAY_MULTIPLIER, retryCount);
       await new Promise(resolve => setTimeout(resolve, delay));
-      return attemptTokenRefresh(retryCount + 1);
+      return doAttemptTokenRefresh(retryCount + 1);
     }
 
     return {

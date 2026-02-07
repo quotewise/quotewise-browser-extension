@@ -74,17 +74,7 @@ module.exports = (env, argv) => {
     
     optimization: {
       minimize: isProduction,
-      splitChunks: {
-        chunks: 'all',
-        cacheGroups: {
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: 'vendors',
-            chunks: 'all',
-            enforce: true
-          }
-        }
-      }
+      splitChunks: false
     },
     
     // Chrome extension specific settings

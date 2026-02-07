@@ -190,8 +190,29 @@ export class AuthStateManager {
             });
             return AuthState.INSUFFICIENT_PRIVILEGES;
 
-          case 'not_authenticated':
           case 'network_error':
+            // Network error is transient. If we were previously authenticated,
+            // stay authenticated rather than forcing re-login. The user still
+            // has a valid refresh token - the server is just temporarily unreachable.
+            if (this.stateData.state === AuthState.CHECKING) {
+              // We were checking from a previously-known state.
+              // Check if we have a valid refresh token (sign we were authenticated).
+              const hasRefresh = await hasValidRefreshToken();
+              if (hasRefresh) {
+                debugLog('Network error during auth check, but refresh token exists - preserving auth state');
+                await this.transitionTo(AuthState.AUTHENTICATED, {
+                  error: 'Network error - using cached credentials',
+                });
+                return AuthState.AUTHENTICATED;
+              }
+            }
+            // Fall through to UNAUTHENTICATED if no refresh token
+            await this.transitionTo(AuthState.UNAUTHENTICATED, {
+              error: authResult.message,
+            });
+            return AuthState.UNAUTHENTICATED;
+
+          case 'not_authenticated':
           default:
             await this.transitionTo(AuthState.UNAUTHENTICATED, {
               error: authResult.message,
