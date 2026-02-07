@@ -51,8 +51,27 @@ export class AuthChecker {
         const refreshResult = await attemptTokenRefresh();
 
         if (!refreshResult.success) {
+          if (refreshResult.error === 'revoked') {
+            return {
+              type: 'session_expired',
+              message: refreshResult.message || 'Your session was revoked. Please log in again.',
+              requiresLogin: true
+            };
+          }
+
+          if (refreshResult.error === 'network_error') {
+            // Network error is transient - user still has a valid refresh token.
+            // Don't treat this as "not authenticated" which would force re-login.
+            return {
+              type: 'network_error',
+              message: refreshResult.message || 'Unable to refresh session',
+              requiresLogin: false
+            };
+          }
+
+          // Token genuinely expired (invalid_grant, expired_token)
           return {
-            type: refreshResult.error === 'revoked' ? 'session_expired' : 'not_authenticated',
+            type: 'not_authenticated',
             message: refreshResult.message || 'Please log in to Quotewise',
             requiresLogin: true
           };

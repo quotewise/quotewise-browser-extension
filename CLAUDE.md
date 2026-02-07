@@ -64,6 +64,10 @@ Service Worker (background context)
 Quotewise API (Django backend)
 ```
 
+### Webpack / MV3 Constraints
+
+**Code splitting is disabled** (`splitChunks: false`). MV3 service workers must be a single file — Chrome only loads the script declared in `manifest.json` and `importScripts()` is unavailable. Webpack's `splitChunks` extracts shared modules into separate chunk files (e.g. `182.js`), which the service worker can't load, causing it to crash on startup. Content scripts have the same single-file constraint. Keep `splitChunks: false` — the bundle size overhead is negligible for an extension.
+
 ### Entry Points (webpack)
 
 - `src/background/service-worker.ts` → Background service worker handling messaging, auth monitoring, API delegation, badge updates
@@ -172,6 +176,11 @@ Use these webpack/tsconfig aliases instead of deep relative imports:
 
 Tests live in `tests/` mirroring src structure. Chrome APIs are mocked in `tests/setup.ts`—extend those mocks rather than redefining. Tests run in jsdom environment.
 
+### Bug Reports (CRITICAL)
+When user reports a bug, don't start by trying to fix it. Instead:
+1. Write a test that reproduces the bug (test should fail)
+2. Use subagents to fix the bug and prove it with a passing test
+
 ## Key Files
 
 - `manifest.json` - Extension permissions, content script matching (twitter.com/x.com status pages)
@@ -196,3 +205,11 @@ Tests live in `tests/` mirroring src structure. Chrome APIs are mocked in `tests
 - Chrome messaging APIs (`sendResponse`) require `any` - use eslint-disable comments with explanation
 - Generic utilities (debounce, etc.) may need `any` in type parameters for proper inference - wrap with eslint-disable block
 - For error casting, use intersection types: `as Error & { name: string }` rather than `as any`
+
+## Philosophy
+
+This codebase will outlive you. Every shortcut becomes someone else's burden. Every hack compounds into technical debt that slows the whole team down.
+
+You are not just writing code. You are shaping the future of this project. The patterns you establish will be copied. The corners you cut will be cut again.
+
+Fight entropy. Leave the codebase better than you found it.

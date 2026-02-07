@@ -2,7 +2,7 @@
 
 **Created**: 2026-01-15
 **Status**: Implemented (v1.4.3)
-**Last Updated**: 2026-01-19 - Badge UX audit (contextual urgency)
+**Last Updated**: 2026-02-07 - Token refresh mutex, network resilience, post-login badge re-check
 
 ## Overview
 
@@ -52,10 +52,39 @@ User sees appropriate visual feedback based on auth state and context.
 
 **UX Philosophy**: "Not logged in" is an expected state, not an error. Only use red for actual errors (session expiry, network failures). Grey indicates inactive/available. Colors indicate active engagement.
 
+### User Story 5 - Post-Login Badge Update (P1)
+
+User logs in while on a tweet page with the overlay open.
+
+**Acceptance Requirements**:
+1. **When** OAuth login succeeds, service worker **MUST** re-check collection status for the current stored tweet
+2. Badge **MUST** update from green/empty (authenticated) to the correct collection badge (★/✓/+)
+3. The re-check **MUST NOT** block the login response to the overlay
+
+### User Story 6 - Network Resilience (P1)
+
+Network is temporarily unreachable during token refresh or auth check.
+
+**Acceptance Requirements**:
+1. **If** token refresh fails due to network error, auth checker **MUST** return `network_error` (not `not_authenticated`)
+2. **If** previously authenticated and network error occurs during auth check, system **MUST** preserve AUTHENTICATED state when a valid refresh token exists
+3. Network errors **MUST NOT** force re-login — only genuinely expired/revoked tokens should
+
+### User Story 7 - Concurrent Token Refresh Safety (P2)
+
+Multiple code paths attempt token refresh simultaneously (alarm handler + API 401 retry + service worker init).
+
+**Acceptance Requirements**:
+1. Only one token refresh request **MUST** be in-flight at a time (mutex)
+2. Concurrent callers **MUST** wait for and reuse the in-flight result
+3. **If** alarm handler's refresh fails but another path already refreshed, system **MUST NOT** clear the fresh tokens
+
 ### Edge Cases
 
 - **If** OAuth flow cancelled, **then** system **MUST** return to unauthenticated state
-- **If** token refresh fails, **then** system **MUST** transition to SESSION_EXPIRED
+- **If** token refresh fails with `revoked`, **then** system **MUST** transition to SESSION_EXPIRED
+- **If** token refresh fails with `expired` and token hasn't changed, **then** system **MUST** clear tokens and require login
+- **If** token refresh fails with `expired` but token was refreshed by another path, **then** system **MUST** keep the fresh tokens and reschedule
 - **If** service worker unavailable, **then** components **MUST** show UNKNOWN state gracefully
 - **If** unauthenticated and navigating to tweet page, badge **MUST NOT** show processing "○" (grey only)
 - **If** stored state says AUTHENTICATED but tokens are invalid/expired, system **MUST** detect this and transition to correct state (prevents stale session showing collection badges)
@@ -75,6 +104,11 @@ User sees appropriate visual feedback based on auth state and context.
 - **FR-009**: UNAUTHENTICATED **MUST NOT** be treated as an error state in `isErrorState()` helper
 - **FR-010**: Badge updates triggered by tab navigation **MUST** wait for AuthStateManager initialization before checking auth state
 - **FR-011**: **When** restoring AUTHENTICATED state from storage, system **MUST** re-validate tokens (stale session detection)
+- **FR-012**: **When** OAuth login succeeds, service worker **MUST** re-run `checkQuoteCollectionStatus()` for the current stored tweet to update the badge
+- **FR-013**: Token refresh **MUST** use a mutex (`refreshInFlight`) — only one refresh in-flight at a time, concurrent callers reuse the result
+- **FR-014**: `network_error` **MUST** be a distinct auth result type; **MUST NOT** be conflated with `not_authenticated`
+- **FR-015**: **When** network error occurs during auth check and a valid refresh token exists, system **MUST** preserve AUTHENTICATED state
+- **FR-016**: `handleTokenRefreshAlarm()` **MUST** snapshot the refresh token before attempting refresh and compare afterward to detect concurrent refresh by another path
 
 ### State Machine
 
@@ -131,12 +165,28 @@ States: UNKNOWN, CHECKING, AUTHENTICATED, UNAUTHENTICATED, SESSION_EXPIRED, AUTH
 | `src/auth/auth-state-manager.ts` | updateBadge() propagates SESSION_EXPIRED to all tabs; restoreState() re-validates AUTHENTICATED state (FR-011) |
 | `src/background/service-worker.ts` | updateExtensionIconForTweetPage() and updateCollectionBadgeForTweet() check auth state first; tab listeners call ensureServicesInitialized() before badge updates (FR-010) |
 
+### Token Refresh Mutex & Network Resilience
+| File | Changes |
+|------|---------|
+| `src/auth/token-refresh.ts` | Added `refreshInFlight` mutex to `attemptTokenRefresh()` (FR-013); `handleTokenRefreshAlarm()` snapshots pre-refresh token to detect concurrent refresh (FR-016); extracted `doAttemptTokenRefresh()` internal impl |
+| `src/auth/auth-checker.ts` | `checkAuthStatus()` returns distinct `network_error` type instead of `not_authenticated` for transient failures (FR-014) |
+| `src/auth/auth-state-manager.ts` | `checkAuthState()` preserves AUTHENTICATED on `network_error` when valid refresh token exists (FR-015) |
+
+### Post-Login Badge Re-check
+| File | Changes |
+|------|---------|
+| `src/background/service-worker.ts` | OAUTH_LOGIN handler re-runs `checkQuoteCollectionStatus()` for stored tweet after `onAuthSuccess()` (FR-012) |
+| `tests/background/post-login-badge.test.ts` | Structural test verifying post-login collection status re-check |
+
 ## Success Criteria
 
 - **SC-001**: Login prompt appears within 100ms when unauthenticated user expands capture
 - **SC-002**: Auth state syncs across contexts within 500ms of change
 - **SC-003**: State recovers correctly after service worker restart
 - **SC-004**: No API calls made before auth check passes
+- **SC-005**: Badge shows ★/✓/+ (not green/empty) within 2s of login completing on a tweet page
+- **SC-006**: Transient network failure does not force re-login when refresh token is valid
+- **SC-007**: Concurrent token refresh attempts do not cause logout (mutex prevents token rotation race)
 
 ## OAuth Endpoint Configuration
 
