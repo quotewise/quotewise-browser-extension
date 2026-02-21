@@ -24,6 +24,7 @@ build/
 
 # Claude Code local settings
 .claude/settings.local.json
+.mcp.json
 
 # OS files
 .DS_Store
