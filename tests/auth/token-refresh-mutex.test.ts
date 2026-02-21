@@ -23,7 +23,7 @@ describe('Token Refresh Mutex - structural verification', () => {
     expect(source).toContain('refreshInFlight');
 
     // Verify the mutex check (return existing promise if in-flight)
-    expect(source).toContain('if (retryCount === 0 && refreshInFlight)');
+    expect(source).toContain('if (refreshInFlight)');
 
     // Verify the mutex is set for new refreshes
     expect(source).toContain('refreshInFlight = refreshPromise');

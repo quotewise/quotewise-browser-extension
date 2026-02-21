@@ -22,10 +22,7 @@ const REFRESH_BUFFER_MS = 5 * 60 * 1000;
 /** Minimum time between refresh attempts */
 const MIN_REFRESH_INTERVAL_MS = 60 * 1000;
 
-/** Maximum retry attempts for failed refresh */
-const MAX_RETRY_ATTEMPTS = 3;
-
-/** Retry delay multiplier for exponential backoff */
+/** Retry delay multiplier for exponential backoff (used by scheduleRetry via chrome.alarms) */
 const RETRY_DELAY_MULTIPLIER = 2;
 
 /**
@@ -122,22 +119,18 @@ export async function handleTokenRefreshAlarm(): Promise<void> {
  * Uses a mutex to ensure only one refresh is in-flight at a time.
  * Concurrent callers wait for and reuse the in-flight result.
  */
-export async function attemptTokenRefresh(retryCount = 0): Promise<TokenRefreshResult> {
-  // For initial calls (not retries), use the mutex
-  if (retryCount === 0 && refreshInFlight) {
+export async function attemptTokenRefresh(): Promise<TokenRefreshResult> {
+  if (refreshInFlight) {
     debugLog('Token refresh already in-flight, waiting for result');
     return refreshInFlight;
   }
 
-  const refreshPromise = doAttemptTokenRefresh(retryCount);
+  const refreshPromise = doAttemptTokenRefresh();
 
-  // Only set the mutex for the initial call (retries are internal)
-  if (retryCount === 0) {
-    refreshInFlight = refreshPromise;
-    refreshPromise.finally(() => {
-      refreshInFlight = null;
-    });
-  }
+  refreshInFlight = refreshPromise;
+  refreshPromise.finally(() => {
+    refreshInFlight = null;
+  });
 
   return refreshPromise;
 }
@@ -145,7 +138,7 @@ export async function attemptTokenRefresh(retryCount = 0): Promise<TokenRefreshR
 /**
  * Internal token refresh implementation (no mutex)
  */
-async function doAttemptTokenRefresh(retryCount: number): Promise<TokenRefreshResult> {
+async function doAttemptTokenRefresh(): Promise<TokenRefreshResult> {
   // Check if we're online
   if (!navigator.onLine) {
     debugLog('Offline - skipping token refresh');
@@ -197,14 +190,9 @@ async function doAttemptTokenRefresh(retryCount: number): Promise<TokenRefreshRe
       }
     }
 
-    // Network or other error
-    if (retryCount < MAX_RETRY_ATTEMPTS) {
-      debugLog(`Retry ${retryCount + 1}/${MAX_RETRY_ATTEMPTS} for token refresh`);
-      const delay = MIN_REFRESH_INTERVAL_MS * Math.pow(RETRY_DELAY_MULTIPLIER, retryCount);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return doAttemptTokenRefresh(retryCount + 1);
-    }
-
+    // Network or other error — return immediately.
+    // The alarm handler (handleTokenRefreshAlarm) owns retry scheduling via chrome.alarms,
+    // which survives service worker termination (unlike setTimeout).
     return {
       success: false,
       error: 'network_error',
@@ -308,8 +296,12 @@ export async function initializeTokenRefresh(): Promise<void> {
 
     if (result.success) {
       scheduleTokenRefresh(result.tokens.accessTokenExpiresAt);
+    } else if (result.error === 'network_error') {
+      // Transient failure on startup — schedule alarm-based retry
+      // so we recover once network is available (survives SW termination)
+      debugLog('Startup refresh failed (network) - scheduling alarm retry');
+      scheduleRetry(1);
     }
-    // If refresh fails, the error handling in attemptTokenRefresh will handle it
   } else if (expiresIn < REFRESH_BUFFER_MS) {
     // Token expiring soon - refresh now
     debugLog('Access token expiring soon - refreshing');
@@ -317,6 +309,9 @@ export async function initializeTokenRefresh(): Promise<void> {
 
     if (result.success) {
       scheduleTokenRefresh(result.tokens.accessTokenExpiresAt);
+    } else if (result.error === 'network_error') {
+      debugLog('Startup refresh failed (network) - scheduling alarm retry');
+      scheduleRetry(1);
     }
   } else {
     // Token still valid - schedule refresh for later

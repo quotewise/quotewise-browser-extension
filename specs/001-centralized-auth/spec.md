@@ -2,7 +2,7 @@
 
 **Created**: 2026-01-15
 **Status**: Implemented (v1.4.3)
-**Last Updated**: 2026-02-07 - Token refresh mutex, network resilience, post-login badge re-check
+**Last Updated**: 2026-02-21 - Persistent token storage, alarm-based retry
 
 ## Overview
 
@@ -34,7 +34,7 @@ User logs in via popup while overlay is open.
 Service worker terminates and restarts (MV3 behavior).
 
 **Acceptance Requirements**:
-1. The system **MUST** persist auth state to `chrome.storage.session`
+1. The system **MUST** persist auth state to `chrome.storage.local`
 2. **When** service worker restarts, it **MUST** restore state from storage
 3. **If** state was transitional (CHECKING, AUTHENTICATING, UNKNOWN), system **MUST** re-validate tokens
 4. **If** state was AUTHENTICATED, system **MUST** re-validate tokens (catches expired sessions)
@@ -79,6 +79,17 @@ Multiple code paths attempt token refresh simultaneously (alarm handler + API 40
 2. Concurrent callers **MUST** wait for and reuse the in-flight result
 3. **If** alarm handler's refresh fails but another path already refreshed, system **MUST NOT** clear the fresh tokens
 
+### User Story 8 - Browser Restart Persistence (P1)
+
+User closes and reopens Chrome. Auth state should survive without network dependency.
+
+**Acceptance Requirements**:
+1. Access tokens and auth state **MUST** be persisted to `chrome.storage.local` (persistent across browser restarts)
+2. **When** browser restarts, extension **MUST** show AUTHENTICATED immediately (no CHECKING flash) if tokens exist
+3. **When** startup token refresh fails (transient network error), system **MUST** schedule alarm-based retry instead of silently giving up
+
+**Context**: `chrome.storage.session` is wiped on browser close/reopen. Previously, access tokens and auth state lived there, requiring a successful network call on every browser launch to restore auth. With a 90-day refresh token already in `chrome.storage.local`, there's no security benefit to ephemeral access token storage — the refresh token can always mint a new one.
+
 ### Edge Cases
 
 - **If** OAuth flow cancelled, **then** system **MUST** return to unauthenticated state
@@ -109,6 +120,9 @@ Multiple code paths attempt token refresh simultaneously (alarm handler + API 40
 - **FR-014**: `network_error` **MUST** be a distinct auth result type; **MUST NOT** be conflated with `not_authenticated`
 - **FR-015**: **When** network error occurs during auth check and a valid refresh token exists, system **MUST** preserve AUTHENTICATED state
 - **FR-016**: `handleTokenRefreshAlarm()` **MUST** snapshot the refresh token before attempting refresh and compare afterward to detect concurrent refresh by another path
+- **FR-017**: Access tokens and auth state **MUST** be stored in `chrome.storage.local` (persistent), NOT `chrome.storage.session` (ephemeral)
+- **FR-018**: Token refresh retry **MUST** use `chrome.alarms` (survives service worker termination), NOT `setTimeout`
+- **FR-019**: `initializeTokenRefresh()` **MUST** schedule an alarm retry when startup refresh fails
 
 ### State Machine
 
@@ -178,6 +192,13 @@ States: UNKNOWN, CHECKING, AUTHENTICATED, UNAUTHENTICATED, SESSION_EXPIRED, AUTH
 | `src/background/service-worker.ts` | OAUTH_LOGIN handler re-runs `checkQuoteCollectionStatus()` for stored tweet after `onAuthSuccess()` (FR-012) |
 | `tests/background/post-login-badge.test.ts` | Structural test verifying post-login collection status re-check |
 
+### Persistent Token Storage & Alarm-Based Retry
+| File | Changes |
+|------|---------|
+| `src/auth/token-storage.ts` | Access tokens moved from `chrome.storage.session` to `chrome.storage.local` (FR-017) |
+| `src/auth/auth-state-manager.ts` | Auth state persistence moved from `chrome.storage.session` to `chrome.storage.local` (FR-017) |
+| `src/auth/token-refresh.ts` | Removed `setTimeout` retry in `doAttemptTokenRefresh()` — alarm handler owns retries (FR-018); `initializeTokenRefresh()` schedules alarm retry on startup failure (FR-019) |
+
 ## Success Criteria
 
 - **SC-001**: Login prompt appears within 100ms when unauthenticated user expands capture
@@ -187,6 +208,7 @@ States: UNKNOWN, CHECKING, AUTHENTICATED, UNAUTHENTICATED, SESSION_EXPIRED, AUTH
 - **SC-005**: Badge shows ★/✓/+ (not green/empty) within 2s of login completing on a tweet page
 - **SC-006**: Transient network failure does not force re-login when refresh token is valid
 - **SC-007**: Concurrent token refresh attempts do not cause logout (mutex prevents token rotation race)
+- **SC-008**: Auth state survives browser close/reopen without network dependency
 
 ## OAuth Endpoint Configuration
 
@@ -213,6 +235,6 @@ tokenUrl: `${envConfig.webBaseUrl}/oauth/token`,
 
 ## Out of Scope
 
-- Token encryption at rest (uses chrome.storage built-in security)
+- Token encryption at rest (access tokens now in `chrome.storage.local` alongside refresh tokens; security tradeoff is negligible since the refresh token — which was always in local storage — can mint new access tokens at will)
 - Multi-account support
 - Offline queue for submissions
