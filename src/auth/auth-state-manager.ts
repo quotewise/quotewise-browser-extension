@@ -3,7 +3,7 @@
  * Single source of truth for auth state across the entire extension
  *
  * Key design principles:
- * - State persisted to chrome.storage.session for MV3 service worker recovery
+ * - State persisted to chrome.storage.local (survives browser restarts)
  * - Broadcasts state changes to all listeners (popup, overlay, content scripts)
  * - Integrates with existing AuthChecker for token validation
  */
@@ -81,11 +81,11 @@ export class AuthStateManager {
   }
 
   /**
-   * Restore state from chrome.storage.session after service worker restart
+   * Restore state from chrome.storage.local after service worker or browser restart
    */
   private async restoreState(): Promise<void> {
     try {
-      const stored = await chrome.storage.session.get(AUTH_STATE_STORAGE_KEY);
+      const stored = await chrome.storage.local.get(AUTH_STATE_STORAGE_KEY);
       const storedState = stored[AUTH_STATE_STORAGE_KEY] as AuthStateData | undefined;
 
       if (storedState) {
@@ -113,11 +113,11 @@ export class AuthStateManager {
   }
 
   /**
-   * Persist current state to chrome.storage.session
+   * Persist current state to chrome.storage.local
    */
   private async persistState(): Promise<void> {
     try {
-      await chrome.storage.session.set({
+      await chrome.storage.local.set({
         [AUTH_STATE_STORAGE_KEY]: this.stateData,
       });
     } catch (error) {

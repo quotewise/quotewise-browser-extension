@@ -1,7 +1,6 @@
 /**
  * Token storage module for OAuth 2.0 tokens
- * Access tokens: chrome.storage.session (ephemeral, cleared on browser close)
- * Refresh tokens: chrome.storage.local (persistent)
+ * All tokens stored in chrome.storage.local (persistent across browser restarts)
  */
 
 import type { OAuthTokens, OAuthTokenResponse } from '../types/oauth';
@@ -33,14 +32,10 @@ export async function storeTokens(response: OAuthTokenResponse): Promise<OAuthTo
   // Parse scopes from response
   const scopes = response.scope ? response.scope.split(' ') : [];
 
-  // Store access token in session storage (ephemeral)
-  await chrome.storage.session.set({
+  // Store all tokens in local storage (persistent across browser restarts)
+  await chrome.storage.local.set({
     [ACCESS_TOKEN_KEY]: response.access_token,
     [ACCESS_TOKEN_EXPIRES_KEY]: accessTokenExpiresAt,
-  });
-
-  // Store refresh token in local storage (persistent)
-  await chrome.storage.local.set({
     [REFRESH_TOKEN_KEY]: response.refresh_token,
     [REFRESH_TOKEN_EXPIRES_KEY]: refreshTokenExpiresAt,
     [TOKEN_SCOPES_KEY]: scopes,
@@ -62,21 +57,16 @@ export async function storeTokens(response: OAuthTokenResponse): Promise<OAuthTo
  * Returns null if no tokens are stored
  */
 export async function getStoredTokens(): Promise<OAuthTokens | null> {
-  // Get access token from session storage
-  const sessionData = await chrome.storage.session.get([
+  const localData = await chrome.storage.local.get([
     ACCESS_TOKEN_KEY,
     ACCESS_TOKEN_EXPIRES_KEY,
-  ]);
-
-  // Get refresh token from local storage
-  const localData = await chrome.storage.local.get([
     REFRESH_TOKEN_KEY,
     REFRESH_TOKEN_EXPIRES_KEY,
     TOKEN_SCOPES_KEY,
   ]);
 
-  const accessToken = sessionData[ACCESS_TOKEN_KEY] as string | undefined;
-  const accessTokenExpiresAt = sessionData[ACCESS_TOKEN_EXPIRES_KEY] as number | undefined;
+  const accessToken = localData[ACCESS_TOKEN_KEY] as string | undefined;
+  const accessTokenExpiresAt = localData[ACCESS_TOKEN_EXPIRES_KEY] as number | undefined;
   const refreshToken = localData[REFRESH_TOKEN_KEY] as string | undefined;
   const refreshTokenExpiresAt = localData[REFRESH_TOKEN_EXPIRES_KEY] as number | undefined;
   const scopes = (localData[TOKEN_SCOPES_KEY] as string[] | undefined) || [];
@@ -180,7 +170,7 @@ export async function updateAccessToken(
 ): Promise<void> {
   const accessTokenExpiresAt = Date.now() + (expiresIn * 1000);
 
-  await chrome.storage.session.set({
+  await chrome.storage.local.set({
     [ACCESS_TOKEN_KEY]: accessToken,
     [ACCESS_TOKEN_EXPIRES_KEY]: accessTokenExpiresAt,
   });
@@ -206,14 +196,9 @@ export async function updateRefreshToken(refreshToken: string): Promise<void> {
  * Clear all stored tokens (logout)
  */
 export async function clearTokens(): Promise<void> {
-  // Clear session storage
-  await chrome.storage.session.remove([
+  await chrome.storage.local.remove([
     ACCESS_TOKEN_KEY,
     ACCESS_TOKEN_EXPIRES_KEY,
-  ]);
-
-  // Clear local storage
-  await chrome.storage.local.remove([
     REFRESH_TOKEN_KEY,
     REFRESH_TOKEN_EXPIRES_KEY,
     TOKEN_SCOPES_KEY,
