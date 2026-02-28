@@ -5,6 +5,7 @@ import { AuthState } from '../../auth/auth-state-machine';
 import type { AuthStateData } from '../../auth/auth-state-machine';
 import { DuplicateBadge } from './components/duplicate-badge';
 import type { SubmitStateDirective } from './components/duplicate-badge';
+import { QuotePreview } from './components/quote-preview';
 
 type DataProvider = () => Promise<TwitterData | null>;
 
@@ -45,6 +46,7 @@ export class OverlayBar {
   private currentData: TwitterData | null = null;
   private duplicateBadge: DuplicateBadge | null = null;
   private duplicateBadgeContainer: HTMLElement | null = null;
+  private quotePreview: QuotePreview | null = null;
   private captureState: CaptureState = {
     expanded: false,
     isLookingUp: false,
@@ -549,23 +551,7 @@ export class OverlayBar {
    * Get selected text from the page (if within tweet content)
    */
   private getPageSelection(): string | null {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return null;
-
-    const selectedText = selection.toString().trim();
-    if (!selectedText) return null;
-
-    // Verify the selection is part of the tweet text
-    if (this.currentData?.text && this.currentData.text.includes(selectedText)) {
-      return selectedText;
-    }
-
-    // Selection might not be exact match due to formatting, but if it's reasonable length, use it
-    if (selectedText.length >= 10 && selectedText.length <= (this.currentData?.text?.length || 0)) {
-      return selectedText;
-    }
-
-    return null;
+    return QuotePreview.getPageSelection(this.currentData?.text);
   }
 
   /**
@@ -575,54 +561,28 @@ export class OverlayBar {
     const quotePreviewEl = this.shadow?.getElementById('quote-preview');
     if (!quotePreviewEl) return;
 
-    const textToSubmit = this.captureState.selectedText || this.currentData?.text || '';
-    const isPartial = !!this.captureState.selectedText;
-
-    if (isPartial) {
-      quotePreviewEl.innerHTML = `
-        <span class="badge info">Selection</span>
-        <span class="quote-text">"${this.escapeHtml(textToSubmit)}"</span>
-        <button class="clear-selection" id="clear-selection-btn" title="Use full tweet">✕</button>
-      `;
-      // Wire up clear button
-      const clearBtn = this.shadow?.getElementById('clear-selection-btn');
-      clearBtn?.addEventListener('click', () => {
-        this.captureState.selectedText = null;
-        this.updateQuotePreview();
+    if (!this.quotePreview) {
+      this.quotePreview = new QuotePreview(quotePreviewEl, {
+        onClearSelection: () => {
+          this.captureState.selectedText = null;
+          this.updateQuotePreview();
+        },
       });
-    } else {
-      const preview = textToSubmit.length > 100
-        ? textToSubmit.substring(0, 100) + '...'
-        : textToSubmit;
-      quotePreviewEl.innerHTML = `<span class="quote-text">"${this.escapeHtml(preview)}"</span>`;
     }
+
+    const textToSubmit = this.captureState.selectedText || this.currentData?.text || '';
+    this.quotePreview.update(textToSubmit, this.captureState.selectedText);
   }
 
   /**
    * Update quote preview to show success state (preserves Selection label if applicable)
    */
   private updateQuotePreviewSuccess(): void {
-    const quotePreviewEl = this.shadow?.getElementById('quote-preview');
-    if (!quotePreviewEl) return;
+    if (!this.quotePreview) return;
 
     const textSubmitted = this.captureState.selectedText || this.currentData?.text || '';
     const isPartial = !!this.captureState.selectedText;
-    const preview = textSubmitted.length > 80
-      ? textSubmitted.substring(0, 80) + '...'
-      : textSubmitted;
-
-    if (isPartial) {
-      quotePreviewEl.innerHTML = `
-        <span class="badge info">Selection</span>
-        <span class="badge success">✓ Submitted</span>
-        <span class="quote-text">"${this.escapeHtml(preview)}"</span>
-      `;
-    } else {
-      quotePreviewEl.innerHTML = `
-        <span class="badge success">✓ Submitted</span>
-        <span class="quote-text">"${this.escapeHtml(preview)}"</span>
-      `;
-    }
+    this.quotePreview.showSuccess(textSubmitted, isPartial);
   }
 
   private collapseCapture(): void {
