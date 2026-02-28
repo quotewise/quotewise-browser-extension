@@ -24,6 +24,7 @@ import { debugLog } from '../config/environment';
 import { MessageType } from '../types/chrome';
 import {
   getStoredTokens,
+  getAccessTokenExpiresIn,
   hasValidRefreshToken,
 } from './token-storage';
 
@@ -81,7 +82,14 @@ export class AuthStateManager {
   }
 
   /**
-   * Restore state from chrome.storage.local after service worker or browser restart
+   * Restore state from chrome.storage.local after service worker or browser restart.
+   *
+   * For AUTHENTICATED state: checks token expiry LOCALLY (Date.now() vs accessTokenExpiresAt).
+   * Only makes a network call if the token is actually expired. This prevents unnecessary
+   * network traffic and — critically — prevents logout when the service worker is killed
+   * mid-request during a network validation call.
+   *
+   * Token refresh scheduling is owned by initializeTokenRefresh(), not this method.
    */
   private async restoreState(): Promise<void> {
     try {
@@ -92,16 +100,38 @@ export class AuthStateManager {
         this.stateData = storedState;
         debugLog('Restored auth state from storage:', storedState.state);
 
-        // Re-check if state is transitional OR if we claim to be authenticated
-        // (need to re-validate tokens on service worker restart to catch expired sessions)
-        if (
+        if (storedState.state === AuthState.AUTHENTICATED) {
+          // Optimistic restore: check token expiry locally, no network call.
+          // initializeTokenRefresh() (called after this in ensureServicesInitialized)
+          // handles expired tokens and refresh scheduling.
+          const expiresIn = await getAccessTokenExpiresIn();
+          if (expiresIn > 0) {
+            debugLog('Access token still valid, restoring AUTHENTICATED (no network call)');
+            // State is already AUTHENTICATED from storage — just update badge
+            await this.updateBadge();
+          } else {
+            // Token expired — check if we can refresh
+            const hasRefresh = await hasValidRefreshToken();
+            if (hasRefresh) {
+              // Keep AUTHENTICATED — initializeTokenRefresh() will handle the refresh.
+              // Don't transition to CHECKING which causes badge flicker.
+              debugLog('Access token expired but refresh token exists, keeping AUTHENTICATED for now');
+              await this.updateBadge();
+            } else {
+              // No refresh token — genuinely unauthenticated
+              debugLog('No valid tokens, transitioning to UNAUTHENTICATED');
+              await this.transitionTo(AuthState.UNAUTHENTICATED);
+            }
+          }
+        } else if (
           storedState.state === AuthState.CHECKING ||
           storedState.state === AuthState.AUTHENTICATING ||
-          storedState.state === AuthState.UNKNOWN ||
-          storedState.state === AuthState.AUTHENTICATED
+          storedState.state === AuthState.UNKNOWN
         ) {
+          // Transitional states mean the SW was killed mid-operation — re-validate
           await this.checkAuthState();
         }
+        // UNAUTHENTICATED, SESSION_EXPIRED, INSUFFICIENT_PRIVILEGES: keep as-is
       } else {
         // No stored state, do initial check
         await this.checkAuthState();

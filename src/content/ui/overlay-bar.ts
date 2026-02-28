@@ -1058,14 +1058,24 @@ export class OverlayBar {
       if (sightingStatus === 'exact_url') {
         // Exact URL match - submission should be blocked
         badge.className += ' badge success';
-        badge.innerHTML = '🟢 Already captured';
+        const quoteUrl = firstMatch?.url || '';
+        if (quoteUrl) {
+          badge.innerHTML = `<a href="${quoteUrl}" target="_blank" style="color:inherit;text-decoration:none;">🟢 Already captured ↗</a>`;
+        } else {
+          badge.innerHTML = '🟢 Already captured';
+        }
         badge.title = 'This exact URL is already in Quotewise';
         // Block submission for exact URL matches
         this.updateSubmitButton(false, 'Already Captured');
       } else if (sightingStatus === 'has_platform_sighting') {
         // Platform sighting exists - warn but allow override
         badge.className += ' badge warning';
-        badge.innerHTML = '🟡 Platform sighting exists';
+        const quoteUrl = firstMatch?.url || '';
+        if (quoteUrl) {
+          badge.innerHTML = `<a href="${quoteUrl}" target="_blank" style="color:inherit;text-decoration:none;">🟡 Platform sighting exists ↗</a>`;
+        } else {
+          badge.innerHTML = '🟡 Platform sighting exists';
+        }
         badge.title = 'A Twitter sighting exists for this quote - you can add another if needed';
         // Keep submit enabled but change to warning style
         this.updateSubmitButtonWarning(true, 'Add Another Sighting');

@@ -62,6 +62,8 @@ export interface DuplicateCheckResult {
     workflow_status: string;
     likes_count: number;
     // Sighting status for platform awareness
+    short_code?: string;
+    url?: string;
     sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
     platform_sighting_url?: string | null;
   }>;

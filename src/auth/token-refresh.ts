@@ -61,11 +61,22 @@ export async function cancelTokenRefresh(): Promise<void> {
   debugLog('Token refresh alarm cancelled');
 }
 
+/** Result of handling a token refresh alarm */
+export interface TokenRefreshAlarmResult {
+  /** Whether refresh succeeded */
+  success: boolean;
+  /** On success: 'refreshed'. On failure: 'revoked', 'expired', 'concurrent_refresh', 'network_error' */
+  outcome: 'refreshed' | 'revoked' | 'expired' | 'concurrent_refresh' | 'network_error';
+  /** Human-readable message for error states */
+  message?: string;
+}
+
 /**
- * Handle the token refresh alarm
- * Called when the alarm fires
+ * Handle the token refresh alarm.
+ * Returns the result so the caller (service worker) can route it through AuthStateManager.
+ * Does NOT directly manipulate badge, storage, or auth state — the caller owns that.
  */
-export async function handleTokenRefreshAlarm(): Promise<void> {
+export async function handleTokenRefreshAlarm(): Promise<TokenRefreshAlarmResult> {
   debugLog('Token refresh alarm triggered');
 
   // Snapshot the current refresh token BEFORE attempting refresh
@@ -77,41 +88,39 @@ export async function handleTokenRefreshAlarm(): Promise<void> {
   if (result.success) {
     // Schedule next refresh
     scheduleTokenRefresh(result.tokens.accessTokenExpiresAt);
-  } else {
-    // Handle failure
-    debugLog('Token refresh failed:', result.error);
-
-    if (result.error === 'revoked') {
-      // Token family was revoked (possible theft)
-      // Clear all tokens and require re-authentication
-      await clearTokens();
-      notifyAuthRequired('Your session was revoked. Please log in again.');
-    } else if (result.error === 'expired') {
-      // Before clearing tokens, check if another code path already refreshed
-      // successfully (which would have stored a new refresh token).
-      // This prevents a race condition where:
-      //   Path A refreshes successfully → stores new tokens
-      //   Path B (this alarm) tried with the old token → got invalid_grant
-      //   Path B clears ALL tokens, including Path A's fresh ones
-      const currentRefreshToken = await getRefreshToken();
-      if (currentRefreshToken && currentRefreshToken !== preRefreshToken) {
-        // Tokens were refreshed by another path - don't clear them
-        debugLog('Tokens were refreshed by another path, skipping clear');
-        // Schedule next refresh based on current tokens
-        const currentExpiresIn = await getAccessTokenExpiresIn();
-        if (currentExpiresIn > 0) {
-          scheduleTokenRefresh(Date.now() + currentExpiresIn);
-        }
-      } else {
-        // Refresh token hasn't changed - it's genuinely expired
-        await clearTokens();
-        notifyAuthRequired('Your session has expired. Please log in again.');
-      }
-    } else {
-      // Network error - retry with backoff
-      scheduleRetry(1);
-    }
+    return { success: true, outcome: 'refreshed' };
   }
+
+  // Handle failure
+  debugLog('Token refresh failed:', result.error);
+
+  if (result.error === 'revoked') {
+    await clearTokens();
+    return { success: false, outcome: 'revoked', message: 'Your session was revoked. Please log in again.' };
+  }
+
+  if (result.error === 'expired') {
+    // Before clearing tokens, check if another code path already refreshed
+    // successfully (which would have stored a new refresh token).
+    const currentRefreshToken = await getRefreshToken();
+    if (currentRefreshToken && currentRefreshToken !== preRefreshToken) {
+      // Tokens were refreshed by another path - don't clear them
+      debugLog('Tokens were refreshed by another path, skipping clear');
+      const currentExpiresIn = await getAccessTokenExpiresIn();
+      if (currentExpiresIn > 0) {
+        scheduleTokenRefresh(Date.now() + currentExpiresIn);
+      }
+      return { success: true, outcome: 'concurrent_refresh' };
+    }
+
+    // Refresh token hasn't changed - it's genuinely expired
+    await clearTokens();
+    return { success: false, outcome: 'expired', message: 'Your session has expired. Please log in again.' };
+  }
+
+  // Network error - retry with backoff
+  scheduleRetry(1);
+  return { success: false, outcome: 'network_error', message: 'Network error during token refresh' };
 }
 
 /**
@@ -259,22 +268,6 @@ function scheduleRetry(attemptNumber: number): void {
 }
 
 /**
- * Notify the user that re-authentication is required
- * This should update the extension badge and state
- */
-function notifyAuthRequired(message: string): void {
-  debugLog('Auth required:', message);
-
-  // Update badge to indicate auth needed
-  chrome.action.setBadgeText({ text: '!' });
-  chrome.action.setBadgeBackgroundColor({ color: '#FF6B6B' });
-  chrome.action.setTitle({ title: `Quotewise: ${message}` });
-
-  // Store auth required state for popup/content script
-  chrome.storage.local.set({ authRequired: true, authMessage: message });
-}
-
-/**
  * Initialize token refresh on service worker startup
  * Restores refresh scheduling if tokens exist
  */
@@ -319,9 +312,3 @@ export async function initializeTokenRefresh(): Promise<void> {
   }
 }
 
-/**
- * Clear auth required state (called after successful re-auth)
- */
-export async function clearAuthRequiredState(): Promise<void> {
-  await chrome.storage.local.remove(['authRequired', 'authMessage']);
-}

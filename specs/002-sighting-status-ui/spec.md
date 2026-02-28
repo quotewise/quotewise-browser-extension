@@ -2,6 +2,7 @@
 
 **Created**: 2026-01-19
 **Status**: Implemented
+**Last Updated**: 2026-02-22 - Cross-reference badge race fix from Spec 001 v1.4.4
 
 ## Overview
 
@@ -131,6 +132,17 @@ User navigates to a tweet for a quote that exists but has no Twitter sighting.
 
 - Spec 001: Centralized Auth State Management (auth required for duplicate checks)
 - Backend API: Duplicate check endpoint returning `sighting_status` field
+
+### Related: Extension Icon Badge vs Overlay Sighting Badge
+
+These are two distinct badge systems that share the same duplicate check data:
+
+| System | Location | Shows | Owned By |
+|--------|----------|-------|----------|
+| **Extension icon badge** | Chrome toolbar icon | ★/✓/+/○ | `service-worker.ts` → `updateCollectionBadgeForTweet()` |
+| **Overlay sighting badge** | Inside overlay bar UI | "Already captured" / "Platform sighting exists" / "Add sighting" | `overlay-bar.ts` → `updateDuplicateInfo()` |
+
+**v1.4.4 fix**: The extension icon badge had a race condition where `tabs.onUpdated` would overwrite the final collection badge (★/✓/+) with `○` (analyzing) when both handlers ran concurrently on cold service worker startup. Fixed by removing the `○` badge from `updateExtensionIconForTweetPage()` — the `TWEET_DATA_EXTRACTED` handler now exclusively owns the collection badge lifecycle. The overlay sighting badges were not affected (they live inside the overlay DOM, not the toolbar icon).
 
 ## Out of Scope
 
