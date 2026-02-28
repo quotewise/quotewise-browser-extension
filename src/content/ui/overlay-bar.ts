@@ -3,6 +3,8 @@ import { MessageType } from '../../types';
 import type { DuplicateCheckResult, OriginatorSearchResult } from '../../types/api';
 import { AuthState } from '../../auth/auth-state-machine';
 import type { AuthStateData } from '../../auth/auth-state-machine';
+import { DuplicateBadge } from './components/duplicate-badge';
+import type { SubmitStateDirective } from './components/duplicate-badge';
 
 type DataProvider = () => Promise<TwitterData | null>;
 
@@ -41,6 +43,8 @@ export class OverlayBar {
   private dataProvider: DataProvider;
   private currentPlatformLabel = 'Twitter';
   private currentData: TwitterData | null = null;
+  private duplicateBadge: DuplicateBadge | null = null;
+  private duplicateBadgeContainer: HTMLElement | null = null;
   private captureState: CaptureState = {
     expanded: false,
     isLookingUp: false,
@@ -1036,75 +1040,26 @@ export class OverlayBar {
     const quotePreviewRow = this.shadow?.querySelector('.quote-preview-row');
     if (!quotePreviewRow) return;
 
-    // Remove existing duplicate badge if any
-    const existingBadge = quotePreviewRow.querySelector('.duplicate-badge');
-    existingBadge?.remove();
-
-    if (!state) return;
-
-    const badge = document.createElement('span');
-    badge.className = 'duplicate-badge';
-
-    if ('checking' in state) {
-      badge.innerHTML = '<div class="spinner" style="width:12px;height:12px;"></div>';
-      badge.title = 'Checking for duplicates...';
-    } else {
-      const { result } = state;
-
-      // Check sighting status from first match (takes priority over recommendation)
-      const firstMatch = result.matches?.[0];
-      const sightingStatus = firstMatch?.sighting_status;
-
-      if (sightingStatus === 'exact_url') {
-        // Exact URL match - submission should be blocked
-        badge.className += ' badge success';
-        const quoteUrl = firstMatch?.url || '';
-        if (quoteUrl) {
-          badge.innerHTML = `<a href="${quoteUrl}" target="_blank" style="color:inherit;text-decoration:none;">🟢 Already captured ↗</a>`;
-        } else {
-          badge.innerHTML = '🟢 Already captured';
-        }
-        badge.title = 'This exact URL is already in Quotewise';
-        // Block submission for exact URL matches
-        this.updateSubmitButton(false, 'Already Captured');
-      } else if (sightingStatus === 'has_platform_sighting') {
-        // Platform sighting exists - warn but allow override
-        badge.className += ' badge warning';
-        const quoteUrl = firstMatch?.url || '';
-        if (quoteUrl) {
-          badge.innerHTML = `<a href="${quoteUrl}" target="_blank" style="color:inherit;text-decoration:none;">🟡 Platform sighting exists ↗</a>`;
-        } else {
-          badge.innerHTML = '🟡 Platform sighting exists';
-        }
-        badge.title = 'A Twitter sighting exists for this quote - you can add another if needed';
-        // Keep submit enabled but change to warning style
-        this.updateSubmitButtonWarning(true, 'Add Another Sighting');
-      } else if (sightingStatus === 'no_platform_sighting') {
-        // Quote exists but no platform sighting - encourage adding
-        badge.className += ' badge info';
-        badge.innerHTML = '🔵 Add sighting';
-        badge.title = 'Quote exists but no Twitter sighting yet - adding this will create one';
-        // Keep submit enabled
-      } else if (result.recommendation === 'duplicate') {
-        badge.className += ' badge warning';
-        badge.innerHTML = '⚠️ Duplicate';
-        badge.title = result.reasoning || 'This quote may already exist';
-      } else if (result.recommendation === 'new_version') {
-        badge.className += ' badge info';
-        badge.innerHTML = 'ℹ️ New version';
-        badge.title = result.reasoning || 'Similar quote exists - will create new version';
-      } else if (result.in_quotewise) {
-        badge.className += ' badge success';
-        badge.innerHTML = '✓ In Quotewise';
-        badge.title = 'Quote already in collection';
-      }
-      // Don't show badge for new_quote - that's the expected case
+    // Lazily create the badge container and component
+    if (!this.duplicateBadgeContainer) {
+      this.duplicateBadgeContainer = document.createElement('span');
+      this.duplicateBadgeContainer.className = 'duplicate-badge';
+      quotePreviewRow.querySelector('.section.center')?.appendChild(this.duplicateBadgeContainer);
     }
 
-    if (badge.innerHTML) {
-      badge.style.marginLeft = '8px';
-      quotePreviewRow.querySelector('.section.center')?.appendChild(badge);
+    if (!this.duplicateBadge) {
+      this.duplicateBadge = new DuplicateBadge(this.duplicateBadgeContainer, {
+        onSubmitStateChange: (directive: SubmitStateDirective) => {
+          if (directive.style === 'warning') {
+            this.updateSubmitButtonWarning(directive.enabled, directive.text);
+          } else {
+            this.updateSubmitButton(directive.enabled, directive.text);
+          }
+        },
+      });
     }
+
+    this.duplicateBadge.update(state);
   }
 
   private sendMessage(message: { type: MessageType; data?: unknown }): Promise<{
