@@ -72,7 +72,6 @@ Quotewise API (Django backend)
 
 - `src/background/service-worker.ts` → Background service worker handling messaging, auth monitoring, API delegation, badge updates
 - `src/content/index.ts` → Content script orchestrator that selects platform adapters
-- `src/popup/popup.ts` → Extension popup (currently disabled in favor of in-page overlay)
 
 ### Platform Adapter Pattern
 
@@ -105,7 +104,7 @@ API-related messages are delegated from service-worker to `api-handler.ts`.
 
 ### Caching Strategy
 
-- **In-memory cache** (`originatorCache` in overlay-bar.ts): Session-lifetime cache for originator lookups by handle
+- **In-memory cache** (`originatorCache` in originator-lookup.ts): Session-lifetime cache for originator lookups by handle
 - **chrome.storage.local**:
   - `currentTweet` - Current tweet data for popup/overlay access
   - `preloadedOriginator` - Originator lookup result (60s TTL)
@@ -134,23 +133,18 @@ src/
 │   ├── index.ts         # ContentOrchestrator entry point
 │   ├── common.ts        # Shared utilities (cleanUrl, parseNumber, etc.)
 │   └── ui/
-│       └── overlay-bar.ts # In-page capture UI with originator lookup
+│       ├── overlay-bar.ts  # Orchestrator: Shadow DOM, state, capture flow
+│       └── components/
+│           ├── duplicate-badge.ts    # Duplicate status badge with Quotewise links
+│           ├── quote-preview.ts      # Quote text display, selection handling
+│           ├── originator-lookup.ts  # Handle lookup with cache + preload
+│           └── action-button.ts      # Submit/Login button management
 ├── config/
 │   └── environment.ts   # Environment detection and config
-├── duplicate/           # Duplicate checking components
-│   ├── duplicate-checker.ts  # Duplicate check logic and state
-│   └── duplicate-display.ts  # Duplicate check UI rendering
-├── lookup/              # Originator lookup components
-│   ├── handle-lookup.ts      # Handle lookup logic and state
-│   └── handle-lookup-display.ts # Handle lookup UI rendering
 ├── platforms/           # Platform adapters
 │   ├── types.ts         # PlatformAdapter interface
 │   └── twitter/
 │       └── adapter.ts   # Twitter/X DOM extraction
-├── popup/
-│   └── popup.ts         # Extension popup (disabled)
-├── search/              # Search components
-│   └── originator-search.ts
 ├── types/               # TypeScript type definitions
 │   ├── api.ts           # API request/response types
 │   ├── auth.ts          # Auth types
@@ -167,7 +161,6 @@ Use these webpack/tsconfig aliases instead of deep relative imports:
 - `@api` → `src/api`
 - `@types` → `src/types`
 - `@content` → `src/content`
-- `@popup` → `src/popup`
 - `@background` → `src/background`
 - `@config` → `src/config`
 - `@platforms` → `src/platforms`
@@ -184,7 +177,8 @@ When user reports a bug, don't start by trying to fix it. Instead:
 ## Key Files
 
 - `manifest.json` - Extension permissions, content script matching (twitter.com/x.com status pages)
-- `src/content/ui/overlay-bar.ts` - In-page capture UI with originator lookup, duplicate check display, quote submission
+- `src/content/ui/overlay-bar.ts` - Overlay bar orchestrator (Shadow DOM, state, capture flow)
+- `src/content/ui/components/` - UI components: duplicate-badge, quote-preview, originator-lookup, action-button
 - `src/api/quotewise-api.ts` - Django API client with session auth
 - `src/api/csrf-utils.ts` - CSRF token handling for Django
 - `src/background/service-worker.ts` - Message routing, preloading, badge updates
