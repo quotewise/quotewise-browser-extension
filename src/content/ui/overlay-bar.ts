@@ -6,15 +6,9 @@ import type { AuthStateData } from '../../auth/auth-state-machine';
 import { DuplicateBadge } from './components/duplicate-badge';
 import type { SubmitStateDirective } from './components/duplicate-badge';
 import { QuotePreview } from './components/quote-preview';
+import { OriginatorLookup } from './components/originator-lookup';
 
 type DataProvider = () => Promise<TwitterData | null>;
-
-/**
- * Session cache for successful originator lookups by handle
- * Only caches found originators - IDs don't change so cache for life of session
- * Not-found results are not cached so we re-check in case user creates the originator
- */
-const originatorCache = new Map<string, OriginatorSearchResult>();
 
 interface CaptureState {
   expanded: boolean;
@@ -47,6 +41,7 @@ export class OverlayBar {
   private duplicateBadge: DuplicateBadge | null = null;
   private duplicateBadgeContainer: HTMLElement | null = null;
   private quotePreview: QuotePreview | null = null;
+  private originatorLookup: OriginatorLookup | null = null;
   private captureState: CaptureState = {
     expanded: false,
     isLookingUp: false,
@@ -507,7 +502,7 @@ export class OverlayBar {
     if (handle) {
       await this.lookupOriginator(handle);
     } else {
-      this.updateOriginatorInfo('No author handle available', 'error');
+      this.setOriginatorHtml('<span class="badge error">!</span> <span>No author handle available</span>');
     }
   }
 
@@ -605,155 +600,55 @@ export class OverlayBar {
       duplicateResult: null
     };
 
-    this.updateOriginatorInfo('Looking up originator...', 'status');
+    this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.updateSubmitButton(false);
     this.updateDuplicateInfo(null);
   }
 
   private async lookupOriginator(handle: string): Promise<void> {
-    const cacheKey = handle.toLowerCase();
-
-    // Check in-memory cache first - only successful lookups are cached
-    const cached = originatorCache.get(cacheKey);
-    if (cached) {
-      this.captureState.lookupResult = 'found';
-      this.captureState.originator = cached;
-      this.updateOriginatorInfo(
-        `<span class="badge success">✓</span>
-         <span class="originator-name">${this.escapeHtml(cached.full_name)}</span>
-         <span class="originator-handle">@${this.escapeHtml(handle)}</span>
-         <span class="cache-indicator">(cached)</span>`,
-        'found'
+    // Lazily create the OriginatorLookup component
+    if (!this.originatorLookup) {
+      const infoEl = this.shadow?.getElementById('originator-info');
+      if (!infoEl) return;
+      this.originatorLookup = new OriginatorLookup(infoEl, (msg) =>
+        this.sendMessage({ type: msg.type as MessageType, data: msg.data })
       );
-      this.updateSubmitButton(true);
-      // Check for preloaded duplicate data before making API call
-      try {
-        const storage = await chrome.storage.local.get(['preloadedDuplicateCheck']);
-        this.checkDuplicateWithPreload(cached.id, storage.preloadedDuplicateCheck);
-      } catch {
-        this.checkDuplicate(cached.id);
-      }
-      return;
-    }
-
-    // Check for preloaded originator data from service worker
-    try {
-      const storage = await chrome.storage.local.get(['preloadedOriginator', 'preloadedDuplicateCheck']);
-      const preloaded = storage.preloadedOriginator;
-
-      if (preloaded && preloaded.handle === cacheKey && (Date.now() - preloaded.timestamp) < 60000) {
-        if (preloaded.originator) {
-          // Preloaded found result
-          originatorCache.set(cacheKey, preloaded.originator);
-          this.captureState.lookupResult = 'found';
-          this.captureState.originator = preloaded.originator;
-          this.updateOriginatorInfo(
-            `<span class="badge success">✓</span>
-             <span class="originator-name">${this.escapeHtml(preloaded.originator.full_name)}</span>
-             <span class="originator-handle">@${this.escapeHtml(handle)}</span>`,
-            'found'
-          );
-          this.updateSubmitButton(true);
-          // Check for preloaded duplicate result too
-          this.checkDuplicateWithPreload(preloaded.originator.id, storage.preloadedDuplicateCheck);
-          return;
-        } else {
-          // Preloaded not-found result
-          this.captureState.lookupResult = 'not_found';
-          this.captureState.createUrl = preloaded.create_url || null;
-          const createLink = preloaded.create_url
-            ? `<a href="${this.escapeHtml(preloaded.create_url)}" target="_blank" rel="noopener" class="create-link">Create on Quotewise</a>`
-            : '';
-          this.updateOriginatorInfo(
-            `<span class="badge warning">?</span>
-             <span>No originator found for @${this.escapeHtml(handle)}</span>
-             ${createLink}`,
-            'not_found'
-          );
-          this.updateSubmitButton(false);
-          return;
-        }
-      }
-    } catch {
-      // Preload check failed, fall through to normal lookup
     }
 
     this.captureState.isLookingUp = true;
-    this.updateOriginatorInfo(`<div class="spinner"></div> Looking up @${this.escapeHtml(handle)}...`, 'loading');
 
     try {
-      const response = await this.sendMessage({
-        type: MessageType.LOOKUP_ORIGINATOR_BY_HANDLE,
-        data: { handle, platform: 'twitter' }
-      });
+      const outcome = await this.originatorLookup.lookup(handle, this.currentData?.url);
 
-      if (response.success && response.found && response.originator) {
-        // Cache successful lookups for life of session
-        originatorCache.set(cacheKey, response.originator);
+      this.captureState.lookupResult = outcome.status;
 
-        this.captureState.lookupResult = 'found';
-        this.captureState.originator = response.originator;
-        this.updateOriginatorInfo(
-          `<span class="badge success">✓</span>
-           <span class="originator-name">${this.escapeHtml(response.originator.full_name)}</span>
-           <span class="originator-handle">@${this.escapeHtml(handle)}</span>`,
-          'found'
-        );
+      if (outcome.status === 'found' && outcome.originator) {
+        this.captureState.originator = outcome.originator;
         this.updateSubmitButton(true);
-        // Start duplicate check in background (non-blocking)
-        this.checkDuplicate(response.originator.id);
-      } else if (response.success && !response.found) {
-        // Don't cache not-found - user might create the originator
-        this.captureState.lookupResult = 'not_found';
-        this.captureState.createUrl = response.create_url || null;
-        const createLink = response.create_url
-          ? `<a href="${this.escapeHtml(response.create_url)}" target="_blank" rel="noopener" class="create-link">Create on Quotewise</a>`
-          : '';
-        this.updateOriginatorInfo(
-          `<span class="badge warning">?</span>
-           <span>No originator found for @${this.escapeHtml(handle)}</span>
-           ${createLink}`,
-          'not_found'
-        );
+
+        // Use preloaded duplicate data if available and fresh
+        if (
+          outcome.preloadedDuplicateCheck &&
+          outcome.preloadedDuplicateCheck.url === this.currentData?.url &&
+          (Date.now() - outcome.preloadedDuplicateCheck.timestamp) < 60000
+        ) {
+          const result = outcome.preloadedDuplicateCheck.result as DuplicateCheckResult;
+          this.captureState.isCheckingDuplicate = false;
+          this.captureState.duplicateResult = result;
+          this.updateDuplicateInfo({ result });
+        } else {
+          this.checkDuplicate(outcome.originator.id);
+        }
+      } else if (outcome.status === 'not_found') {
+        this.captureState.createUrl = outcome.createUrl || null;
         this.updateSubmitButton(false);
       } else {
-        throw new Error(response.error || 'Lookup failed');
+        // error
+        this.captureState.errorMessage = outcome.errorMessage || null;
+        this.updateSubmitButton(false);
       }
-    } catch (error) {
-      this.captureState.lookupResult = 'error';
-      this.captureState.errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.updateOriginatorInfo(
-        `<span class="badge error">!</span>
-         <span>Lookup failed: ${this.escapeHtml(this.captureState.errorMessage || '')}</span>`,
-        'error'
-      );
-      this.updateSubmitButton(false);
     } finally {
       this.captureState.isLookingUp = false;
-    }
-  }
-
-  /**
-   * Check for duplicates, using preloaded data if available and fresh
-   */
-  private checkDuplicateWithPreload(
-    originatorId: number,
-    preloadedDuplicateCheck?: { url: string; result: unknown; timestamp: number }
-  ): void {
-    // Check if preloaded duplicate check is fresh and for the right URL
-    if (
-      preloadedDuplicateCheck &&
-      preloadedDuplicateCheck.url === this.currentData?.url &&
-      (Date.now() - preloadedDuplicateCheck.timestamp) < 60000
-    ) {
-      // Use preloaded result - no spinner needed since data is instant
-      const result = preloadedDuplicateCheck.result as DuplicateCheckResult;
-      this.captureState.isCheckingDuplicate = false;
-      this.captureState.duplicateResult = result;
-      this.updateDuplicateInfo({ result });
-    } else {
-      // Fall back to fresh check (preload not ready or stale)
-      this.checkDuplicate(originatorId);
     }
   }
 
@@ -800,10 +695,9 @@ export class OverlayBar {
 
         // Clear duplicate badge and show success in originator row
         this.updateDuplicateInfo(null);
-        this.updateOriginatorInfo(
+        this.setOriginatorHtml(
           `<span class="badge success">✓</span>
-           <span>Quote added successfully!</span>`,
-          'success'
+           <span>Quote added successfully!</span>`
         );
         this.updateSubmitButton(false, 'Done!');
 
@@ -828,10 +722,9 @@ export class OverlayBar {
     } catch (error) {
       this.captureState.submitResult = 'error';
       this.captureState.errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.updateOriginatorInfo(
+      this.setOriginatorHtml(
         `<span class="badge error">!</span>
-         <span>Submit failed: ${this.escapeHtml(this.captureState.errorMessage || '')}</span>`,
-        'error'
+         <span>Submit failed: ${this.escapeHtml(this.captureState.errorMessage || '')}</span>`
       );
       this.updateSubmitButton(true, 'Retry');
     } finally {
@@ -839,10 +732,17 @@ export class OverlayBar {
     }
   }
 
-  private updateOriginatorInfo(html: string, _type: string): void {
-    const infoEl = this.shadow?.getElementById('originator-info');
-    if (infoEl) {
-      infoEl.innerHTML = html;
+  /**
+   * Set HTML directly on the originator-info element (for non-lookup states like submit success/error)
+   */
+  private setOriginatorHtml(html: string): void {
+    if (this.originatorLookup) {
+      this.originatorLookup.setHtml(html);
+    } else {
+      const infoEl = this.shadow?.getElementById('originator-info');
+      if (infoEl) {
+        infoEl.innerHTML = html;
+      }
     }
   }
 
