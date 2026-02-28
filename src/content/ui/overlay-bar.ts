@@ -7,6 +7,7 @@ import { DuplicateBadge } from './components/duplicate-badge';
 import type { SubmitStateDirective } from './components/duplicate-badge';
 import { QuotePreview } from './components/quote-preview';
 import { OriginatorLookup } from './components/originator-lookup';
+import { ActionButton } from './components/action-button';
 
 type DataProvider = () => Promise<TwitterData | null>;
 
@@ -42,6 +43,7 @@ export class OverlayBar {
   private duplicateBadgeContainer: HTMLElement | null = null;
   private quotePreview: QuotePreview | null = null;
   private originatorLookup: OriginatorLookup | null = null;
+  private actionButton: ActionButton | null = null;
   private captureState: CaptureState = {
     expanded: false,
     isLookingUp: false,
@@ -747,109 +749,62 @@ export class OverlayBar {
   }
 
   private updateSubmitButton(enabled: boolean, text?: string): void {
-    const submitBtn = this.shadow?.getElementById('submit-btn') as HTMLButtonElement | null;
-
-    // Button might not exist if user is not authenticated
-    if (!submitBtn) {
-      return;
-    }
-
-    submitBtn.disabled = !enabled;
-    // Reset to default success style
-    submitBtn.className = 'success';
-    if (text) {
-      submitBtn.textContent = text;
-    } else {
-      submitBtn.textContent = 'Submit Quote';
-    }
+    if (!this.actionButton) return;
+    this.actionButton.showSubmit(enabled, text);
   }
 
   /**
    * Update submit button with warning style (for platform sighting confirmation)
    */
   private updateSubmitButtonWarning(enabled: boolean, text: string): void {
-    const submitBtn = this.shadow?.getElementById('submit-btn') as HTMLButtonElement | null;
-
-    // Button might not exist if user is not authenticated
-    if (!submitBtn) {
-      return;
-    }
-
-    submitBtn.disabled = !enabled;
-    submitBtn.className = 'warning';
-    submitBtn.textContent = text;
+    if (!this.actionButton) return;
+    this.actionButton.showSubmitWarning(enabled, text);
   }
 
   /**
-   * Updates the action button in the right section based on authentication state
-   * Shows Login button when not authenticated, Submit button when authenticated
+   * Lazily initializes the ActionButton component targeting the right section of the originator row
+   */
+  private ensureActionButton(): ActionButton {
+    if (!this.actionButton) {
+      const rightSection = this.shadow?.querySelector('.originator-row .section.right') as HTMLElement;
+      this.actionButton = new ActionButton(rightSection, {
+        onSubmit: () => this.submitQuote(),
+        onLogin: async () => {
+          try {
+            const response = await this.sendMessage({ type: MessageType.OAUTH_LOGIN });
+            if (response.success) {
+              this.collapseCapture();
+              this.expandCapture();
+              return { success: true };
+            }
+            this.setOriginatorHtml(
+              `<span class="badge error">!</span>
+               <span>Login failed: ${this.escapeHtml(response.error || 'Unknown error')}</span>`
+            );
+            return { success: false, error: response.error };
+          } catch (error) {
+            console.error('OAuth login error:', error);
+            this.setOriginatorHtml(
+              `<span class="badge error">!</span>
+               <span>Unable to start login. Please reload the page and try again.</span>`
+            );
+            return { success: false, error: 'Unable to start login' };
+          }
+        },
+      });
+    }
+    return this.actionButton;
+  }
+
+  /**
+   * Updates the action button based on authentication state
    */
   private updateActionButton(isAuthenticated: boolean): void {
-    const rightSection = this.shadow?.querySelector('.originator-row .section.right');
-    if (!rightSection) return;
-
-    // Remove any existing action button
-    const existingButton = rightSection.querySelector('button');
-    if (existingButton) {
-      existingButton.remove();
-    }
-
-    if (!isAuthenticated) {
-      // Create Login button
-      const loginButton = document.createElement('button');
-      loginButton.className = 'primary';
-      loginButton.id = 'login-btn';
-      loginButton.textContent = 'Login to Quotewise';
-
-      loginButton.addEventListener('click', async () => {
-        loginButton.textContent = 'Logging in...';
-        loginButton.disabled = true;
-
-        try {
-          const response = await this.sendMessage({ type: MessageType.OAUTH_LOGIN });
-          if (response.success) {
-            // Login successful - retry the capture flow
-            this.collapseCapture();
-            await this.expandCapture();
-          } else {
-            // Show error in center section
-            const originatorInfo = this.shadow?.getElementById('originator-info');
-            if (originatorInfo) {
-              originatorInfo.innerHTML = `
-                <span class="badge error">!</span>
-                <span>Login failed: ${this.escapeHtml(response.error || 'Unknown error')}</span>
-              `;
-            }
-            // Re-enable login button for retry
-            loginButton.textContent = 'Retry Login';
-            loginButton.disabled = false;
-          }
-        } catch (error) {
-          console.error('OAuth login error:', error);
-          const originatorInfo = this.shadow?.getElementById('originator-info');
-          if (originatorInfo) {
-            originatorInfo.innerHTML = `
-              <span class="badge error">!</span>
-              <span>Unable to start login. Please reload the page and try again.</span>
-            `;
-          }
-          loginButton.textContent = 'Retry Login';
-          loginButton.disabled = false;
-        }
-      });
-
-      rightSection.appendChild(loginButton);
+    const ab = this.ensureActionButton();
+    if (isAuthenticated) {
+      ab.showSubmit(true);
     } else {
-      // Create Submit button
-      const submitButton = document.createElement('button');
-      submitButton.className = 'success';
-      submitButton.id = 'submit-btn';
-      submitButton.textContent = 'Submit Quote';
-      submitButton.disabled = true;
-
-      submitButton.addEventListener('click', () => this.submitQuote());
-
-      rightSection.appendChild(submitButton);
+      ab.showLogin();
     }
   }
 
