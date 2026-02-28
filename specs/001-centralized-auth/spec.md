@@ -6,7 +6,7 @@
 
 ## Overview
 
-Centralized authentication state management for Chrome extension MV3. Single source of truth in service worker with reactive updates to popup and overlay components.
+Centralized authentication state management for Chrome extension MV3. Single source of truth in service worker with reactive updates to overlay components.
 
 ## User Scenarios & Testing
 
@@ -22,7 +22,7 @@ User clicks extension on a tweet page without being logged in.
 
 ### User Story 2 - Cross-Context Auth Sync (P1)
 
-User logs in via popup while overlay is open.
+User authenticates while overlay is open.
 
 **Acceptance Requirements**:
 1. **When** auth state changes, the system **MUST** broadcast to all contexts
@@ -183,7 +183,7 @@ States: UNKNOWN, CHECKING, AUTHENTICATED, UNAUTHENTICATED, SESSION_EXPIRED, AUTH
 
 - **AuthStateData**: Current state, username, scopes, expiry, error
 - **AuthStateManager**: Service worker singleton, owns state, broadcasts changes
-- **AuthSubscriber**: Helper for popup/overlay to subscribe to state
+- **AuthSubscriber**: Helper for overlay to subscribe to state
 
 ## Implementation (Completed)
 
@@ -200,7 +200,6 @@ States: UNKNOWN, CHECKING, AUTHENTICATED, UNAUTHENTICATED, SESSION_EXPIRED, AUTH
 | `src/types/chrome.ts` | Added AUTH_STATE_GET, AUTH_STATE_CHANGED, AUTH_STATE_SUBSCRIBE |
 | `src/background/service-worker.ts` | Eager AuthStateManager init, OAuth event wiring, auth-aware badge functions |
 | `src/background/auth-monitor.ts` | Deprecated, delegates to AuthStateManager |
-| `src/popup/popup.ts` | Listens for AUTH_STATE_CHANGED |
 | `src/content/ui/overlay-bar.ts` | Auth check before capture, reactive updates |
 
 ### v1.4.3 Badge Audit Changes
