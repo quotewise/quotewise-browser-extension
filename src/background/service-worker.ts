@@ -87,11 +87,21 @@ chrome.runtime.onStartup.addListener(async () => {
   await ensureServicesInitialized();
 });
 
-// Handle alarms for token refresh
+// Handle alarms for token refresh — route results through AuthStateManager (FR-021)
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'token-refresh') {
     debugLog('Token refresh alarm triggered');
-    await handleTokenRefreshAlarm();
+    await ensureServicesInitialized();
+    const result = await handleTokenRefreshAlarm();
+
+    if (!authStateManager) return;
+
+    if (result.success) {
+      await authStateManager.onTokenRefreshed();
+    } else if (result.outcome === 'revoked' || result.outcome === 'expired') {
+      await authStateManager.onTokenRefreshFailed();
+    }
+    // network_error: don't change state — alarm handler already scheduled retry
   }
 });
 
@@ -197,8 +207,6 @@ chrome.runtime.onMessage.addListener((
         authStateManager?.startAuthenticating();
         initiateOAuthFlow().then(async tokens => {
           debugLog('OAuth login successful');
-          // Clear any auth required state
-          chrome.storage.local.remove(['authRequired', 'authMessage']);
           // Notify AuthStateManager of successful auth (handles badge)
           await authStateManager?.onAuthSuccess(undefined, tokens.scopes);
           sendResponse({ success: true, scopes: tokens.scopes });
@@ -309,9 +317,13 @@ async function updateExtensionIconForTweetPage(tweetData?: TwitterData): Promise
       }
     }
 
-    // Only show tweet processing badges when authenticated
+    // When authenticated: don't set a processing badge here.
+    // The content script's TWEET_DATA_EXTRACTED handler sets the processing badge
+    // and then the final collection badge (★/✓/+). Setting ○ here races with that
+    // flow and can overwrite the final badge back to ○ on concurrent SW wakeup.
+    // Auth-state badges (grey, red !) are handled above; collection badges are
+    // handled by updateCollectionBadgeForTweet() in handleTweetDataExtracted().
     if (tweetData) {
-      // Tweet data extracted - show green check for successful processing
       chrome.action.setBadgeText({
         tabId: tabId,
         text: '✓'
@@ -323,20 +335,6 @@ async function updateExtensionIconForTweetPage(tweetData?: TwitterData): Promise
       chrome.action.setTitle({
         tabId: tabId,
         title: `Tweet processed: "${tweetData.text.substring(0, 50)}..."`
-      });
-    } else {
-      // Tweet page detected but no data yet - show analyzing state
-      chrome.action.setBadgeText({
-        tabId: tabId,
-        text: '○'
-      });
-      chrome.action.setBadgeBackgroundColor({
-        tabId: tabId,
-        color: '#2196F3'
-      });
-      chrome.action.setTitle({
-        tabId: tabId,
-        title: 'Analyzing tweet...'
       });
     }
   } catch (error) {

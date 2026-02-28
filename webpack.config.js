@@ -11,8 +11,7 @@ module.exports = (env, argv) => {
     
     entry: {
       'background/service-worker': './src/background/service-worker.ts',
-      'content/index': './src/content/index.ts',
-      'popup/popup': './src/popup/popup.ts'
+      'content/index': './src/content/index.ts'
     },
     
     output: {
@@ -27,7 +26,6 @@ module.exports = (env, argv) => {
         '@api': path.resolve(__dirname, 'src/api'),
         '@types': path.resolve(__dirname, 'src/types'),
         '@content': path.resolve(__dirname, 'src/content'),
-        '@popup': path.resolve(__dirname, 'src/popup'),
         '@background': path.resolve(__dirname, 'src/background'),
         '@config': path.resolve(__dirname, 'src/config')
       }

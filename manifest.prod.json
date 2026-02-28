@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Quotewise Quote Capture",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "description": "Capture quotes from Twitter/X and add them to Quotewise with proper attribution",
   "permissions": [
     "activeTab",
@@ -55,15 +55,6 @@
       "matches": [
         "https://twitter.com/*",
         "https://x.com/*"
-      ]
-    },
-    {
-      "resources": [
-        "popup.html",
-        "popup.css"
-      ],
-      "matches": [
-        "<all_urls>"
       ]
     }
   ]

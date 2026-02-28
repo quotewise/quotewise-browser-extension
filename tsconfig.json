@@ -20,7 +20,6 @@
       "@api/*": ["api/*"],
       "@types/*": ["types/*"],
       "@content/*": ["content/*"],
-      "@popup/*": ["popup/*"],
       "@background/*": ["background/*"]
     }
   },

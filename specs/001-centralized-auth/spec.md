@@ -1,8 +1,8 @@
 # Feature Specification: Centralized Auth State Management
 
 **Created**: 2026-01-15
-**Status**: Implemented (v1.4.3)
-**Last Updated**: 2026-02-21 - Persistent token storage, alarm-based retry
+**Status**: Implemented (v1.4.4)
+**Last Updated**: 2026-02-22 - Optimistic auth restore, single-owner state management
 
 ## Overview
 
@@ -31,13 +31,14 @@ User logs in via popup while overlay is open.
 
 ### User Story 3 - Service Worker Recovery (P2)
 
-Service worker terminates and restarts (MV3 behavior).
+Service worker terminates and restarts (MV3 behavior). MV3 service workers terminate after ~30 seconds of idle time and restart on any event (message, alarm, tab update). This happens dozens of times per hour.
 
 **Acceptance Requirements**:
 1. The system **MUST** persist auth state to `chrome.storage.local`
 2. **When** service worker restarts, it **MUST** restore state from storage
 3. **If** state was transitional (CHECKING, AUTHENTICATING, UNKNOWN), system **MUST** re-validate tokens
-4. **If** state was AUTHENTICATED, system **MUST** re-validate tokens (catches expired sessions)
+4. **If** state was AUTHENTICATED, system **MUST** check token expiry locally (compare `accessTokenExpiresAt` against `Date.now()`) — **MUST NOT** make a network call if the access token is still valid
+5. **If** service worker is terminated mid-flight during an async auth check, the next restart **MUST NOT** enter a degraded state (no CHECKING loops)
 
 ### User Story 4 - Contextual Badge Feedback (P2)
 
@@ -90,6 +91,31 @@ User closes and reopens Chrome. Auth state should survive without network depend
 
 **Context**: `chrome.storage.session` is wiped on browser close/reopen. Previously, access tokens and auth state lived there, requiring a successful network call on every browser launch to restore auth. With a 90-day refresh token already in `chrome.storage.local`, there's no security benefit to ephemeral access token storage — the refresh token can always mint a new one.
 
+### User Story 9 - Optimistic Auth Restore (P0)
+
+User is authenticated, service worker restarts (idle timeout, memory pressure, tab navigation). Auth should be instant with zero network dependency.
+
+**Acceptance Requirements**:
+1. **When** service worker restarts with stored AUTHENTICATED state, system **MUST** compare `accessTokenExpiresAt` against `Date.now()` locally
+2. **If** access token is not expired, system **MUST** restore AUTHENTICATED immediately — no network call, no CHECKING transition
+3. **If** access token is expired but refresh token exists, system **MUST** attempt token refresh (network call acceptable here)
+4. `initializeTokenRefresh()` **MUST** own all token refresh scheduling — `restoreState()` **MUST NOT** duplicate this work
+5. Service worker restart **MUST NOT** cause any visible badge flicker (no CHECKING → AUTHENTICATED flash)
+
+**Context**: MV3 service workers restart dozens of times per hour. The previous implementation called `checkAuthState()` (which makes a network call via `authChecker.checkAuthStatus()`) on every restart for AUTHENTICATED state. This meant: (a) unnecessary network traffic, (b) if the server was slow or the SW was killed mid-request, the user got logged out, (c) the state transitioned through CHECKING, causing badge flicker. Every production Chrome extension (Bitwarden, Dark Reader) does a local expiry check — `Date.now() < tokenExpiresAt` — and only hits the network when the token is actually expired.
+
+### User Story 10 - Single-Owner State Management (P0)
+
+All auth state mutations flow through AuthStateManager. No other code path directly manipulates badge or auth storage.
+
+**Acceptance Requirements**:
+1. `handleTokenRefreshAlarm()` **MUST NOT** directly set badge text/color or write `authRequired` to storage
+2. Token refresh alarm outcomes **MUST** flow through AuthStateManager (`onTokenRefreshed()` / `onTokenRefreshFailed()`)
+3. Badge state **MUST** only be set by AuthStateManager's `updateBadge()` method and the service worker's collection badge functions
+4. There **MUST** be exactly one badge color for SESSION_EXPIRED (`#F44336`), not two (`#F44336` vs `#FF6B6B`)
+
+**Context**: `notifyAuthRequired()` in `token-refresh.ts` bypassed AuthStateManager entirely — setting badge to `!` with wrong color `#FF6B6B`, writing `authRequired: true` to storage, and never broadcasting AUTH_STATE_CHANGED. This caused state desynchronization where AuthStateManager thought the user was authenticated but the badge showed an error.
+
 ### Edge Cases
 
 - **If** OAuth flow cancelled, **then** system **MUST** return to unauthenticated state
@@ -114,7 +140,7 @@ User closes and reopens Chrome. Auth state should survive without network depend
 - **FR-008**: Auth error states (SESSION_EXPIRED, INSUFFICIENT_PRIVILEGES) **MUST** take priority over tweet-collection badges
 - **FR-009**: UNAUTHENTICATED **MUST NOT** be treated as an error state in `isErrorState()` helper
 - **FR-010**: Badge updates triggered by tab navigation **MUST** wait for AuthStateManager initialization before checking auth state
-- **FR-011**: **When** restoring AUTHENTICATED state from storage, system **MUST** re-validate tokens (stale session detection)
+- **FR-011**: ~~**When** restoring AUTHENTICATED state from storage, system **MUST** re-validate tokens (stale session detection)~~ **SUPERSEDED by FR-020**. Re-validating via network on every SW restart caused the persistent re-login bug. Local expiry check is sufficient; `initializeTokenRefresh()` handles expired tokens.
 - **FR-012**: **When** OAuth login succeeds, service worker **MUST** re-run `checkQuoteCollectionStatus()` for the current stored tweet to update the badge
 - **FR-013**: Token refresh **MUST** use a mutex (`refreshInFlight`) — only one refresh in-flight at a time, concurrent callers reuse the result
 - **FR-014**: `network_error` **MUST** be a distinct auth result type; **MUST NOT** be conflated with `not_authenticated`
@@ -123,6 +149,11 @@ User closes and reopens Chrome. Auth state should survive without network depend
 - **FR-017**: Access tokens and auth state **MUST** be stored in `chrome.storage.local` (persistent), NOT `chrome.storage.session` (ephemeral)
 - **FR-018**: Token refresh retry **MUST** use `chrome.alarms` (survives service worker termination), NOT `setTimeout`
 - **FR-019**: `initializeTokenRefresh()` **MUST** schedule an alarm retry when startup refresh fails
+- **FR-020**: `restoreState()` **MUST** check `accessTokenExpiresAt` locally when stored state is AUTHENTICATED. If token is not expired, restore AUTHENTICATED without any network call. If token is expired, attempt refresh via `initializeTokenRefresh()` (not `checkAuthState()`)
+- **FR-021**: `handleTokenRefreshAlarm()` **MUST** return its result to the caller. The service worker alarm listener **MUST** route results through AuthStateManager (`onTokenRefreshed()` / `onTokenRefreshFailed()`)
+- **FR-022**: `notifyAuthRequired()` **MUST** be removed. All badge and state mutations **MUST** flow through AuthStateManager
+- **FR-023**: `handleTokenRefreshAlarm()` **MUST NOT** call `clearTokens()` directly for `revoked` or `expired` errors — it **MUST** return the error to the service worker, which delegates to AuthStateManager
+- **FR-024**: `clearAuthRequiredState()` and the `authRequired`/`authMessage` storage keys **MUST** be removed (dead code after `notifyAuthRequired()` removal)
 
 ### State Machine
 
@@ -199,6 +230,13 @@ States: UNKNOWN, CHECKING, AUTHENTICATED, UNAUTHENTICATED, SESSION_EXPIRED, AUTH
 | `src/auth/auth-state-manager.ts` | Auth state persistence moved from `chrome.storage.session` to `chrome.storage.local` (FR-017) |
 | `src/auth/token-refresh.ts` | Removed `setTimeout` retry in `doAttemptTokenRefresh()` — alarm handler owns retries (FR-018); `initializeTokenRefresh()` schedules alarm retry on startup failure (FR-019) |
 
+### v1.4.4 Optimistic Restore & Single-Owner Fixes
+| File | Changes |
+|------|---------|
+| `src/auth/auth-state-manager.ts` | `restoreState()` checks `accessTokenExpiresAt` locally — restores AUTHENTICATED without network call when token is valid (FR-020). Only calls `checkAuthState()` for transitional states and genuinely expired tokens. |
+| `src/auth/token-refresh.ts` | `handleTokenRefreshAlarm()` returns `TokenRefreshResult` instead of void (FR-021). Removed `notifyAuthRequired()` (FR-022). Removed `clearTokens()` calls — caller handles state transitions (FR-023). Removed `clearAuthRequiredState()` (FR-024). |
+| `src/background/service-worker.ts` | Alarm handler routes `handleTokenRefreshAlarm()` results through AuthStateManager (FR-021). Removed `authRequired`/`authMessage` storage cleanup from OAUTH_LOGIN handler (FR-024). |
+
 ## Success Criteria
 
 - **SC-001**: Login prompt appears within 100ms when unauthenticated user expands capture
@@ -209,6 +247,9 @@ States: UNKNOWN, CHECKING, AUTHENTICATED, UNAUTHENTICATED, SESSION_EXPIRED, AUTH
 - **SC-006**: Transient network failure does not force re-login when refresh token is valid
 - **SC-007**: Concurrent token refresh attempts do not cause logout (mutex prevents token rotation race)
 - **SC-008**: Auth state survives browser close/reopen without network dependency
+- **SC-009**: Service worker restart with valid access token restores AUTHENTICATED with zero network calls
+- **SC-010**: No badge flicker (CHECKING → AUTHENTICATED) on service worker restart
+- **SC-011**: Token refresh alarm failure updates AuthStateManager state (no desynchronization between badge and state)
 
 ## OAuth Endpoint Configuration
 
