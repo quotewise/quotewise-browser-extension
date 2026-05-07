@@ -31,6 +31,37 @@ const pendingDuplicateChecks = new Map<string, Promise<void>>();
 
 // Service worker startup is logged once after initialization completes
 
+const CONTENT_SCRIPT_FILE = 'content/index.js';
+const MISSING_CONTENT_SCRIPT_MESSAGE = 'Receiving end does not exist';
+const TWEET_PAGE_REGEX = /^https:\/\/(twitter\.com|x\.com)\/[^/]+\/status\/\d+/;
+
+function isTweetPageUrl(url?: string): boolean {
+  return !!url && TWEET_PAGE_REGEX.test(url);
+}
+
+function isMissingContentScriptError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(MISSING_CONTENT_SCRIPT_MESSAGE);
+}
+
+async function showOverlayInTab(tab: chrome.tabs.Tab): Promise<void> {
+  if (!tab.id) return;
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: MessageType.SHOW_OVERLAY });
+  } catch (error) {
+    if (!isMissingContentScriptError(error) || !isTweetPageUrl(tab.url)) {
+      throw error;
+    }
+
+    debugLog('Content script missing on tweet tab; injecting before showing overlay');
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: [CONTENT_SCRIPT_FILE]
+    });
+    await chrome.tabs.sendMessage(tab.id, { type: MessageType.SHOW_OVERLAY });
+  }
+}
+
 /**
  * Ensure all services are initialized
  * Called before any message handling to recover from service worker termination
@@ -108,8 +139,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 // Toolbar icon click: show overlay bar in active tab
 chrome.action.onClicked.addListener(async (tab) => {
   try {
-    if (!tab.id) return;
-    await chrome.tabs.sendMessage(tab.id, { type: MessageType.SHOW_OVERLAY });
+    await showOverlayInTab(tab);
   } catch (error) {
     console.error('Error handling action click:', error);
   }
@@ -357,7 +387,7 @@ async function clearTweetPageIcon(tabId: number): Promise<void> {
 // Handle tab updates to detect tweet pages (full page loads)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
-    const isTweetPage = /https:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(tab.url);
+    const isTweetPage = isTweetPageUrl(tab.url);
 
     if (isTweetPage) {
       // Ensure services are initialized before checking auth state
@@ -377,7 +407,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
   // Only process main frame navigations
   if (details.frameId !== 0) return;
 
-  const isTweetPage = /https:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(details.url);
+  const isTweetPage = isTweetPageUrl(details.url);
 
   if (isTweetPage) {
     debugLog('SPA navigation detected to tweet page:', details.url);
@@ -391,7 +421,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: details.tabId },
-        files: ['content/index.js']
+        files: [CONTENT_SCRIPT_FILE]
       });
       debugLog('Content script injected for SPA navigation');
     } catch (error) {

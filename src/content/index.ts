@@ -19,6 +19,7 @@ class ContentOrchestrator {
   private urlWatcher: number | null = null;
   private lastUrl = window.location.href;
   private overlay: OverlayBar | null = null;
+  private messageListenerRegistered = false;
 
   constructor(adapters: PlatformAdapter<TwitterData>[]) {
     this.adapters = adapters;
@@ -31,6 +32,9 @@ class ContentOrchestrator {
   }
 
   private listenForMessages(): void {
+    if (this.messageListenerRegistered) return;
+    this.messageListenerRegistered = true;
+
     chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
       debugLog(`ContentOrchestrator received message: ${message.type}`);
 
@@ -71,9 +75,10 @@ class ContentOrchestrator {
     if (this.urlWatcher) return;
 
     this.urlWatcher = window.setInterval(() => {
-      if (window.location.href !== this.lastUrl) {
-        this.lastUrl = window.location.href;
+      const nextUrl = window.location.href;
+      if (nextUrl !== this.lastUrl) {
         this.selectAdapter(true);
+        this.lastUrl = nextUrl;
       }
     }, 750);
   }

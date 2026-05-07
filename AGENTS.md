@@ -7,11 +7,23 @@
 
 ## Build, Test, and Development Commands
 - `npm run dev` — webpack watch build to `dist/`; reload the unpacked extension in `chrome://extensions`.
-- `npm run build` — production bundle (minified, cleaned `dist/`).
+- `bun run build` or `npm run build` — production bundle (minified, cleaned `dist/`); `dist/manifest.json` is generated from `manifest.prod.json`.
 - `npm run lint` — ESLint for TypeScript sources; run before committing.
 - `npm run type-check` — `tsc --noEmit` for static typing.
 - `npm test` — Jest + ts-jest in `jsdom`; use `npm test -- --coverage` to generate `coverage/`.
 - `npm run clean` — remove `dist/`.
+- `bun run bump-version <version|major|minor|patch>` — update `package.json`, `package-lock.json`, `manifest.json`, `manifest.dev.json`, and `manifest.prod.json` together. Do not edit version fields by hand.
+- `bun run version:check` — verify all project version declarations are in sync.
+
+## Release Build Verification
+- Before a release or manual Chrome reload, run:
+  1. `bun run version:check`
+  2. `npm run type-check`
+  3. `npm run lint`
+  4. `npm test -- --runInBand`
+  5. `bun run build`
+- After building, confirm `dist/manifest.json`, `dist/background/service-worker.js`, and `dist/content/index.js` exist, and that `dist/manifest.json` has the intended version.
+- In `chrome://extensions`, load or reload the unpacked extension from this repo's `dist/` directory. If the repo moved on disk, remove the old unpacked extension and load the new `dist/` path instead of only clicking reload.
 
 ## Coding Style & Naming Conventions
 - TypeScript-first; keep modules small. Prefer 2-space indentation; match surrounding files.
