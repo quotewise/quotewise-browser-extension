@@ -41,6 +41,15 @@
 - PRs should include: a concise summary, linked backlog item (see `docs/delivery/backlog.md`), clear before/after notes for UI changes (screenshots for popup tweaks), and which verification commands were run.
 - Call out manifest permission or API surface changes in PRs.
 
+## Issue Tracking — Beads (shared with `quotewise` repo)
+- This repo has no local beads DB; it redirects to the canonical Dolt store in `../quotewise/.beads` via `.beads/redirect` (an absolute path; `.beads/` is gitignored).
+- One-time setup on a fresh clone: `mkdir -p .beads && echo "$(cd ../quotewise && pwd)/.beads" > .beads/redirect`, then verify with `bd where`.
+- Do **not** `bd init` here. It would create a competing local DB.
+- When creating issues, tag the surface(s) via labels so the shared DB stays filterable across repos:
+  - `--labels chrome-ext[,django-api,cli,mcp-server,infra]` plus domain labels (e.g. `auth`, `duplicate-detection`, `ux`). Add a label per surface for cross-cutting work.
+  - Do **not** pass `--repo`. It triggers auto-routing this DB isn't configured for — creates appear successful but silently fail to persist. Filter via `bd list --label chrome-ext` instead.
+- See the main `quotewise/AGENTS.md` for the broader bd workflow (`bd ready`, `bd show`, `bd update --claim`, `bd close`).
+
 ## Security & Configuration Tips
 - Environments are defined in `src/config/environment.ts`; avoid hardcoding secrets or domains outside that map.
 - Validate Chrome permissions remain minimal; update `manifest.json` deliberately and document rationale in PRs.
