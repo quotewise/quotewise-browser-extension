@@ -108,7 +108,7 @@ export interface Originator {
 
 export interface QuoteSubmissionRequest {
   text: string;
-  originator_id?: number;
+  originator_slug?: string;  // Public originator identifier (slug). Preferred reference for writes.
   originator_search?: string;
   source_url: string;
   platform_code: PlatformCode;
@@ -211,7 +211,7 @@ export interface PreflightResult {
 export interface QuotewiseApiClient {
   baseUrl: string;
   searchOriginators(query: string, limit?: number): Promise<OriginatorSearchResult[]>;
-  checkQuoteDuplicate(text: string, originatorId?: string, sourceUrl?: string, socialHandle?: string): Promise<DuplicateCheckResult>;
+  checkQuoteDuplicate(text: string, originatorSlug?: string, sourceUrl?: string, socialHandle?: string): Promise<DuplicateCheckResult>;
   submitQuote(quoteData: QuoteSubmissionRequest): Promise<QuoteSubmissionResult>;
   checkAuthStatus(): Promise<AuthStatusResult>;
   listCollections(): Promise<CollectionsListResponse>;

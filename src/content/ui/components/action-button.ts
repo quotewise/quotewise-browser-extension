@@ -1,11 +1,13 @@
 export interface ActionButtonCallbacks {
   onSubmit: () => void;
   onLogin: () => Promise<{ success: boolean; error?: string }>;
+  onViewQuote: (url: string) => void;
 }
 
 export class ActionButton {
   private button: HTMLButtonElement | null = null;
-  private mode: 'submit' | 'login' = 'submit';
+  private mode: 'submit' | 'login' | 'view_quote' = 'submit';
+  private viewQuoteUrl: string | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -36,7 +38,16 @@ export class ActionButton {
     this.button.textContent = 'Login to Quotewise';
   }
 
-  private ensureButton(mode: 'submit' | 'login'): void {
+  showViewQuote(url: string, text = 'View Quote'): void {
+    this.viewQuoteUrl = url;
+    this.ensureButton('view_quote');
+    if (!this.button) return;
+    this.button.disabled = false;
+    this.button.className = 'primary';
+    this.button.textContent = text;
+  }
+
+  private ensureButton(mode: 'submit' | 'login' | 'view_quote'): void {
     if (this.button && this.mode === mode) return;
 
     // Remove existing button
@@ -54,11 +65,16 @@ export class ActionButton {
       btn.textContent = 'Submit Quote';
       btn.disabled = true;
       btn.addEventListener('click', () => this.callbacks.onSubmit());
-    } else {
+    } else if (mode === 'login') {
       btn.id = 'login-btn';
       btn.className = 'primary';
       btn.textContent = 'Login to Quotewise';
       btn.addEventListener('click', () => this.handleLogin(btn));
+    } else {
+      btn.id = 'view-quote-btn';
+      btn.className = 'primary';
+      btn.textContent = 'View Quote';
+      btn.addEventListener('click', () => this.handleViewQuote());
     }
 
     this.button = btn;
@@ -77,5 +93,10 @@ export class ActionButton {
     }
     // On success, the overlay bar handles collapse/re-expand;
     // the button may be replaced by showSubmit() at that point.
+  }
+
+  private handleViewQuote(): void {
+    if (!this.viewQuoteUrl) return;
+    this.callbacks.onViewQuote(this.viewQuoteUrl);
   }
 }
