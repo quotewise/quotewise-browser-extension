@@ -120,7 +120,7 @@ export class ApiHandler {
             // Support both camelCase and snake_case field names
             const data = message.data || {};
             const text = data.text;
-            const originatorId = data.originatorId ?? data.originator_id;
+            const originatorSlug = data.originatorSlug ?? data.originator_slug;
             const sourceUrl = data.sourceUrl ?? data.source_url;
             const socialHandle = data.socialHandle ?? data.social_handle;
 
@@ -134,7 +134,7 @@ export class ApiHandler {
 
             const duplicateResult = await this.apiClient.checkQuoteDuplicate(
                 text,
-                originatorId,
+                originatorSlug,
                 sourceUrl,
                 socialHandle
             );
