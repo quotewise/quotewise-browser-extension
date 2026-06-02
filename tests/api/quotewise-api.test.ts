@@ -389,6 +389,36 @@ describe('QuotewiseApiClient', () => {
     });
   });
 
+  describe('preflightCheck', () => {
+    const okPreflight = () => ({
+      ok: true,
+      json: () => Promise.resolve({ originator: { found: false }, duplicate_check: {} }),
+      headers: new Headers({ 'content-type': 'application/json' })
+    } as Response);
+
+    test('caps the text sent to preflight so huge article bodies do not break the call', async () => {
+      mockFetch.mockResolvedValue(okPreflight());
+
+      await client.preflightCheck('kpaxs', 'twitter', 'a'.repeat(5000), 'https://x.com/kpaxs/status/1');
+
+      const call = mockFetch.mock.calls.find(c => String(c[0]).includes('/v1/quotes/preflight/'));
+      expect(call).toBeDefined();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body.handle).toBe('kpaxs');
+      expect(body.text.length).toBe(2000);
+    });
+
+    test('leaves short text unchanged', async () => {
+      mockFetch.mockResolvedValue(okPreflight());
+
+      await client.preflightCheck('kpaxs', 'twitter', 'short quote', 'https://x.com/kpaxs/status/1');
+
+      const call = mockFetch.mock.calls.find(c => String(c[0]).includes('/v1/quotes/preflight/'));
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body.text).toBe('short quote');
+    });
+  });
+
   describe('submitQuote', () => {
     const validQuoteData: QuoteSubmissionRequest = {
       text: 'Test quote',
