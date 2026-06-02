@@ -20,6 +20,9 @@ import { getEnvironmentConfig, debugLog } from '../config/environment';
 import { getAccessToken } from '../auth/token-storage';
 import { attemptTokenRefresh } from '../auth/token-refresh';
 
+/** Max characters of quote text sent to the preflight endpoint (enough for duplicate matching). */
+const MAX_PREFLIGHT_TEXT_LENGTH = 2000;
+
 /**
  * Main API client implementation with OAuth 2.0 Bearer token support
  * Following patterns from quotewise/rest_api.py and quote_collection.js
@@ -468,7 +471,11 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
           body: JSON.stringify({
             handle: cleanHandle,
             platform,
-            text,
+            // Cap the text: preflight only needs it for duplicate matching, and
+            // sending a full long-form X Article body (~11k chars) can fail the
+            // call, leaving the originator cache cold and forcing the by-handle
+            // fallback. A short prefix is plenty for a quote match.
+            text: text.slice(0, MAX_PREFLIGHT_TEXT_LENGTH),
             source_url: sourceUrl
           })
         }

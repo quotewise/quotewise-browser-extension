@@ -45,6 +45,8 @@ export class OverlayBar {
   private quotePreview: QuotePreview | null = null;
   private originatorLookup: OriginatorLookup | null = null;
   private actionButton: ActionButton | null = null;
+  private selectionChangeHandler: (() => void) | null = null;
+  private selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private captureState: CaptureState = {
     expanded: false,
     isLookingUp: false,
@@ -500,6 +502,12 @@ export class OverlayBar {
     // Initialize action button based on current auth state
     this.updateActionButton(true); // We know we're authenticated at this point
 
+    // On articles, watch for the user highlighting a passage after opening so
+    // capture enables live without reopening the bar.
+    if (this.currentData.isArticle) {
+      this.startSelectionWatcher();
+    }
+
     // Start originator lookup by handle
     const handle = this.currentData.author?.username;
     if (handle) {
@@ -562,6 +570,44 @@ export class OverlayBar {
   }
 
   /**
+   * Watch the page selection while the bar is open on an article, so a quote
+   * captured by highlighting after opening fills in live (no reopen needed).
+   * Debounced because selectionchange fires continuously during a drag.
+   */
+  private startSelectionWatcher(): void {
+    if (this.selectionChangeHandler) return;
+    this.selectionChangeHandler = () => {
+      if (this.selectionDebounceTimer) clearTimeout(this.selectionDebounceTimer);
+      this.selectionDebounceTimer = setTimeout(() => this.onPageSelectionChanged(), 200);
+    };
+    document.addEventListener('selectionchange', this.selectionChangeHandler);
+  }
+
+  private stopSelectionWatcher(): void {
+    if (this.selectionDebounceTimer) {
+      clearTimeout(this.selectionDebounceTimer);
+      this.selectionDebounceTimer = null;
+    }
+    if (this.selectionChangeHandler) {
+      document.removeEventListener('selectionchange', this.selectionChangeHandler);
+      this.selectionChangeHandler = null;
+    }
+  }
+
+  /**
+   * React to a settled page selection. Latches: only adopts a new valid
+   * selection, never clears the current one on an empty event (clicking the
+   * bar can momentarily collapse the page selection). Use the ✕ to clear.
+   */
+  private onPageSelectionChanged(): void {
+    const selection = this.getPageSelection();
+    if (!selection || selection === this.captureState.selectedText) return;
+    this.captureState.selectedText = selection;
+    this.updateQuotePreview();
+    this.updateSubmitButton(!!this.captureState.originator);
+  }
+
+  /**
    * Update the quote preview in capture row to show what will be submitted
    */
   private updateQuotePreview(): void {
@@ -602,6 +648,7 @@ export class OverlayBar {
   }
 
   private collapseCapture(): void {
+    this.stopSelectionWatcher();
     if (!this.shadow) return;
 
     const captureRow = this.shadow.getElementById('capture-row');
