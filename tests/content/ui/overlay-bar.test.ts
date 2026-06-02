@@ -252,4 +252,44 @@ describe('OverlayBar', () => {
     expect(dupCall[0].data.originator_slug).toBe('kpaxs');
     expect(dupCall[0].data.originator_id).toBeUndefined();
   });
+
+  it('live-updates the selection when the user highlights after opening (article)', () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).currentData = { ...tweetData, isArticle: true };
+    (overlay as any).captureState.originator = {
+      id: 1, unique_id: 'kpaxs', full_name: 'Kpaxs', sort_name_display: 'Kpaxs', confidence: 1,
+    };
+    (overlay as any).captureState.selectedText = null;
+    jest.spyOn(overlay as any, 'getPageSelection').mockReturnValue('a highlighted article passage');
+
+    (overlay as any).onPageSelectionChanged();
+
+    expect((overlay as any).captureState.selectedText).toBe('a highlighted article passage');
+  });
+
+  it('latches: does not clear an existing selection when selectionchange reports nothing', () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).currentData = { ...tweetData, isArticle: true };
+    (overlay as any).captureState.selectedText = 'previously selected';
+    jest.spyOn(overlay as any, 'getPageSelection').mockReturnValue(null);
+
+    (overlay as any).onPageSelectionChanged();
+
+    expect((overlay as any).captureState.selectedText).toBe('previously selected');
+  });
+
+  it('attaches and detaches the selectionchange watcher', () => {
+    const addSpy = jest.spyOn(document, 'addEventListener');
+    const removeSpy = jest.spyOn(document, 'removeEventListener');
+    const overlay = new OverlayBar(async () => tweetData);
+
+    (overlay as any).startSelectionWatcher();
+    expect(addSpy).toHaveBeenCalledWith('selectionchange', expect.any(Function));
+
+    (overlay as any).stopSelectionWatcher();
+    expect(removeSpy).toHaveBeenCalledWith('selectionchange', expect.any(Function));
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
 });
