@@ -165,8 +165,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     const language = this.extractLanguage(article);
     const isProtected = this.detectProtected(article);
     const mediaPresent = this.detectMedia(article);
-    const retweeter = author.retweeter;
-    const tweetType = this.detectTweetType(article, !!retweeter);
+    const tweetType = this.detectTweetType(article);
     const isArticle = this.detectArticle(article);
 
     if (!text || !tweetId) {
@@ -182,10 +181,6 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
         profileUrl: author.profileUrl,
         avatarUrl: author.avatarUrl
       },
-      retweeter: retweeter ? {
-        username: retweeter.username,
-        displayName: retweeter.displayName
-      } : undefined,
       url,
       date,
       likes: metrics.likes,
@@ -207,9 +202,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
         is_protected: isProtected,
         has_media: mediaPresent,
         reply_to_tweet_id: undefined,
-        quoted_tweet_id: undefined,
-        retweeter_username: retweeter?.username,
-        retweeter_display_name: retweeter?.displayName
+        quoted_tweet_id: undefined
       }
     };
 
@@ -401,15 +394,13 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     verified: boolean;
     profileUrl?: string;
     avatarUrl?: string;
-    retweeter?: { username: string; displayName: string };
   } {
     const author = {
       username: '',
       displayName: '',
       verified: false,
       profileUrl: undefined as string | undefined,
-      avatarUrl: undefined as string | undefined,
-      retweeter: undefined as { username: string; displayName: string } | undefined
+      avatarUrl: undefined as string | undefined
     };
 
     const userLink = article.querySelector('[data-testid="User-Name"] a[href*="/"]') as HTMLAnchorElement | null;
@@ -438,19 +429,10 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       author.avatarUrl = avatar.src;
     }
 
-    const socialContext = document.querySelector('[data-testid="socialContext"]');
-    const socialText = socialContext ? extractTextContent(socialContext).toLowerCase() : '';
-    if (socialText.includes('retweeted') || socialText.includes('reposted')) {
-      const retweeterLink = socialContext?.querySelector('a[href*="/"]') as HTMLAnchorElement | null;
-      const retweeterHandle = retweeterLink?.href ? this.extractHandleFromHref(retweeterLink.href) : null;
-      const retweeterName = retweeterLink ? extractTextContent(retweeterLink) : null;
-      if (retweeterHandle) {
-        author.retweeter = {
-          username: retweeterHandle,
-          displayName: retweeterName || retweeterHandle
-        };
-      }
-    }
+    // NB: no retweeter/socialContext extraction. The "X reposted" banner only
+    // appears in timeline/feed views; on a /status/ permalink (the only place
+    // the content script runs) you are viewing the original tweet, so there is
+    // no reposter to extract. (Verified 2026-06-02, docs/twitter-dom-verification.md.)
 
     return author;
   }
@@ -516,9 +498,32 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     metrics.likes = parseCount(collectElements(selectors.likes));
     metrics.bookmarks = parseCount(collectElements(selectors.bookmarks), ['bookmark']);
     metrics.quotes = parseCount(collectElements(selectors.quotes));
-    metrics.views = parseCount(collectElements(selectors.views), ['view']);
+    // Prefer the full-integer views from the article's aria-label summary; the
+    // per-element views display is K/M-abbreviated and parses lossily.
+    const summaryViews = this.extractViewsFromSummary(article);
+    metrics.views = summaryViews ?? parseCount(collectElements(selectors.views), ['view']);
 
     return metrics;
+  }
+
+  /**
+   * X exposes a full-integer metrics summary on the article (or a descendant)
+   * aria-label, e.g. "2 replies, 11 reposts, 196 likes, 67 bookmarks, 24226 views".
+   * The standalone views display is abbreviated ("24.2K"), so prefer this when present.
+   * Returns null if no "N views" summary is found (caller falls back).
+   */
+  private extractViewsFromSummary(article: Element): number | null {
+    const candidates = [article, ...Array.from(article.querySelectorAll('[aria-label]'))];
+    for (const el of candidates) {
+      const aria = el.getAttribute('aria-label') || '';
+      if (!/\blikes?\b/i.test(aria)) continue; // identify the all-metrics summary
+      const match = aria.match(/([\d,]+)\s+views?\b/i);
+      if (match) {
+        const n = parseInt(match[1].replace(/,/g, ''), 10);
+        if (!isNaN(n)) return n;
+      }
+    }
+    return null;
   }
 
   /**
@@ -564,11 +569,16 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     return !!article.querySelector('[data-testid="tweetPhoto"], video, audio');
   }
 
-  private detectTweetType(article: Element, hasRetweeter: boolean): TwitterData['tweetType'] {
-    if (article.querySelector('[data-testid="quoteTweet"]')) return 'quote';
-    if (hasRetweeter) return 'retweet';
-    const replyIndicator = article.querySelector('[data-testid="reply"]') || article.textContent?.includes('Replying to');
-    if (replyIndicator) return 'reply';
+  private detectTweetType(article: Element): TwitterData['tweetType'] {
+    // A quote tweet nests the quoted tweet inside the focal article, so the
+    // article has two [data-testid="tweetText"] nodes (X no longer exposes a
+    // quoteTweet testid — verified 2026-06-02, see docs/twitter-dom-verification.md).
+    if (article.querySelectorAll('[data-testid="tweetText"]').length >= 2) return 'quote';
+    // "Replying to @x" marks a reply to another user. (Self-thread replies show a
+    // thread connector instead and fall through to 'original' — acceptable.)
+    // NB: do NOT use [data-testid="reply"] — that is the reply *action button*
+    // present on every tweet, so it misclassifies all originals as replies.
+    if (article.textContent?.includes('Replying to')) return 'reply';
     return 'original';
   }
 

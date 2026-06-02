@@ -61,8 +61,8 @@ describe('TwitterAdapter extraction', () => {
     expect(data?.text).toContain('Hello world from Twitter');
     expect(data?.author.username).toBe('alice');
     expect(data?.author.displayName).toBe('Alice');
-    expect(data?.retweeter?.username).toBe('bob');
-    expect(data?.tweetType).toBe('retweet');
+    expect(data?.retweeter).toBeUndefined();
+    expect(data?.tweetType).toBe('original');
     expect(data?.likes).toBe(7);
     expect(data?.retweets).toBe(5);
     expect(data?.replies).toBe(3);
@@ -72,6 +72,65 @@ describe('TwitterAdapter extraction', () => {
     expect(data?.url).toBeTruthy();
     expect(data?.isProtected).toBe(true);
     expect(data?.platform_data.is_protected).toBe(true);
+  });
+
+  test('classifies a quote tweet via two tweetText nodes (no quoteTweet testid)', () => {
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name"><div><span><span>Alfred</span></span></div><a href="https://x.com/Alfred_Lin">Alfred</a></div>
+        <div data-testid="tweetText"><span lang="en">Outer commentary</span></div>
+        <div data-testid="tweetText"><span lang="en">The quoted inner tweet</span></div>
+        <a href="https://x.com/Alfred_Lin/status/2026005499410583932"><time datetime="2026-02-22T17:14:39Z"></time></a>
+      </article>`;
+    const data = (new TwitterAdapter() as any).extractFromDom();
+    expect(data?.tweetType).toBe('quote');
+    expect(data?.text).toBe('Outer commentary'); // outer (first) tweetText, not the quoted one
+  });
+
+  test('classifies a plain tweet as original, ignoring the reply action button', () => {
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name"><div><span><span>Alice</span></span></div><a href="https://x.com/alice">Alice</a></div>
+        <div data-testid="tweetText"><span lang="en">An original thought</span></div>
+        <div data-testid="reply" aria-label="5 Replies. Reply"></div>
+        <a href="https://x.com/alice/status/123"><time datetime="2026-01-01T00:00:00Z"></time></a>
+      </article>`;
+    expect((new TwitterAdapter() as any).extractFromDom()?.tweetType).toBe('original');
+  });
+
+  test('classifies as reply when "Replying to" text is present', () => {
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name"><div><span><span>Alice</span></span></div><a href="https://x.com/alice">Alice</a></div>
+        <div>Replying to @someone</div>
+        <div data-testid="tweetText"><span lang="en">my reply</span></div>
+        <a href="https://x.com/alice/status/123"><time datetime="2026-01-01T00:00:00Z"></time></a>
+      </article>`;
+    expect((new TwitterAdapter() as any).extractFromDom()?.tweetType).toBe('reply');
+  });
+
+  test('does not extract a retweeter or classify as retweet (socialContext ignored)', () => {
+    document.body.innerHTML = `
+      <div data-testid="socialContext"><a href="https://x.com/bob">Bob</a> reposted</div>
+      <article data-testid="tweet">
+        <div data-testid="User-Name"><div><span><span>Alice</span></span></div><a href="https://x.com/alice">Alice</a></div>
+        <div data-testid="tweetText"><span lang="en">original by alice</span></div>
+        <a href="https://x.com/alice/status/123"><time datetime="2026-01-01T00:00:00Z"></time></a>
+      </article>`;
+    const data = (new TwitterAdapter() as any).extractFromDom();
+    expect(data?.retweeter).toBeUndefined();
+    expect(data?.tweetType).not.toBe('retweet');
+  });
+
+  test('reads full-integer views from the article aria-label summary (not the K/M display)', () => {
+    document.body.innerHTML = `
+      <article data-testid="tweet" aria-label="2865 replies, 21000 reposts, 109960 likes, 2333 bookmarks, 7661636 views">
+        <div data-testid="User-Name"><div><span><span>E</span></span></div><a href="https://x.com/elonmusk">E</a></div>
+        <div data-testid="tweetText"><span lang="en">viral</span></div>
+        <div data-testid="app-text-transition-container">7.2M</div>
+        <a href="https://x.com/elonmusk/status/123"><time datetime="2026-01-01T00:00:00Z"></time></a>
+      </article>`;
+    expect((new TwitterAdapter() as any).extractFromDom()?.views).toBe(7661636);
   });
 
   test('handleMessage delegates extract requests', async () => {
