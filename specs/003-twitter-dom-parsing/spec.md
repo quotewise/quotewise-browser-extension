@@ -2,7 +2,7 @@
 
 **Created**: 2026-06-02
 **Status**: Implemented (baseline) — Living (canonical, drives implementation)
-**Last Updated**: 2026-06-02 — Baseline established from the live x.com audit + fixes (PR #6)
+**Last Updated**: 2026-06-02 — Baseline from the live x.com audit + fixes (PR #6); clarified (4 Q&A — see Clarifications)
 
 ## Overview
 
@@ -116,12 +116,17 @@ Captured engagement metrics and attribution reflect the true values, including f
   handle is used only to look the originator up and for duplicate-check context.
 - **FR-021**: If a resolved originator has no slug, the system MUST NOT submit (clear error), rather than post
   an empty reference.
+- **FR-022**: If the author handle does not resolve to a Quotewise originator (lookup not-found), the system
+  MUST disable submission and surface a "Create on Quotewise" affordance; it MUST NOT submit an unattributed
+  quote.
 
 **Metrics**
 - **FR-030**: Likes, retweets, replies, and bookmarks MUST be read from full-number aria-labels (accurate at
   all magnitudes).
 - **FR-031**: Views MUST be read as a full integer from the article's aria-label summary
-  ("… N likes, N bookmarks, N views"); when absent, the abbreviated display is parsed with K/M/B expansion.
+  ("… N likes, N bookmarks, N views"). When that summary is absent, the system MUST fall back to the
+  abbreviated display parsed with K/M/B expansion; this yields an **approximate** value, which is acceptable
+  for the (rare) fallback path.
 - **FR-032**: Numeric parsing (`parseNumber`, `src/content/common.ts`) MUST expand K/M/B magnitude suffixes
   and MUST NOT treat a following word that begins with K/M/B (e.g. "Bookmarks") as a suffix.
 - **FR-033** *(known gap)*: The quotes count is currently unavailable (no DOM source after X removed the
@@ -134,13 +139,21 @@ Captured engagement metrics and attribution reflect the true values, including f
 
 **Capture gating**
 - **FR-050**: While the post is a long-form Article, submission MUST be disabled until the user selects text.
-- **FR-051**: A selection is valid when its anchor is within the post content (`article` / tweet /
-  article read-view / longform component); selections elsewhere MUST be rejected. Article **titles are within
-  content and ARE quotable** (accepted behavior).
+- **FR-051**: A selection is valid when its anchor is within the post content container (`article` / tweet /
+  article read-view / longform component). **Any** selection inside that container is honored — body, title,
+  image captions, and embedded quoted-tweet text included; only selections outside it (sidebar, nav, page
+  chrome) MUST be rejected. (Article titles are within content and ARE quotable — accepted behavior.)
 
 **Resilience**
 - **FR-060**: Each extraction MUST degrade gracefully through a primary → fallback selector chain and prefer
   returning best-effort data over failing the whole capture.
+
+**Data hygiene**
+- **FR-070**: The REMOVE-disposition fields (see Key Entities) — `author.profileUrl`, `retweeter` +
+  `platform_data.retweeter_username` / `retweeter_display_name`, `platform_data.quote_count`,
+  `platform_data.reply_to_tweet_id` — MUST be dropped from the captured `TwitterData` and the submit payload.
+  Before removal, confirm the Quotewise API tolerates their absence in `platform_data`. (`quoted_tweet_id`
+  stays — it is FUTURE work to populate, not remove.)
 
 ### Selector Inventory (canonical — current implementation)
 
@@ -228,8 +241,9 @@ How each captured field is used today, and its intended disposition. **KEEP** = 
   canonical path (no fallthrough to a CTA or UI chrome).
 - **SC-003**: Quote tweets capture the outer commentary and classify as `quote`; originals are not
   misclassified as `reply`.
-- **SC-004**: Engagement counts are exact full integers for K/M/B-scale tweets (e.g. a 7.2M-view tweet records
-  7,200,000-order, not 7.2).
+- **SC-004**: Engagement counts are exact full integers for K/M/B-scale tweets when the article aria-label
+  summary is present (e.g. a 7.2M-view tweet records 7,661,636, not 7.2); on the rare fallback (no summary),
+  an approximate K/M/B-expanded value (7,200,000) is acceptable — never the raw "7.2".
 - **SC-005**: On an Article, submission is blocked until a passage is selected; an in-article selection is
   honored and a sidebar/nav selection is rejected.
 - **SC-006**: Every submitted quote carries a valid `originator_slug`; capture never posts an empty originator.
@@ -265,10 +279,16 @@ How each captured field is used today, and its intended disposition. **KEEP** = 
 - **Quotes count** and **reply/quoted tweet-id linkage** — no reliable DOM source today (quotes) or not yet
   wired (linkage); tracked as future FRs above.
 - **SpecKit tooling port** into this repo (`.specify/`, scripts) — separate task.
-- **Vestigial-field cleanup** (REMOVE-disposition fields) — recorded here; implemented separately.
 
-## Clarifications / Decisions
+## Clarifications
 
+### Session 2026-06-02
+- Q: On the views fallback (no full-integer aria summary), what value to record? → A: **Approximate via K/M/B expansion** — exact when the summary is present; approximate is acceptable on the rare fallback (FR-031, SC-004).
+- Q: Within an Article, which selections are quotable? → A: **Any selection inside the article content container** (body, title, captions, embedded quoted text); only sidebar/nav are rejected (FR-051).
+- Q: When the handle doesn't resolve to a Quotewise originator, what should capture do? → A: **Block submit + offer "Create on Quotewise"**; never submit an unattributed quote (FR-022).
+- Q: Drop the REMOVE-disposition vestigial fields now or keep as backlog? → A: **Remove now** — authorized under this spec; verify the API tolerates omitted `platform_data` keys first (FR-070).
+
+### Decisions
 - **Selection required on Articles** — the full ~11k-char body is a poor default; Articles require an explicit
   highlight (FR-050).
 - **Article titles are quotable** — the title is DOM-nested in the article content, so title selections are
