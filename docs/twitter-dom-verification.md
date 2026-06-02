@@ -10,9 +10,12 @@ cadence.
 
 It serves two roles:
 1. **Methodology / regression test** (sections 1–5) — reusable, version-controlled.
-2. **Findings snapshot** (section 6) — what was true on a given run date.
+2. **Pointer to the canonical contract** (section 6) — the current selectors and expected behavior to compare
+   against live in the spec at [`specs/003-twitter-dom-parsing/spec.md`](../specs/003-twitter-dom-parsing/spec.md).
 
-> This is a **verification** tool. It changes nothing. Confirmed drift is fixed separately (TDD), tracked in beads.
+> This is a **verification** tool — it changes nothing. The spec is the source of truth for *what the parser
+> should do*; this battery tells you whether the live DOM still matches it. On drift: update the spec, then
+> the code (TDD), tracked in beads.
 
 ---
 
@@ -233,78 +236,21 @@ Capture the full Probe A JSON per situation (at minimum `meta`, `articleDiscover
 
 ---
 
-## 6. Findings — run of 2026-06-02
+## 6. Canonical contract & baseline
 
-UI language: `en` throughout. 15 situations run; selection probes on the article (S9). **Verify-only** — fixes
-tracked in beads `qw-io3r` (no code changed by this pass).
+The **current selector inventory, parsing contract, and per-field data disposition** are maintained in the
+canonical, implementation-driving spec:
 
-### Confirmed bugs (drifted), prioritized
+> **[`specs/003-twitter-dom-parsing/spec.md`](../specs/003-twitter-dom-parsing/spec.md)**
 
-| # | Bug | Evidence | Impact |
-|---|-----|----------|--------|
-| 1 | **`tweetType` is effectively always "reply"** | `detectTweetType` keys off `[data-testid="reply"]` (the reply *action button on every tweet*) → 15/15 classified "reply" regardless of type. "Replying to" didn't fire even on a real reply (S4). Retweet/quote overrides are themselves broken (#2/#3). | Systematic; field is constant. |
-| 2 | **Quote-tweet detection dead** | `[data-testid="quoteTweet"]` no longer matches (S7) → never "quote", and the `quotes` metric never populates (0/null everywhere). The separate `[data-testid="quotedTweet"]` −500 scoring penalty is also stale/moot. Code uses both inconsistent testids. | Quote tweets misclassified; quotes count always 0. |
-| 3 | **Retweeter extraction broken** | On reposts (S6, S10) `socialContext` shows "reposted" but `socialContext.querySelector('a[href*="/"]')` is null → handle/name null → `author.retweeter` never built → reposter lost AND `tweetType` falls to "reply" (not "retweet"). | Reposts lose attribution + misclassify. |
-| 4 | **`views` lossy at K/M scale** | Status pages lack the full-number `[aria-label*="View"]` (it EXISTS on the timeline — S15: "7661636 views…" → accurate), so views falls to abbreviated text ("35.9K"/"7.2M") and `common.ts parseNumber` (strips all but `\d.`) yields 35.9 / 7.2. Confirmed on 6 K/M tweets (S1,S3,S5,S6,S10,S12). | Views off by 1e3–1e6×. Only views; all other metrics accurate at every scale. |
+**Workflow.** Run the battery (§1–5) against live x.com, compare the output to the spec's *Selector Inventory*
+and *Success Criteria*, and **on drift, update the spec first, then bring the code into line** (spec-driven).
 
-### Holds (verified)
+The **2026-06-02 baseline run** — the full 15-situation battery plus the resulting fixes (`tweetType` rework
+removing the reply action-button signal, quote detection via 2× `tweetText`, retweeter removal, views from the
+article aria-label summary, K/M/B-aware `parseNumber`) — is summarized in the spec's **Version History**; the
+detailed pre-fix findings remain in this file's git history.
 
-- **Article discovery + scoring**: winner = URL-id-matching article every time; +1000 URL signal correctly
-  dominates column/cell bonuses for replies (S4: focal 1008 vs parent 185) and thread heads (S5).
-- **tweetId** via `time`-anchor: robust to `/photo/`, `/video/` (S2/S3) and `/history` on edited tweets (S10).
-- **tweetText** `[data-testid="tweetText"]` primary: all standard tweets, all languages incl. Arabic RTL
-  (`dir="auto"`, S13). **Article body** (S9): `isArticle` all 3 testids fire; body via `articleBody` tier.
-- **acct**: handle (User-Name link + `x.com` regex), displayName (tier-1 everywhere), verified (`icon-verified`
-  8/8), avatar (`Tweet-User-Avatar`).
-- **metrics likes/retweets/replies/bookmarks**: full-number aria-labels, accurate at all scales incl. 100K+
-  (S12). `retweet` testid still works despite the "reposts" UI label. **0 distinguishable from missing** (S14).
-- **date** (datetime), **language** (`[lang]`, incl. `ar`), **media** (photo/video/audio — note a video tweet
-  also reports `photo:true` for its poster), **isArticle** (3 testids), **selection scoping** (S9 Probe B:
-  honors body + title, rejects sidebar), **activation gate** (`/home` → `adapterWouldMatch:false`, S15).
-
-### Untested / gaps (low priority)
-- **Protected positive case** — no example found; negative held everywhere; `isProtected` is **badge-only**
-  (gates nothing in lookup/submit) → low impact.
-- **Subscribe-CTA on standalone tweets** — subscriber-only tweets are **modal-gated/unreachable**; the article
-  CTA path is covered by S9. `isSubscribeCta` is effectively article-only.
-- Non-verified account (verified false-positive check) + gold/gray badge variants.
-- `retweetConfirm`/`likeConfirm` (transient), `UserAvatar-Container-unknown`, `time` aria-label date fallback,
-  bare `div[data-testid=tweet]` — legacy/transient; base selectors confirmed.
-
-### Decisions & minor observations
-- **Article titles are quotable** — the title (`twitter-article-title`) is DOM-nested inside the article
-  content container, so selections there are honored like body. **Accepted as intended (2026-06-02)** — no harm.
-- −50 `socialContext` prev-sibling scoring penalty didn't fire on a real repost (heuristic drift; low impact,
-  +1000 dominates).
-- Article `language:null` (articles carry no `[lang]`).
-- DLP layer redacted some testid values / URLs in this run; functional booleans were unaffected.
-
----
-
-## 7. Follow-up fix plan (separate, TDD, gated)
-
-**Phase A — one targeted discovery probe** on a quote tweet + a repost + a status page, to capture the
-*current* DOM for the four broken assumptions before coding: (1) quote-tweet container testid, (2) reposter
-link structure inside `socialContext`, (3) full-number views source on the status page, (4) a reliable reply
-indicator. (We don't yet know the new selectors — same approach used to discover the article read-view testids.)
-
-**Phase B — TDD fixes** in `src/platforms/twitter/adapter.ts` (+ `src/content/common.ts`), each with a faithful
-DOM fixture: tweetType (drop action-button signal, real reply indicator, working retweet/quote overrides);
-quote detection (current testid, quotes metric, −500 penalty, reconcile `quotedTweet`/`quoteTweet`); retweeter
-(`socialContext` reposter-link selector); views (full-number source case-insensitive + K/M/B-aware
-`parseNumber`). Verify full suite + type-check + lint + build; PR.
-
-Tracked: beads `qw-io3r`.
-
-## 8. Phase A discovery results & applied fixes (2026-06-02)
-
-A targeted discovery probe on a quote tweet, a repost, and a high-views status page found the current DOM, and the four bugs were fixed (TDD; `src/platforms/twitter/adapter.ts` + `src/content/common.ts`; beads `qw-0ihz`):
-
-- **Quote** — X exposes **no** `*quote*` testid anymore; the quoted tweet is nested inline, so the focal article has **two `[data-testid="tweetText"]` nodes**. → `detectTweetType` now returns `quote` when `tweetText` count ≥ 2 (outer text is the first node, already what we extract).
-- **Views** — the `article[data-testid="tweet"]` element (or a descendant) carries a **full-integer** aria-label summary: `"… N likes, N bookmarks, N views"`. The standalone display is K/M-abbreviated. → new `extractViewsFromSummary()` reads `"N views"` from that aria-label (primary); falls back to the abbreviated display, now parsed by a **K/M/B-aware `parseNumber`**.
-- **Retweeter** — `[data-testid="socialContext"]` is **absent on `/status/` permalinks** (it's a timeline-only banner; a permalink shows the original tweet). → retweeter/socialContext extraction **removed**, and the `retweet` tweetType branch dropped. (The optional `TwitterData.retweeter` type fields remain, always undefined; the validator still permits them.)
-- **tweetType** — removed the `[data-testid="reply"]` **action-button** signal (present on every tweet → misclassified all originals). New order: `quote` (2× tweetText) → `reply` ("Replying to" text) → `original`. Self-thread quote-threads read as `original` (accepted).
-
-> When re-running this battery as a regression test, note that **Probe A above still tests the pre-fix selectors** (it reports raw DOM + what the *old* adapter would do). Update its `tweetType`/`views`/`quote`/retweeter checks to match the current adapter logic, or just rely on its raw-DOM dumps + the per-assumption holds in §6.
-
-New testids observed for the inventory: `UserAvatar-Container-<handle>` (dynamic, replaces the `-unknown` variant), `<userId>-subscribe`, `birdwatch-pivot`/`icon-birdwatch-fill` (Community Notes).
+> Note: Probe A (§3) still reports raw DOM plus what a *pre-fix* adapter would compute for
+> `tweetType`/`views`/`quote`/retweeter. Rely on its raw-DOM dumps and compare against the spec; refresh those
+> derived checks when you next revise the battery to mirror the current adapter.
