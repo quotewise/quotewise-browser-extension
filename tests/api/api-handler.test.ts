@@ -131,7 +131,7 @@ describe('ApiHandler', () => {
         type: 'CHECK_DUPLICATE' as MessageType,
         data: {
           text: 'Test quote',
-          originator_id: '1',
+          originator_slug: 'kpaxs',
           source_url: 'https://x.com/test/status/123'
         }
       };
@@ -140,7 +140,7 @@ describe('ApiHandler', () => {
 
       expect(mockApiClient.checkQuoteDuplicate).toHaveBeenCalledWith(
         'Test quote',
-        '1',
+        'kpaxs',
         'https://x.com/test/status/123',
         undefined
       );

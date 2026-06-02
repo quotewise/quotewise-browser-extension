@@ -1,26 +1,41 @@
 #!/usr/bin/env node
 /**
- * Keep package.json and manifest.json versions in sync.
- * Usage: node scripts/bump-version.js <version|major|minor|patch>
+ * Keep package, manifest, and lockfile versions in sync.
+ * Usage: node scripts/bump-version.js <version|major|minor|patch|check>
  *
  * Examples:
  *   node scripts/bump-version.js 1.2.3    # Set explicit version
  *   node scripts/bump-version.js patch    # Bump 1.2.0 -> 1.2.1
  *   node scripts/bump-version.js minor    # Bump 1.2.0 -> 1.3.0
  *   node scripts/bump-version.js major    # Bump 1.2.0 -> 2.0.0
+ *   node scripts/bump-version.js check    # Verify all project versions match
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const root = process.cwd();
-const manifestPath = path.join(root, 'manifest.json');
 const pkgPath = path.join(root, 'package.json');
+const projectVersionFiles = [
+  'package.json',
+  'manifest.json',
+  'manifest.dev.json',
+  'manifest.prod.json',
+  'package-lock.json'
+];
 
 const versionArg = process.argv[2];
 if (!versionArg) {
-  console.error('Usage: node scripts/bump-version.js <version|major|minor|patch>');
+  console.error('Usage: node scripts/bump-version.js <version|major|minor|patch|check>');
   process.exit(1);
+}
+
+function readJson(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function writeJson(filePath, json) {
+  fs.writeFileSync(filePath, JSON.stringify(json, null, 2) + '\n');
 }
 
 /**
@@ -69,7 +84,7 @@ function getNewVersion(arg) {
 
   if (bumpTypes.includes(arg)) {
     // Read current version from package.json
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+    const pkg = readJson(pkgPath);
     const currentVersion = pkg.version;
     return bumpVersion(currentVersion, arg);
   }
@@ -84,19 +99,90 @@ function getNewVersion(arg) {
   return arg;
 }
 
-function updateJson(filePath, updater) {
-  const json = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+function updateJsonFile(relativePath, updater) {
+  const filePath = path.join(root, relativePath);
+  const json = readJson(filePath);
   const updated = updater(json);
-  fs.writeFileSync(filePath, JSON.stringify(updated, null, 2) + '\n');
+  writeJson(filePath, updated);
+}
+
+function updateManifest(relativePath, newVersion) {
+  updateJsonFile(relativePath, (manifest) => ({
+    ...manifest,
+    version: newVersion
+  }));
+}
+
+function updatePackageJson(newVersion) {
+  updateJsonFile('package.json', (pkg) => ({
+    ...pkg,
+    version: newVersion
+  }));
+}
+
+function updatePackageLock(newVersion) {
+  updateJsonFile('package-lock.json', (lockfile) => {
+    const updated = {
+      ...lockfile,
+      version: newVersion
+    };
+
+    if (updated.packages?.['']) {
+      updated.packages[''] = {
+        ...updated.packages[''],
+        version: newVersion
+      };
+    }
+
+    return updated;
+  });
+}
+
+function getProjectVersions() {
+  const versions = [];
+
+  for (const relativePath of projectVersionFiles) {
+    const json = readJson(path.join(root, relativePath));
+
+    if (relativePath === 'package-lock.json') {
+      versions.push([relativePath, json.version]);
+      versions.push([`${relativePath} packages[""]`, json.packages?.['']?.version]);
+    } else {
+      versions.push([relativePath, json.version]);
+    }
+  }
+
+  return versions;
+}
+
+function checkVersions() {
+  const versions = getProjectVersions();
+  const missing = versions.filter(([, version]) => !version);
+  const unique = new Set(versions.map(([, version]) => version).filter(Boolean));
+
+  if (missing.length === 0 && unique.size === 1) {
+    console.log(`Project versions are in sync at ${[...unique][0]}`);
+    return;
+  }
+
+  console.error('Project version drift detected:');
+  for (const [label, version] of versions) {
+    console.error(`- ${label}: ${version || '<missing>'}`);
+  }
+  process.exit(1);
+}
+
+if (versionArg === 'check') {
+  checkVersions();
+  process.exit(0);
 }
 
 const newVersion = getNewVersion(versionArg);
 
-updateJson(pkgPath, (pkg) => ({ ...pkg, version: newVersion }));
+updatePackageJson(newVersion);
+updateManifest('manifest.json', newVersion);
+updateManifest('manifest.dev.json', newVersion);
+updateManifest('manifest.prod.json', newVersion);
+updatePackageLock(newVersion);
 
-updateJson(manifestPath, (manifest) => ({
-  ...manifest,
-  version: newVersion
-}));
-
-console.log(`Version bumped to ${newVersion} in package.json and manifest.json`);
+console.log(`Version bumped to ${newVersion} in ${projectVersionFiles.join(', ')}`);

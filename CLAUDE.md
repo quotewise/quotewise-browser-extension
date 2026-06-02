@@ -6,6 +6,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Chrome extension (Manifest V3) for capturing quotes from social media platforms (currently Twitter/X) and submitting them to the Quotewise backend (api.quotewise.io). Uses OAuth authentication.
 
+## Beads Issue Tracker (shared with `quotewise` repo)
+
+This repo does **not** own a beads DB. The canonical Dolt store lives in the sibling `quotewise` repo and is shared via a redirect file at `.beads/redirect` containing the absolute path to it (mirroring the worktree pattern documented in `quotewise/docs/architecture/08-beads-dolt-infrastructure.md`).
+
+```bash
+# One-time setup on a fresh clone (replace path with your local quotewise checkout):
+mkdir -p .beads && echo "/Users/chris/code/quotewise-org/quotewise/.beads" > .beads/redirect
+bd where   # should report:  database: <quotewise-path>/.beads/embeddeddolt
+```
+
+`.beads/` is gitignored because the path is machine-specific. Do **not** run `bd init` here — it would create a competing local DB.
+
+### Multi-repo tagging convention
+
+Quotewise spans several repos (`quotewise`, `quotewise-chrome-extension`, `quotewise-cli`, `quotewise-mcp`, `quotewise-infrastructure`). When creating issues from anywhere, tag the surface(s) explicitly via **labels** so the shared DB stays filterable:
+
+- **`--labels <surface>[,<surface>...]`** — required. Use one of: `chrome-ext`, `django-api`, `cli`, `mcp-server`, `infra`. Add a label per surface for cross-cutting work, plus domain labels (e.g. `duplicate-detection`, `auth`, `ux`).
+
+Example:
+```bash
+bd create "..." --type feature --priority 1 \
+  --labels chrome-ext,django-api,duplicate-detection
+```
+
+Filter later with `bd list --label chrome-ext`.
+
+> ⚠️ **Do NOT pass `--repo`.** It triggers bd's auto-routing logic, which expects repo registration this DB doesn't have. `bd create --repo …` reports `✓ Created` but the issue silently fails to persist. Use labels instead.
+
 ## Build & Development Commands
 
 **Always use Bun instead of npm** for this project.

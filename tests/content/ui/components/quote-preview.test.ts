@@ -41,6 +41,13 @@ describe('QuotePreview', () => {
     expect(clearCalls).toBe(1);
   });
 
+  it('shows a selection-required prompt with no submittable text', () => {
+    preview.showSelectionRequired();
+    expect(container.querySelector('.badge.warning')).not.toBeNull();
+    expect(container.textContent?.toLowerCase()).toContain('select');
+    expect(container.querySelector('.clear-selection')).toBeNull();
+  });
+
   it('shows success state without Selection badge', () => {
     preview.showSuccess('submitted text', false);
     expect(container.querySelector('.badge.success')?.textContent).toBe('✓ Submitted');
@@ -102,6 +109,68 @@ describe('QuotePreview', () => {
 
     it('returns null when tweet text is undefined', () => {
       expect(QuotePreview.getPageSelection(undefined)).toBeNull();
+    });
+
+    it('honors a genuine selection anchored within an article even when the extracted tweet text is wrong/short', () => {
+      // Reproduces the article/subscription-page bug: extracted text is the
+      // subscribe CTA, which does NOT contain the reader's highlighted passage.
+      document.body.innerHTML = `
+        <article data-testid="tweet">
+          <div role="button"><span dir="auto">Click to Subscribe to Kpaxs</span></div>
+          <div dir="auto" lang="en" id="body">The actual long-form article passage that the reader highlighted.</div>
+        </article>
+      `;
+      const bodyEl = document.getElementById('body') as HTMLElement;
+      const selectedText = 'long-form article passage that the reader highlighted';
+
+      const mockSelection = {
+        isCollapsed: false,
+        toString: () => selectedText,
+        anchorNode: bodyEl.firstChild, // text node inside the article body
+      };
+      jest.spyOn(window, 'getSelection').mockReturnValue(mockSelection as unknown as Selection);
+
+      // The mis-extracted "tweet text" is the CTA, which does not contain the selection.
+      expect(QuotePreview.getPageSelection('Click to Subscribe to Kpaxs')).toBe(selectedText);
+
+      jest.restoreAllMocks();
+    });
+
+    it('honors a selection inside the X Article read-view even when not wrapped in an <article>', () => {
+      document.body.innerHTML = `
+        <div data-testid="twitterArticleReadView">
+          <div data-testid="longformRichTextComponent" id="lf">
+            <span>some highlighted long-form passage</span>
+          </div>
+        </div>
+      `;
+      const span = document.querySelector('#lf span') as HTMLElement;
+      const selectedText = 'highlighted long-form passage';
+      const mockSelection = {
+        isCollapsed: false,
+        toString: () => selectedText,
+        anchorNode: span.firstChild,
+      };
+      jest.spyOn(window, 'getSelection').mockReturnValue(mockSelection as unknown as Selection);
+
+      expect(QuotePreview.getPageSelection('Click to Subscribe to Kpaxs')).toBe(selectedText);
+
+      jest.restoreAllMocks();
+    });
+
+    it('ignores a selection that is outside any article/tweet content', () => {
+      document.body.innerHTML = `<div id="sidebar">Trending: something unrelated and long enough</div>`;
+      const sidebar = document.getElementById('sidebar') as HTMLElement;
+      const mockSelection = {
+        isCollapsed: false,
+        toString: () => 'something unrelated and long enough',
+        anchorNode: sidebar.firstChild,
+      };
+      jest.spyOn(window, 'getSelection').mockReturnValue(mockSelection as unknown as Selection);
+
+      expect(QuotePreview.getPageSelection('Click to Subscribe to Kpaxs')).toBeNull();
+
+      jest.restoreAllMocks();
     });
   });
 });
