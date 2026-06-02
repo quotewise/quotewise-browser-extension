@@ -212,6 +212,12 @@ How each captured field is used today, and its intended disposition. **KEEP** = 
 **RESERVE** = retain for a credible near-future use; **REMOVE** = no consumer, slim it out;
 **FUTURE** = should be populated/used by planned work. (Schema: `src/types/chrome.ts`.)
 
+> Note on `platform_data`: the API currently **ignores the entire `platform_data` blob** (it has no serializer
+> field — see Decisions). Its fields are *sent but not persisted*; the tweet id is effectively captured via
+> `source_url` (`x.com/<user>/status/<id>` → the sighting's `platform_identifier`), so `platform_data.tweet_id`
+> is redundant, not a gap. For `platform_data` rows, **KEEP** means "continue sending" (harmless), not
+> "the backend uses it."
+
 | Field | Used today | Disposition |
 |---|---|---|
 | `text` | submitted as quote text; selection-gated on Articles | **KEEP** |
@@ -289,6 +295,14 @@ How each captured field is used today, and its intended disposition. **KEEP** = 
 - Q: Drop the REMOVE-disposition vestigial fields now or keep as backlog? → A: **Remove now** — authorized under this spec; verify the API tolerates omitted `platform_data` keys first (FR-070).
 
 ### Decisions
+- **`platform_data` not persisted by the API — no change (2026-06-02)** — the submitted `platform_data` blob is
+  ignored by `POST /v1/quotes/` (no serializer field; `QuoteCreateSerializer` consumes only `text`,
+  `originator`, `source_url`, and a few optional top-level fields incl. `likes_count`). Evaluated for a
+  backend change to persist an engagement snapshot (views/retweets/bookmarks/replies) and **declined — not
+  relevant at this time**. The tweet id is already captured via `source_url` (→ `platform_identifier`), so
+  `platform_data.tweet_id` is redundant, not a gap. The extension keeps sending `platform_data` (harmless);
+  reviving the snapshot later would be a **backend-only** change (read what's already on the wire) — no
+  extension work. Resolves the open decision raised in `plan.md`.
 - **Selection required on Articles** — the full ~11k-char body is a poor default; Articles require an explicit
   highlight (FR-050).
 - **Article titles are quotable** — the title is DOM-nested in the article content, so title selections are
