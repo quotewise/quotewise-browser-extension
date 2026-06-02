@@ -224,6 +224,88 @@ describe('TwitterAdapter extraction', () => {
     expect(primaryTweetId).toBe('4444444444');
   });
 
+  test('captures the X Article read-view body, not the subscribe CTA', () => {
+    // Real X Article structure (confirmed on live page): there is no
+    // [data-testid="tweetText"]; the body lives in
+    // twitterArticleReadView > twitterArticleRichTextView > longformRichTextComponent,
+    // and its paragraphs carry no [lang]/dir="auto". The bare "Click to
+    // Subscribe to <name>" CTA is a plain div[dir="auto"] (no role/button/testid
+    // hook) that appears before any rich-text content.
+    document.body.innerHTML = `
+      <article data-testid="tweet" role="article">
+        <div data-testid="User-Name">
+          <div><span><span>Kpaxs</span></span></div>
+          <a href="https://twitter.com/Kpaxs">Kpaxs</a>
+        </div>
+        <div><div><div dir="auto">Click to Subscribe to Kpaxs</div></div></div>
+        <div data-testid="twitterArticleReadView">
+          <div data-testid="twitterArticleRichTextView">
+            <div data-testid="longformRichTextComponent">
+              <div><span><span>When you decide whether to do some hard, scary, agentic thing, the real skill is judgment.</span></span></div>
+            </div>
+          </div>
+        </div>
+        <a href="https://twitter.com/Kpaxs/status/2061435378024739198"><time datetime="2023-01-01T00:00:00Z"></time></a>
+      </article>
+    `;
+
+    const adapter = new TwitterAdapter();
+    const article = document.querySelector('article') as HTMLElement;
+    const text = (adapter as any).extractTweetText(article);
+
+    expect(text).toContain('the real skill is judgment');
+    expect(text).not.toMatch(/Subscribe/);
+  });
+
+  test('skips the bare subscribe CTA but still returns it as a last resort so capture opens', () => {
+    // Defensive: if no real body can be located, returning null would stop the
+    // overlay from opening at all. Capture must still open (the user's selection
+    // can then drive the quote), so extraction returns the only text it found.
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div dir="auto">Click to Subscribe to Kpaxs</div>
+        <a href="https://twitter.com/Kpaxs/status/5555555555"><time datetime="2023-01-01T00:00:00Z"></time></a>
+      </article>
+    `;
+
+    const adapter = new TwitterAdapter();
+    const article = document.querySelector('article') as HTMLElement;
+
+    expect((adapter as any).extractTweetText(article)).toBe('Click to Subscribe to Kpaxs');
+  });
+
+  test('flags X Article pages via isArticle', () => {
+    document.body.innerHTML = `
+      <article data-testid="tweet" role="article">
+        <div data-testid="User-Name">
+          <div><span><span>Kpaxs</span></span></div>
+          <a href="https://twitter.com/Kpaxs">Kpaxs</a>
+        </div>
+        <div data-testid="twitterArticleReadView">
+          <div data-testid="twitterArticleRichTextView">
+            <div data-testid="longformRichTextComponent">
+              <div><span><span>The body of a long-form article.</span></span></div>
+            </div>
+          </div>
+        </div>
+        <a href="https://twitter.com/Kpaxs/status/2061435378024739198"><time datetime="2023-01-01T00:00:00Z"></time></a>
+      </article>
+    `;
+
+    const adapter = new TwitterAdapter();
+    const data = (adapter as any).extractFromDom();
+
+    expect(data?.isArticle).toBe(true);
+  });
+
+  test('does not flag a normal tweet as an article', () => {
+    // beforeEach() installs a normal tweet DOM (with [data-testid="tweetText"]).
+    const adapter = new TwitterAdapter();
+    const data = (adapter as any).extractFromDom();
+
+    expect(data?.isArticle).toBe(false);
+  });
+
   test('calculates priority scores correctly', () => {
     document.body.innerHTML = `
       <div data-testid="primaryColumn">

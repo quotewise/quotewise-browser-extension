@@ -236,7 +236,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   /**
    * Check for duplicate quotes
    */
-  async checkQuoteDuplicate(text: string, originatorId?: string, sourceUrl?: string, socialHandle?: string): Promise<DuplicateCheckResult> {
+  async checkQuoteDuplicate(text: string, originatorSlug?: string, sourceUrl?: string, socialHandle?: string): Promise<DuplicateCheckResult> {
     if (!text.trim()) {
       return {
         recommendation: 'new_quote',
@@ -251,7 +251,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
     try {
       const payload = {
         text: text.trim(),
-        originator_id: originatorId ? parseInt(originatorId) : undefined,
+        originator_slug: originatorSlug || undefined,
         source_url: sourceUrl,
         social_handle: socialHandle
       };
