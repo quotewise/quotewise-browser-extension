@@ -27,6 +27,17 @@ export class QuotePreview {
     }
   }
 
+  /**
+   * Article pages require an explicit selection (the full body is far too long
+   * to be a useful quote). Prompt the reader to highlight a passage.
+   */
+  showSelectionRequired(): void {
+    this.container.innerHTML = `
+      <span class="badge warning">Select text</span>
+      <span class="quote-text">Highlight a passage in the article to capture it as a quote.</span>
+    `;
+  }
+
   showSuccess(text: string, wasPartial: boolean): void {
     const preview = text.length > 80
       ? text.substring(0, 80) + '...'
@@ -53,17 +64,37 @@ export class QuotePreview {
     const selectedText = selection.toString().trim();
     if (!selectedText) return null;
 
-    // Verify the selection is part of the tweet text
+    // Fast path: the selection is a verbatim subset of the extracted text.
     if (tweetText && tweetText.includes(selectedText)) {
       return selectedText;
     }
 
-    // Selection might not be exact match due to formatting, but if it's reasonable length, use it
-    if (selectedText.length >= 10 && selectedText.length <= (tweetText?.length || 0)) {
+    // Otherwise honor a genuine selection that is anchored inside the tweet /
+    // long-form article content. On article and subscription pages the
+    // extracted `tweetText` is often partial or wrong (e.g. a "Subscribe"
+    // CTA), so we must not gate the user's highlight on it — only on whether
+    // the highlight actually lives within the post's content.
+    if (QuotePreview.isSelectionWithinPostContent(selection)) {
       return selectedText;
     }
 
     return null;
+  }
+
+  /**
+   * Whether the selection's anchor sits inside a post-content container (a
+   * tweet or an X Article read view) as opposed to the sidebar, nav, or other
+   * page chrome. The long-form read view normally nests inside an
+   * <article>, but it is matched explicitly so selections are honored even on
+   * layouts where it does not.
+   */
+  private static isSelectionWithinPostContent(selection: Selection): boolean {
+    const anchor = selection.anchorNode;
+    if (!anchor) return false;
+    const anchorEl = anchor instanceof Element ? anchor : anchor.parentElement;
+    return !!anchorEl?.closest(
+      'article, [data-testid="tweet"], [data-testid="twitterArticleReadView"], [data-testid="longformRichTextComponent"]'
+    );
   }
 
   private escapeHtml(text: string): string {

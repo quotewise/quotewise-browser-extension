@@ -167,6 +167,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     const mediaPresent = this.detectMedia(article);
     const retweeter = author.retweeter;
     const tweetType = this.detectTweetType(article, !!retweeter);
+    const isArticle = this.detectArticle(article);
 
     if (!text || !tweetId) {
       return null;
@@ -195,6 +196,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       tweetType,
       language: language || undefined,
       isProtected,
+      isArticle,
       platform_data: {
         tweet_id: tweetId,
         reply_count: metrics.replies,
@@ -335,22 +337,62 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
   }
 
   private extractTweetText(article: Element): string | null {
-    const selectors = [
-      '[data-testid="tweetText"]',
-      '[lang]',
-      'div[dir="auto"]',
-      'article span[lang]'
-    ];
+    // Canonical tweet-text container (normal tweets): trust it when present.
+    const primary = article.querySelector('[data-testid="tweetText"]');
+    if (primary) {
+      const text = extractTextContent(primary);
+      if (text) return text;
+    }
 
-    for (const selector of selectors) {
-      const node = article.querySelector(selector);
-      if (node) {
+    // Long-form X Articles have no tweetText node — the body lives in a
+    // dedicated read view, and its paragraphs carry no [lang]/dir="auto", so
+    // the generic fallbacks below cannot reach it. The rich-text view is an
+    // ancestor of the per-block longform component, so it is matched first in
+    // document order and yields the full body.
+    const articleBody = article.querySelector(
+      '[data-testid="twitterArticleRichTextView"], [data-testid="longformRichTextComponent"]'
+    );
+    if (articleBody) {
+      const text = extractTextContent(articleBody);
+      if (text) return text;
+    }
+
+    // Broad fallbacks. These latch onto non-content UI — notably the bare
+    // "Click to Subscribe to <name>" CTA, which is a plain div[dir="auto"]
+    // with no role/button/testid hook. Skip interactive controls and the
+    // subscribe CTA, but never regress to null while some text exists (so
+    // capture still opens and the user's selection can drive the quote).
+    const fallbackSelectors = ['[lang]', 'div[dir="auto"]', 'article span[lang]'];
+    let firstAnyText: string | null = null;
+
+    for (const selector of fallbackSelectors) {
+      for (const node of article.querySelectorAll(selector)) {
         const text = extractTextContent(node);
-        if (text) return text;
+        if (!text) continue;
+        if (firstAnyText === null) firstAnyText = text;
+        if (this.isInteractiveControl(node) || this.isSubscribeCta(text)) continue;
+        return text;
       }
     }
 
-    return null;
+    return firstAnyText;
+  }
+
+  /**
+   * True when the node is, or lives inside, an interactive control such as a
+   * button — never real quote content.
+   */
+  private isInteractiveControl(node: Element): boolean {
+    return !!node.closest('button, [role="button"], [data-testid="placementTracking"]');
+  }
+
+  /**
+   * X's "Subscribe" call-to-action ("Click to Subscribe to <name>") renders as
+   * a bare div with no structural hook, so it can only be recognized by its
+   * short, fixed phrasing.
+   */
+  private isSubscribeCta(text: string): boolean {
+    return text.length < 80 && /^(click to )?subscribe to /i.test(text);
   }
 
   private extractAuthor(article: Element): {
@@ -528,5 +570,16 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     const replyIndicator = article.querySelector('[data-testid="reply"]') || article.textContent?.includes('Replying to');
     if (replyIndicator) return 'reply';
     return 'original';
+  }
+
+  /**
+   * Long-form X Articles render the body in a dedicated read view rather than a
+   * tweetText node. Their presence marks the post as an article, where capture
+   * should require an explicit text selection instead of grabbing the whole body.
+   */
+  private detectArticle(article: Element): boolean {
+    return !!article.querySelector(
+      '[data-testid="twitterArticleReadView"], [data-testid="twitterArticleRichTextView"], [data-testid="longformRichTextComponent"]'
+    );
   }
 }
