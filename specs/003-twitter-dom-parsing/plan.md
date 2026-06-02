@@ -87,12 +87,12 @@ Estimated: small, single PR, no backend coordination.
 
 ## Decisions surfaced (need a call before/with implementation)
 
-1. **`platform_data` is entirely unused by the API** (research Finding 1). Options: **(a)** do FR-070 only and
-   keep sending the rest as future-proofing *(recommended — low cost, additive if the backend later consumes
-   it)*; **(b)** stop sending `platform_data` wholesale (trim the payload); **(c)** coordinate a backend change
-   to persist it (e.g. into `QuoteSighting.citation_json`). (a)/(b) are extension-only; (c) is cross-repo.
-   **This plan assumes (a)** — FR-070 trims only the four REMOVE fields; the wholesale question is flagged for
-   a separate cross-repo decision, not actioned here.
+1. **`platform_data` is entirely unused by the API** (research Finding 1) — **RESOLVED 2026-06-02: no API
+   change, no extension change.** None of the `platform_data` engagement fields are worth persisting at this
+   time, and the tweet id is already captured via `source_url` (→ `platform_identifier`), so
+   `platform_data.tweet_id` is redundant — not a gap. The extension keeps sending `platform_data` as-is
+   (harmless); an engagement snapshot, if ever wanted, is a backend-only change (read what's already on the
+   wire). FR-070 still trims only the genuinely-dead fields. (See spec Decisions.)
 2. **`originator_slug` serializer flag** (research Finding 3) — verify on the backend; not a spec-003 blocker
    (production submit works).
 
