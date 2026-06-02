@@ -124,11 +124,23 @@ export function parseDate(dateString: string): string | null {
  */
 export function parseNumber(numberString: string): number {
   if (!numberString) return 0;
-  
-  // Remove all non-digit characters except decimal points
-  const cleaned = numberString.replace(/[^\d.]/g, '');
-  const number = parseFloat(cleaned);
-  
+
+  const withoutCommas = numberString.replace(/,/g, '');
+
+  // X abbreviates large counts ("35.9K", "7.2M"). Expand a K/M/B magnitude
+  // suffix when it immediately follows the number — but not when it's just the
+  // first letter of a following word (e.g. "198 Bookmarks").
+  const magnitude = withoutCommas.match(/(\d[\d.]*)\s*([KMB])(?![A-Za-z])/i);
+  if (magnitude) {
+    const value = parseFloat(magnitude[1]);
+    if (isNaN(value)) return 0;
+    const suffix = magnitude[2].toUpperCase();
+    const multiplier = suffix === 'K' ? 1e3 : suffix === 'M' ? 1e6 : 1e9;
+    return Math.round(value * multiplier);
+  }
+
+  // Otherwise strip everything but digits and a decimal point.
+  const number = parseFloat(withoutCommas.replace(/[^\d.]/g, ''));
   return isNaN(number) ? 0 : number;
 }
 
