@@ -16,6 +16,11 @@ import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-r
 import { initiateOAuthFlow, logout } from '../auth/auth-flow';
 import { initializeAuthStateManager, AuthStateManager } from '../auth/auth-state-manager';
 import { AuthState } from '../auth/auth-state-machine';
+import {
+  classifyDuplicateSighting,
+  getMatchForDuplicateSightingState
+} from '../utils/duplicate-status';
+import type { DuplicateSightingState } from '../utils/duplicate-status';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -30,6 +35,51 @@ let servicesInitialized = false;
 const pendingDuplicateChecks = new Map<string, Promise<void>>();
 
 // Service worker startup is logged once after initialization completes
+
+const CONTENT_SCRIPT_FILE = 'content/index.js';
+const MISSING_CONTENT_SCRIPT_MESSAGE = 'Receiving end does not exist';
+const TWEET_PAGE_REGEX = /^https:\/\/(twitter\.com|x\.com)\/[^/]+\/status\/\d+/;
+
+function isTweetPageUrl(url?: string): boolean {
+  return !!url && TWEET_PAGE_REGEX.test(url);
+}
+
+function isMissingContentScriptError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(MISSING_CONTENT_SCRIPT_MESSAGE);
+}
+
+async function showOverlayInTab(tab: chrome.tabs.Tab): Promise<void> {
+  if (!tab.id) return;
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, { type: MessageType.SHOW_OVERLAY });
+  } catch (error) {
+    if (!isMissingContentScriptError(error) || !isTweetPageUrl(tab.url)) {
+      throw error;
+    }
+
+    debugLog('Content script missing on tweet tab; injecting before showing overlay');
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: [CONTENT_SCRIPT_FILE]
+    });
+    await chrome.tabs.sendMessage(tab.id, { type: MessageType.SHOW_OVERLAY });
+  }
+}
+
+function getExistingQuoteConfigTitle(sightingState: DuplicateSightingState, quote: string): string {
+  switch (sightingState) {
+    case 'exact_sighting':
+      return `Exact sighting already in Quotewise: ${quote}`;
+    case 'same_platform_sighting':
+      return `Quote already has a Twitter sighting: ${quote}`;
+    case 'other_platform_sighting':
+      return `Quote exists; add this Twitter sighting: ${quote}`;
+    case 'unknown':
+    default:
+      return `In Quotewise (not collected): ${quote}`;
+  }
+}
 
 /**
  * Ensure all services are initialized
@@ -108,8 +158,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 // Toolbar icon click: show overlay bar in active tab
 chrome.action.onClicked.addListener(async (tab) => {
   try {
-    if (!tab.id) return;
-    await chrome.tabs.sendMessage(tab.id, { type: MessageType.SHOW_OVERLAY });
+    await showOverlayInTab(tab);
   } catch (error) {
     console.error('Error handling action click:', error);
   }
@@ -357,7 +406,7 @@ async function clearTweetPageIcon(tabId: number): Promise<void> {
 // Handle tab updates to detect tweet pages (full page loads)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
-    const isTweetPage = /https:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(tab.url);
+    const isTweetPage = isTweetPageUrl(tab.url);
 
     if (isTweetPage) {
       // Ensure services are initialized before checking auth state
@@ -377,7 +426,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
   // Only process main frame navigations
   if (details.frameId !== 0) return;
 
-  const isTweetPage = /https:\/\/(twitter\.com|x\.com)\/\w+\/status\/\d+/.test(details.url);
+  const isTweetPage = isTweetPageUrl(details.url);
 
   if (isTweetPage) {
     debugLog('SPA navigation detected to tweet page:', details.url);
@@ -391,7 +440,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: details.tabId },
-        files: ['content/index.js']
+        files: [CONTENT_SCRIPT_FILE]
       });
       debugLog('Content script injected for SPA navigation');
     } catch (error) {
@@ -524,7 +573,11 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
       duplicate_check?: {
         in_quotewise?: boolean;
         existing_sightings_for_url?: Array<{ id: number; in_user_collections?: boolean }>;
-        matches?: Array<{ similarity: number; in_user_collections?: boolean }>;
+        matches?: Array<{
+          similarity: number;
+          in_user_collections?: boolean;
+          sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
+        }>;
         recommendation?: string;
       };
     }>((resolve) => {
@@ -603,14 +656,21 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
 
     // Determine badge status from duplicate check result
     let status: 'already_collected' | 'exists_not_collected' | 'new_quote' = 'new_quote';
+    let sightingState: DuplicateSightingState = 'unknown';
 
     if (duplicateResult) {
-      // Check for exact URL matches first (sighting already exists for this URL)
-      const existingSightings = duplicateResult.existing_sightings_for_url || [];
-      if (existingSightings.length > 0) {
-        // URL already captured - check if in user's collections
+      sightingState = classifyDuplicateSighting(duplicateResult);
+
+      if (sightingState === 'exact_sighting') {
+        const existingSightings = duplicateResult.existing_sightings_for_url || [];
+        const exactMatch = getMatchForDuplicateSightingState(duplicateResult, sightingState);
         const inUserCollections = existingSightings.some(s => s.in_user_collections);
-        status = inUserCollections ? 'already_collected' : 'exists_not_collected';
+        status = inUserCollections || !!exactMatch?.in_user_collections
+          ? 'already_collected'
+          : 'exists_not_collected';
+      } else if (sightingState === 'same_platform_sighting' || sightingState === 'other_platform_sighting') {
+        const match = getMatchForDuplicateSightingState(duplicateResult, sightingState);
+        status = match?.in_user_collections ? 'already_collected' : 'exists_not_collected';
       } else {
         // No exact URL match - check text similarity matches (must be high similarity)
         const matches = duplicateResult.matches || [];
@@ -627,7 +687,7 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
     }
 
     debugLog('Badge status determined:', status);
-    await updateCollectionBadgeForTweet(status, tweetData.text, tabId);
+    await updateCollectionBadgeForTweet(status, tweetData.text, tabId, sightingState);
   } catch (error) {
     console.error('Error checking quote collection status:', error);
     // On error, show as new quote (safe default)
@@ -642,7 +702,8 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
 async function updateCollectionBadgeForTweet(
   state: 'processing' | 'already_collected' | 'exists_not_collected' | 'new_quote',
   quoteText: string,
-  tabId?: number
+  tabId?: number,
+  sightingState: DuplicateSightingState = 'unknown'
 ): Promise<void> {
   try {
     // Use provided tabId, or fall back to active tab
@@ -703,7 +764,7 @@ async function updateCollectionBadgeForTweet(
         badge = {
           text: '+',
           color: '#FF9800', // Orange - exists but not in your collection
-          title: `In Quotewise (not in your collection): "${preview}..."`
+          title: getExistingQuoteBadgeTitle(sightingState, preview)
         };
         break;
       case 'new_quote':
@@ -722,6 +783,20 @@ async function updateCollectionBadgeForTweet(
     debugLog(`Badge updated for tab ${targetTabId}: ${state}`, badge);
   } catch (error) {
     console.error('Error updating collection badge:', error);
+  }
+}
+
+function getExistingQuoteBadgeTitle(sightingState: DuplicateSightingState, preview: string): string {
+  switch (sightingState) {
+    case 'exact_sighting':
+      return `Exact sighting already in Quotewise: "${preview}..."`;
+    case 'same_platform_sighting':
+      return `Quote already has a Twitter sighting: "${preview}..."`;
+    case 'other_platform_sighting':
+      return `Quote exists; add this Twitter sighting: "${preview}..."`;
+    case 'unknown':
+    default:
+      return `In Quotewise (not in your collection): "${preview}..."`;
   }
 }
 
@@ -868,7 +943,7 @@ function getCollectionBadgeConfig(badgeInfo: import('../types/chrome').Collectio
       return {
         text: '+',
         color: '#FF9800', // Orange - exists but not in your collection
-        title: `In Quotewise (not collected): ${quote}`
+        title: getExistingQuoteConfigTitle(badgeInfo.duplicateSightingState || 'unknown', quote)
       };
     
     case 'new_quote':

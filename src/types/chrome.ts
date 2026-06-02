@@ -2,6 +2,8 @@
  * Chrome extension API type extensions and custom types
  */
 
+import type { DuplicateSightingState } from '../utils/duplicate-status';
+
 // Extend Chrome API types as needed
 declare namespace chrome {
   namespace runtime {
@@ -93,6 +95,8 @@ export interface TwitterData {
   tweetType: 'original' | 'reply' | 'retweet' | 'quote';
   language?: string;
   isProtected?: boolean;
+  /** True when the post is a long-form X Article (read-view), where capture requires an explicit text selection. */
+  isArticle?: boolean;
   platform_data: {
     tweet_id: string | null;
     reply_count: number;
@@ -180,6 +184,7 @@ export type CollectionBadgeState = 'already_collected' | 'exists_not_collected' 
 export interface CollectionBadgeInfo {
   state: CollectionBadgeState;
   quoteText?: string; // For title display
+  duplicateSightingState?: DuplicateSightingState;
 }
 
 // Utility types

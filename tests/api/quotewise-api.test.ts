@@ -341,7 +341,7 @@ describe('QuotewiseApiClient', () => {
         headers: new Headers({ 'content-type': 'application/json' })
       } as Response);
 
-      const result = await client.checkQuoteDuplicate('Test quote', '1');
+      const result = await client.checkQuoteDuplicate('Test quote', 'kpaxs');
 
       expect(result).toEqual(mockDuplicateResult);
       expect(mockFetch).toHaveBeenCalledWith(
@@ -350,7 +350,7 @@ describe('QuotewiseApiClient', () => {
           method: 'POST',
           body: JSON.stringify({
             text: 'Test quote',
-            originator_id: 1
+            originator_slug: 'kpaxs'
           })
         })
       );

@@ -8,6 +8,7 @@ import type { SubmitStateDirective } from './components/duplicate-badge';
 import { QuotePreview } from './components/quote-preview';
 import { OriginatorLookup } from './components/originator-lookup';
 import { ActionButton } from './components/action-button';
+import { classifyDuplicateSighting } from '../../utils/duplicate-status';
 
 type DataProvider = () => Promise<TwitterData | null>;
 
@@ -552,6 +553,15 @@ export class OverlayBar {
   }
 
   /**
+   * X Article bodies are far too long to capture wholesale, so on article pages
+   * a quote requires an explicit text selection. Normal tweets fall back to the
+   * full tweet text as before.
+   */
+  private requiresSelection(): boolean {
+    return !!this.currentData?.isArticle && !this.captureState.selectedText;
+  }
+
+  /**
    * Update the quote preview in capture row to show what will be submitted
    */
   private updateQuotePreview(): void {
@@ -563,8 +573,17 @@ export class OverlayBar {
         onClearSelection: () => {
           this.captureState.selectedText = null;
           this.updateQuotePreview();
+          // On articles, clearing the selection re-blocks submit.
+          if (this.requiresSelection()) {
+            this.updateSubmitButton(false);
+          }
         },
       });
+    }
+
+    if (this.requiresSelection()) {
+      this.quotePreview.showSelectionRequired();
+      return;
     }
 
     const textToSubmit = this.captureState.selectedText || this.currentData?.text || '';
@@ -628,18 +647,22 @@ export class OverlayBar {
         this.captureState.originator = outcome.originator;
         this.updateSubmitButton(true);
 
-        // Use preloaded duplicate data if available and fresh
-        if (
-          outcome.preloadedDuplicateCheck &&
-          outcome.preloadedDuplicateCheck.url === this.currentData?.url &&
-          (Date.now() - outcome.preloadedDuplicateCheck.timestamp) < 60000
-        ) {
-          const result = outcome.preloadedDuplicateCheck.result as DuplicateCheckResult;
-          this.captureState.isCheckingDuplicate = false;
-          this.captureState.duplicateResult = result;
-          this.updateDuplicateInfo({ result });
-        } else {
-          this.checkDuplicate(outcome.originator.id);
+        // On an article with no selection yet, submit is blocked, so skip the
+        // duplicate check (it would run against the entire article body).
+        if (!this.requiresSelection()) {
+          // Use preloaded duplicate data if available and fresh
+          if (
+            outcome.preloadedDuplicateCheck &&
+            outcome.preloadedDuplicateCheck.url === this.currentData?.url &&
+            (Date.now() - outcome.preloadedDuplicateCheck.timestamp) < 60000
+          ) {
+            const result = outcome.preloadedDuplicateCheck.result as DuplicateCheckResult;
+            this.captureState.isCheckingDuplicate = false;
+            this.captureState.duplicateResult = result;
+            this.updateDuplicateInfo({ result });
+          } else {
+            this.checkDuplicate(outcome.originator.unique_id);
+          }
         }
       } else if (outcome.status === 'not_found') {
         this.captureState.createUrl = outcome.createUrl || null;
@@ -657,12 +680,35 @@ export class OverlayBar {
   private async submitQuote(): Promise<void> {
     if (!this.currentData || !this.captureState.originator) return;
 
-    // Block submission for exact_url matches (this URL is already captured)
+    // The slug is the public write identifier. Guard against a resolved
+    // originator that somehow lacks one rather than POSTing an empty reference
+    // (which the API rejects with a cryptic "originator is required").
+    const originatorSlug = this.captureState.originator.unique_id;
+    if (!originatorSlug) {
+      this.setOriginatorHtml(
+        `<span class="badge error">!</span>
+         <span>Couldn't resolve this originator's ID — please retry or open it in Quotewise.</span>`
+      );
+      this.updateSubmitButton(true, 'Retry');
+      return;
+    }
+
+    // Block submission when this URL or another sighting on the same platform is already captured.
     const duplicateResult = this.captureState.duplicateResult;
-    const sightingStatus = duplicateResult?.matches?.[0]?.sighting_status;
-    if (sightingStatus === 'exact_url') {
+    const sightingState = classifyDuplicateSighting(duplicateResult);
+    if (sightingState === 'exact_sighting') {
       // Submission should already be blocked via UI, but double-check here
       this.updateSubmitButton(false, 'Already Captured');
+      return;
+    }
+    if (sightingState === 'same_platform_sighting') {
+      this.updateSubmitButton(false, 'Sighting Exists');
+      return;
+    }
+
+    // Articles require an explicit selection — never submit the full body.
+    if (this.requiresSelection()) {
+      this.updateSubmitButton(false);
       return;
     }
 
@@ -677,7 +723,7 @@ export class OverlayBar {
         type: MessageType.SUBMIT_QUOTE,
         data: {
           text: quoteText,
-          originator_id: this.captureState.originator.id,
+          originator_slug: originatorSlug,
           source_url: this.currentData.url,
           platform_code: 'TX',
           likes_count: this.currentData.likes || 0,
@@ -710,14 +756,18 @@ export class OverlayBar {
           type: MessageType.UPDATE_COLLECTION_BADGE,
           data: {
             state: 'exists_not_collected',
-            quoteText: quoteText
+            quoteText: quoteText,
+            duplicateSightingState: 'exact_sighting'
           }
         }).catch(() => {
           // Badge update is non-critical
         });
 
+        const clearDuplicateCache = this.clearPreloadedDuplicateCheckForCurrentUrl();
+
         // Auto-hide after success
-        setTimeout(() => this.hide(), 1500);
+        setTimeout(() => this.hide(), 1000);
+        await clearDuplicateCache;
       } else {
         throw new Error(response.error || response.message || 'Submission failed');
       }
@@ -750,6 +800,10 @@ export class OverlayBar {
 
   private updateSubmitButton(enabled: boolean, text?: string): void {
     if (!this.actionButton) return;
+    if (this.requiresSelection()) {
+      this.actionButton.showSubmit(false, 'Select quote-text to submit');
+      return;
+    }
     this.actionButton.showSubmit(enabled, text);
   }
 
@@ -758,7 +812,16 @@ export class OverlayBar {
    */
   private updateSubmitButtonWarning(enabled: boolean, text: string): void {
     if (!this.actionButton) return;
+    if (this.requiresSelection()) {
+      this.actionButton.showSubmit(false, 'Select quote-text to submit');
+      return;
+    }
     this.actionButton.showSubmitWarning(enabled, text);
+  }
+
+  private updateViewQuoteButton(url: string, text: string): void {
+    if (!this.actionButton) return;
+    this.actionButton.showViewQuote(url, text);
   }
 
   /**
@@ -791,6 +854,9 @@ export class OverlayBar {
             return { success: false, error: 'Unable to start login' };
           }
         },
+        onViewQuote: (url: string) => {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        },
       });
     }
     return this.actionButton;
@@ -802,7 +868,8 @@ export class OverlayBar {
   private updateActionButton(isAuthenticated: boolean): void {
     const ab = this.ensureActionButton();
     if (isAuthenticated) {
-      ab.showSubmit(true);
+      // Routed through updateSubmitButton so the article selection gate applies.
+      this.updateSubmitButton(true);
     } else {
       ab.showLogin();
     }
@@ -811,7 +878,7 @@ export class OverlayBar {
   /**
    * Check for duplicate quotes in background (non-blocking, informational only)
    */
-  private async checkDuplicate(originatorId: number): Promise<void> {
+  private async checkDuplicate(originatorSlug: string): Promise<void> {
     if (!this.currentData?.text) return;
 
     this.captureState.isCheckingDuplicate = true;
@@ -825,7 +892,7 @@ export class OverlayBar {
         type: MessageType.CHECK_DUPLICATE,
         data: {
           text: quoteText,
-          originator_id: originatorId,
+          originator_slug: originatorSlug,
           source_url: this.currentData.url,
           social_handle: this.currentData.author?.username
         }
@@ -865,6 +932,11 @@ export class OverlayBar {
     if (!this.duplicateBadge) {
       this.duplicateBadge = new DuplicateBadge(this.duplicateBadgeContainer, {
         onSubmitStateChange: (directive: SubmitStateDirective) => {
+          if (directive.type === 'view_quote') {
+            this.updateViewQuoteButton(directive.url, directive.text);
+            return;
+          }
+
           if (directive.style === 'warning') {
             this.updateSubmitButtonWarning(directive.enabled, directive.text);
           } else {
@@ -875,6 +947,19 @@ export class OverlayBar {
     }
 
     this.duplicateBadge.update(state);
+  }
+
+  private async clearPreloadedDuplicateCheckForCurrentUrl(): Promise<void> {
+    if (!this.currentData?.url) return;
+
+    try {
+      const storage = await chrome.storage.local.get(['preloadedDuplicateCheck']);
+      if (storage.preloadedDuplicateCheck?.url === this.currentData.url) {
+        await chrome.storage.local.remove(['preloadedDuplicateCheck']);
+      }
+    } catch {
+      // Cache cleanup is best-effort; the next duplicate check can still recover.
+    }
   }
 
   private sendMessage(message: { type: MessageType; data?: unknown }): Promise<{

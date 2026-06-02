@@ -6,17 +6,20 @@ describe('ActionButton', () => {
   let onSubmitCalls: number;
   let onLoginResult: { success: boolean; error?: string };
   let onLoginCalls: number;
+  let onViewQuoteCalls: string[];
   let actionButton: ActionButton;
 
   beforeEach(() => {
     container = document.createElement('div');
     onSubmitCalls = 0;
     onLoginCalls = 0;
+    onViewQuoteCalls = [];
     onLoginResult = { success: true };
 
     callbacks = {
       onSubmit: () => { onSubmitCalls++; },
       onLogin: async () => { onLoginCalls++; return onLoginResult; },
+      onViewQuote: (url: string) => { onViewQuoteCalls.push(url); },
     };
 
     actionButton = new ActionButton(container, callbacks);
@@ -110,6 +113,31 @@ describe('ActionButton', () => {
     expect(onLoginCalls).toBe(1);
   });
 
+  it('shows view quote button via showViewQuote()', () => {
+    actionButton.showViewQuote('https://quotewise.io/quotes/abc123');
+    const btn = container.querySelector('button') as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    expect(btn.id).toBe('view-quote-btn');
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toBe('View Quote');
+    expect(btn.className).toBe('primary');
+  });
+
+  it('calls onViewQuote when view quote button clicked', () => {
+    actionButton.showViewQuote('https://quotewise.io/quotes/abc123');
+    const btn = container.querySelector('button') as HTMLButtonElement;
+    btn.click();
+    expect(onViewQuoteCalls).toEqual(['https://quotewise.io/quotes/abc123']);
+  });
+
+  it('updates reused view quote button with the latest URL', () => {
+    actionButton.showViewQuote('https://quotewise.io/quotes/old');
+    actionButton.showViewQuote('https://quotewise.io/quotes/new');
+    const btn = container.querySelector('button') as HTMLButtonElement;
+    btn.click();
+    expect(onViewQuoteCalls).toEqual(['https://quotewise.io/quotes/new']);
+  });
+
   it('does not crash if showSubmit called before any button exists', () => {
     // No button created yet — should not throw
     expect(() => actionButton.showSubmit(false)).not.toThrow();
@@ -133,6 +161,15 @@ describe('ActionButton', () => {
     actionButton.showLogin();
     expect(container.querySelector('#submit-btn')).toBeNull();
     expect(container.querySelector('#login-btn')).toBeTruthy();
+  });
+
+  it('replaces submit button with view quote button when switching modes', () => {
+    actionButton.showSubmit(true);
+    expect(container.querySelector('#submit-btn')).toBeTruthy();
+
+    actionButton.showViewQuote('https://quotewise.io/quotes/abc123');
+    expect(container.querySelector('#submit-btn')).toBeNull();
+    expect(container.querySelector('#view-quote-btn')).toBeTruthy();
   });
 
   it('reuses existing submit button without recreating', () => {
