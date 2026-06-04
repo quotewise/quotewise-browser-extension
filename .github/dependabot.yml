@@ -1,0 +1,31 @@
+# Dependabot configuration — https://docs.github.com/code-security/dependabot
+#
+# This project uses Bun (bun.lock) exclusively; the stale package-lock.json was
+# removed and npm/yarn/pnpm lockfiles are gitignored (see CLAUDE.md, .gitignore).
+# Dependabot's "bun" ecosystem (GA 2025-02-13) reads the text-based bun.lock
+# (Bun >= 1.1.39) and keeps the dependency tree current.
+#
+# NOTE: As of 2026, Dependabot supports *version updates* for Bun but not yet
+# *security updates* (vulnerability-triggered PRs) against bun.lock. This config
+# enables the scheduled version-update PRs that are available today; revisit for
+# a `security-updates` knob once Dependabot ships Bun security support.
+version: 2
+updates:
+  - package-ecosystem: "bun"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    # Solo-dev noise control: bundle routine minor/patch bumps into a single
+    # weekly PR; majors arrive as separate PRs so they can be reviewed deliberately.
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
