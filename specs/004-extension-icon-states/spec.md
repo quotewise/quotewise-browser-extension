@@ -50,6 +50,9 @@ confused. This is the most common ambiguity.
 - **When** auth state is `UNAUTHENTICATED`, the system **MUST** swap the artwork to the **greyed owl** (visible
   at a glance, no badge) and set the tooltip "Quotewise — log in to capture quotes".
 - **When** auth state is `AUTHENTICATED`, the artwork **MUST** be the full-color owl.
+- **When** auth state is transitional (`UNKNOWN`, `CHECKING`, or `AUTHENTICATING`), the artwork **MUST** be the
+  full-color owl with **no badge** and neutral tooltip "Quotewise"; it **MUST NOT** claim "ready to capture" or
+  show any quote-status badge until `AUTHENTICATED` is confirmed.
 - The greyed and full-color states **MUST** be distinguishable by the artwork alone, not by tooltip alone.
 
 ### User Story 2 - Know a tweet is new and capturable (P1)
@@ -85,7 +88,7 @@ API distinguishes them and the icon should too.
 - **When** a match is `exact_url` or `exact_same_originator` (similarity = 1.0) and not in the user's
   collection, the badge **MUST** show `=` on `#E69F00` (orange), tooltip "Exact match already in Quotewise".
 - **When** the best match is `near_same_originator` (0.8 < similarity < 1.0), the badge **MUST** show `~` on
-  `#CC79A7` (purple), tooltip "Similar version already in Quotewise (NN% match)".
+  `#CC79A7` (purple), tooltip "Similar version already in Quotewise".
 - Exact and similar **MUST** be distinguishable by **both** shape (`=` vs `~`) and color (orange vs purple).
 
 ### User Story 5 - Be warned when a quote is attributed to someone else (P2)
@@ -117,14 +120,17 @@ A user sees the extension is checking a quote, or that their session needs atten
 
 - **Multiple conditions true at once** (e.g. session expired *and* on a known-duplicate tweet): resolve by the
   precedence in FR-030 — the user sees exactly one state.
-- **Non-tweet / non-actionable page**: no quote-status badge; the icon shows the ambient state only (Ready or
-  Logged-out), tooltip "Quotewise".
+- **Non-tweet / non-actionable page**: no quote-status badge; the icon shows the ambient/auth state only
+  (Ready, Auth-pending, Logged-out, or Error).
 - **Duplicate check fails / `search_metadata.error`**: treat as no quote-status (fall back to ambient Ready);
   never show a misleading collection badge on an errored check.
 - **`match_type: similar`** (≤ 0.8, weak): below the duplicate threshold — **MUST NOT** raise an exact/similar
   badge; treated as New for icon purposes (detail, if any, belongs in the tray).
 - **Tab switching**: quote-status badges are tab-scoped; switching to a non-tweet tab **MUST NOT** leak the
-  prior tab's badge.
+  prior tab's badge; the worker re-resolves on tab activation to restore the newly active tab's own state.
+- **Auth transition after quote status**: because Chrome tab-scoped action settings beat global settings, a
+  transition to logged-out, auth-pending, ready, or error **MUST** overwrite affected tweet tabs as well as the
+  global default so a prior tab-scoped badge/icon cannot survive.
 
 ## Requirements
 
@@ -135,10 +141,16 @@ A user sees the extension is checking a quote, or that their session needs atten
   and a **quote-status badge** layer (`setBadgeText` + `setBadgeBackgroundColor`), composed per the precedence
   in FR-030.
 - **FR-002**: Quote-status badges MUST be applied **per-tab** (`tabId`); ambient/auth states MAY be global, and
-  MUST be cleared on non-tweet pages so a stale badge never persists.
+  MUST also overwrite affected tweet tabs during auth transitions so stale tab-scoped badge/icon settings never
+  shadow `Logged-out`, `Auth-pending`, `Ready`, or `Error`. Quote-status badges MUST be cleared on non-tweet pages
+  so a stale badge never persists.
 - **FR-003**: The system MUST NOT call `setBadgeTextColor` (let Chrome auto-contrast the badge text).
 
-**Ambient artwork layer**
+**Ambient/system layer**
+Loading and Error are semantic system states, not quote-status states. They render as badges on the
+full-color owl but live in this group because they answer ambient "is work happening / is auth broken?"
+questions and outrank quote-status badges.
+
 - **FR-010**: `AUTHENTICATED` (and no quote in focus) MUST render the **full-color owl**, no badge, tooltip
   "Quotewise — ready to capture".
 - **FR-011**: `UNAUTHENTICATED` MUST swap to the **greyed owl** (`icon{n}-grey.png`) via `setIcon`, no badge,
@@ -151,6 +163,10 @@ A user sees the extension is checking a quote, or that their session needs atten
   are static, an MV3 service worker may be terminated mid-animation (leaving frozen "debris"), and the
   badge/icon state persists in the browser process independently of the worker. (The dominant real-world MV3
   pattern is exactly this: a static `'...'`/dot set once and cleared on completion.)
+- **FR-014**: `UNKNOWN`, `CHECKING`, and `AUTHENTICATING` MUST render an **auth-pending neutral** state:
+  full-color owl, no badge, tooltip "Quotewise". They MUST NOT render quote-status badges or the
+  "ready to capture" tooltip until `AUTHENTICATED` is confirmed. If a duplicate/preflight check is already in
+  flight, the Loading state MUST supersede this neutral state.
 
 **Quote-status badge layer** (rendered on the full-color owl)
 - **FR-020**: `recommendation: new_quote` / `new_quote_known_author` (no qualifying duplicate) → `★` on
@@ -162,22 +178,24 @@ A user sees the extension is checking a quote, or that their session needs atten
   Quotewise".
 - **FR-023**: `recommendation: new_version` / `new_version_known_author` (match_type correlate
   `near_same_originator`) → `~` on `#CC79A7`, tooltip "Similar version already in Quotewise".
-- **FR-024**: `exact_different_originator` / `near_different_originator` (`recommendation: attribution_conflict`)
-  → `⚠` on `#D55E00`, tooltip "Heads up — attributed to someone else in Quotewise".
+- **FR-024**: `exact_different_originator` / `near_different_originator`
+  (`recommendation: attribution_conflict` / `attribution_conflict_resolved`) → `⚠` on `#D55E00`,
+  tooltip "Heads up — attributed to someone else in Quotewise".
 - **FR-025**: A weak `match_type: similar` (≤ 0.8) MUST NOT raise an exact/similar badge. Under FR-040 this is
   enforced automatically — a sub-threshold match yields `recommendation: new_quote*`, mapping to **New**.
 
 **Precedence**
 - **FR-030**: When multiple states qualify, the system MUST render exactly one, resolved top-down:
   `Error (SESSION_EXPIRED / INSUFFICIENT_PRIVILEGES)` → `Logged-out (UNAUTHENTICATED)` → `Loading` →
-  one quote-status badge in the order `In-your-collection > Attribution-conflict > Exact > Similar > New`.
+  `Auth-pending (UNKNOWN / CHECKING / AUTHENTICATING)` → one quote-status badge in the order
+  `In-your-collection > Attribution-conflict > Exact > Similar > New`.
 
 **Data mapping**
 - **FR-040**: Quote-status selection MUST resolve from `DuplicateCheckResult` in this order: **(1)** if **any**
   match has `in_user_collections: true` → **In your collection** (`✓`); **(2)** otherwise map the **top-level
-  `recommendation`** (the authoritative backend verdict) to the badge — `duplicate` / `duplicate_known_author`
-  → **Exact** (`=`); `new_version` / `new_version_known_author` → **Similar** (`~`); `attribution_conflict` /
-  `attribution_conflict_resolved` → **Conflict** (`⚠`); `new_quote` / `new_quote_known_author` → **New**
+  `recommendation`** (the authoritative backend verdict) to the badge in FR-030 order — `attribution_conflict` /
+  `attribution_conflict_resolved` → **Conflict** (`⚠`); `duplicate` / `duplicate_known_author` → **Exact** (`=`);
+  `new_version` / `new_version_known_author` → **Similar** (`~`); `new_quote` / `new_quote_known_author` → **New**
   (`★`). The extension MUST NOT re-derive the backend's similarity thresholds. `matches[].match_type`,
   `matches[].similarity`, and `existing_sightings_for_url[]` are retained for the tray, not for icon selection.
   This extends `src/utils/duplicate-status.ts`, which today reads only `sighting_status`.
@@ -189,7 +207,7 @@ A user sees the extension is checking a quote, or that their session needs atten
   out of context (the accessible label; badge text is an image and is not read by AT).
 - **FR-051**: Every state MUST be distinguishable by **shape/glyph**, not color alone (WCAG 1.4.1); badge
   glyphs MUST be bold/filled to target ≥ 3:1 non-text contrast at 16px (WCAG 1.4.11). Colors are the
-  color-blind-safe Okabe-Ito working set.
+  color-blind-safe Okabe-Ito working set. The 3:1 target is a manual acceptance gate at real toolbar size.
 
 **Art-asset pipeline**
 - **FR-060**: The color and grey owl PNGs (`icon{16,32,48,128}.png`, `icon{16,32,48,128}-grey.png`) MUST be
@@ -203,8 +221,9 @@ A user sees the extension is checking a quote, or that their session needs atten
 
 **Consolidation & copy**
 - **FR-070**: The three current badge/icon config sources (`auth-state-machine.ts` presentation,
-  `auth-monitor.ts getBadgeConfig`, `service-worker.ts getCollectionBadgeConfig`) MUST be consolidated into a
-  single resolver that owns FR-010..FR-030. The duplicate `auth-monitor.getBadgeConfig` MUST be removed.
+  `auth-monitor.ts getBadgeConfig` plus its `updateBadgeState` / `updateBadgeFromAuthStatus` helpers, and
+  `service-worker.ts getCollectionBadgeConfig`) MUST be consolidated into a single resolver that owns
+  FR-010..FR-030. The duplicate auth-monitor presentation helpers MUST be removed.
 - **FR-071**: Tooltip copy MUST be centralized with the state table and use one voice ("Quotewise — …"); the
   manifest `action.default_title` "Capture Quote" MUST be changed to "Quotewise".
 
@@ -213,14 +232,15 @@ A user sees the extension is checking a quote, or that their session needs atten
 | State | Layer | Glyph | Color | API trigger |
 |---|---|---|---|---|
 | Ready | artwork | — (color owl) | — | `AUTHENTICATED` |
+| Auth pending | artwork | — (color owl) | — | `UNKNOWN` / `CHECKING` / `AUTHENTICATING` |
 | Logged out | artwork | — (grey owl) | grey owl `#dcdcdc`/`#6f6f6f` | `UNAUTHENTICATED` |
 | Loading | badge | `●` (static) | `#56B4E9` | check in flight |
 | Error | badge | `!` | `#D55E00` | `SESSION_EXPIRED` / `INSUFFICIENT_PRIVILEGES` |
-| New | badge | `★` | `#0072B2` | rec. `new_quote*` |
 | In your collection | badge | `✓` | `#009E73` | any match `in_user_collections: true` |
+| Attribution conflict | badge | `⚠` | `#D55E00` | rec. `attribution_conflict*` (mt. `*_different_originator`) |
 | Exact dup exists | badge | `=` | `#E69F00` | rec. `duplicate*` (mt. `exact_url`/`exact_same_originator`) |
 | Similar version | badge | `~` | `#CC79A7` | rec. `new_version*` (mt. `near_same_originator`) |
-| Attribution conflict | badge | `⚠` | `#D55E00` | rec. `attribution_conflict*` (mt. `*_different_originator`) |
+| New | badge | `★` | `#0072B2` | rec. `new_quote*` |
 
 ## Success Criteria
 
@@ -242,7 +262,8 @@ A user sees the extension is checking a quote, or that their session needs atten
 
 - **State resolver (new/consolidated)**: a single module computing `(iconPath, badgeText, badgeColor, title)`
   from `(AuthState, DuplicateCheckResult | null, tabContext)`; replaces the presentation halves of
-  `src/auth/auth-state-machine.ts`, `src/background/auth-monitor.ts` (`getBadgeConfig`), and
+  `src/auth/auth-state-machine.ts`, `src/background/auth-monitor.ts` (`getBadgeConfig`,
+  `updateBadgeState`, `updateBadgeFromAuthStatus`), and
   `src/background/service-worker.ts` (`getCollectionBadgeConfig` / `updateCollectionBadgeForTweet` /
   `updateExtensionIconForTweetPage`).
 - **Duplicate mapping**: extend `src/utils/duplicate-status.ts` to read `match_type` + `in_user_collections`
@@ -252,7 +273,8 @@ A user sees the extension is checking a quote, or that their session needs atten
 - **Assets/build**: `assets/owl.svg` (from `quotewise.svg`) + a rasterize script (resvg/sharp) emitting the
   color and `-grey` PNG sets into `public/icons/`; manifest `default_title` update.
 - **Tests**: resolver truth-table over `AuthState × DuplicateCheckResult` incl. precedence ties; duplicate-status
-  mapping per `match_type`; asset snapshot (grey is desaturated, dimensions correct).
+  mapping per recommendation/in-collection status; applicator scoping/clear tests; asset snapshot (grey is
+  desaturated, dimensions correct).
 
 ## Assumptions
 
@@ -294,7 +316,7 @@ A user sees the extension is checking a quote, or that their session needs atten
 ### Session 2026-06-04
 
 - Q: Loading indicator — animate the badge, or keep it static given MV3 service-worker termination? → A: **Static** single sky `●`, set once at check start and cleared/replaced on completion; **no animation**. Researched real extensions: the dominant MV3 pattern is a static `'...'`/dot (e.g. `robertknight/ocrs`, `remorses/playwriter`, `crimx/ext-saladict`); animated badge/icon loops are MV2-only and discouraged by Chrome (`setIcon` is for static images), and die with the worker.
-- Q: Does the badge derive from per-match `matches[]` or the top-level `recommendation`? → A: **Hybrid (Option A):** show `✓` if any match has `in_user_collections: true`; otherwise map the authoritative top-level `recommendation` (`duplicate*`→`=`, `new_version*`→`~`, `attribution_conflict*`→`⚠`, `new_quote*`→`★`). The extension does **not** re-derive backend similarity thresholds; `match_type`/`similarity` are retained for the tray (FR-040).
+- Q: Does the badge derive from per-match `matches[]` or the top-level `recommendation`? → A: **Hybrid (Option A):** show `✓` if any match has `in_user_collections: true`; otherwise map the authoritative top-level `recommendation` in FR-030 order (`attribution_conflict*`→`⚠`, `duplicate*`→`=`, `new_version*`→`~`, `new_quote*`→`★`). The extension does **not** re-derive backend similarity thresholds; `match_type`/`similarity` are retained for the tray (FR-040).
 
 ### Decisions
 - **Two-layer model (System B)** — the artwork carries the ambient "is this active / is anything wrong?" signal

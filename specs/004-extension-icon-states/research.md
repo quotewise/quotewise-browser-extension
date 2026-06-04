@@ -68,9 +68,10 @@ implementation. Format per decision: **Decision · Rationale · Alternatives con
 ## D5 — Quote-status derives from the **top-level `recommendation`** (hybrid), not re-derived thresholds
 
 - **Decision**: Map per FR-040: **(1)** if **any** match has `in_user_collections: true` →
-  **In your collection** (`✓`); **(2)** else map `recommendation`: `duplicate*`→**Exact** (`=`),
-  `new_version*`→**Similar** (`~`), `attribution_conflict*`→**Conflict** (`⚠`),
-  `new_quote*`→**New** (`★`). The extension does **not** recompute similarity thresholds.
+  **In your collection** (`✓`); **(2)** else map `recommendation` in FR-030 order:
+  `attribution_conflict*`→**Conflict** (`⚠`), `duplicate*`→**Exact** (`=`),
+  `new_version*`→**Similar** (`~`), `new_quote*`→**New** (`★`). The extension does **not**
+  recompute similarity thresholds.
   `matches[].match_type`/`similarity`/`existing_sightings_for_url[]` are retained for the future tray.
 - **Rationale**: The backend (`_classify_match`/`_generate_recommendation` in
   `quotewise/services/quotes/service.py`) is the authority; re-deriving thresholds client-side would
@@ -94,14 +95,17 @@ implementation. Format per decision: **Decision · Rationale · Alternatives con
 ## D7 — Scoping: quote-status badges per-`tabId`; ambient/auth global; explicit clears
 
 - **Decision**: Quote-status (`★ ✓ = ~ ⚠`) and Loading (`●`) are applied with `{ tabId }`. Ambient
-  artwork (color/grey owl) and auth-error (`!`) use **global** `setIcon`/`setBadgeText` (no tabId).
-  On a non-tweet page or tab switch away from a tweet, the worker MUST **clear** the tab badge
-  (`setBadgeText({ tabId, text: '' })`) and reset the icon to color (if authenticated) so no stale
-  per-tab badge leaks (FR-002, SC-007, edge cases).
+  artwork (color/grey owl), auth-pending, and auth-error (`!`) set a **global default**, then auth
+  transitions also overwrite affected tweet tabs with `{ tabId }` so a prior tab-scoped badge/icon
+  cannot shadow LoggedOut/AuthPending/Ready/Error. On a non-tweet page or tab switch away from a
+  tweet (`tabs.onActivated`), the worker MUST **clear** the tab badge
+  (`setBadgeText({ tabId, text: '' })`) and reset the icon to the ambient state so no stale per-tab
+  badge leaks (FR-002, SC-007, edge cases).
 - **Rationale** (Context7 Chrome `action` ref): tab-scoped settings take priority over global, so a
   per-tab quote badge naturally overlays the global ambient state for that tab while other tabs show
-  ambient only. Logged-out greying is a whole-extension fact → global `setIcon` (no tabId) sets the
-  default for all tabs; re-auth must global-reset to color.
+  ambient only. The same precedence means a later global auth update cannot clear a tab-specific
+  quote badge or color icon; auth changes must global-set the default and then tab-overwrite affected
+  tweet tabs.
 - **Alternatives considered**: everything global — rejected: the current bug (one tab's badge
   bleeding onto others) traces partly to inconsistent scoping; the spec mandates per-tab quote state.
 
@@ -109,8 +113,9 @@ implementation. Format per decision: **Decision · Rationale · Alternatives con
 
 - **Decision**: New `src/background/icon-state-resolver.ts` (pure) owns FR-010..FR-030; a thin
   `icon-applicator` is the only caller of `chrome.action`. **Delete**
-  `auth-monitor.getBadgeConfig`/`updateBadgeState`, `auth-state-machine.getStateBadgeText/Color` (the
-  presentation halves; keep the FSM), and `service-worker`'s `updateExtensionIconForTweetPage`,
+  `auth-monitor.getBadgeConfig`/`updateBadgeState`/`updateBadgeFromAuthStatus`,
+  `auth-state-machine.getStateBadgeText/Color` (the presentation halves; keep the FSM), and
+  `service-worker`'s `updateExtensionIconForTweetPage`,
   `updateCollectionBadgeForTweet`, `getCollectionBadgeConfig`, `updateCollectionBadge`.
 - **Rationale**: The root cause of today's nondeterministic appearance is three sources writing the
   same surface with different colors/text; whoever writes last wins (design §1, FR-070, SC-005).
