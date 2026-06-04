@@ -152,46 +152,6 @@ export function getStateMessage(state: AuthState): string {
 }
 
 /**
- * Get badge text for a state
- */
-export function getStateBadgeText(state: AuthState): string {
-  switch (state) {
-    case AuthState.AUTHENTICATED:
-      return '';  // No badge when authenticated
-    case AuthState.UNAUTHENTICATED:
-      return '';  // Not an error, just inactive - grey badge with no text
-    case AuthState.SESSION_EXPIRED:
-      return '!';  // Actual error requiring action
-    case AuthState.INSUFFICIENT_PRIVILEGES:
-      return '?';
-    case AuthState.CHECKING:
-    case AuthState.AUTHENTICATING:
-    case AuthState.UNKNOWN:
-      return '...';
-  }
-}
-
-/**
- * Get badge color for a state
- */
-export function getStateBadgeColor(state: AuthState): string {
-  switch (state) {
-    case AuthState.AUTHENTICATED:
-      return '#4CAF50';  // Green
-    case AuthState.UNAUTHENTICATED:
-      return '#9AA0A6';  // Grey - not an error, just inactive
-    case AuthState.SESSION_EXPIRED:
-      return '#F44336';  // Red - actual error requiring action
-    case AuthState.INSUFFICIENT_PRIVILEGES:
-      return '#FF9800';  // Orange
-    case AuthState.CHECKING:
-    case AuthState.AUTHENTICATING:
-    case AuthState.UNKNOWN:
-      return '#9E9E9E';  // Gray
-  }
-}
-
-/**
  * Storage key for auth state in chrome.storage.session
  */
 export const AUTH_STATE_STORAGE_KEY = 'authState';

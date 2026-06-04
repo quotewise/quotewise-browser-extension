@@ -209,7 +209,10 @@ When user reports a bug, don't start by trying to fix it. Instead:
 - `src/content/ui/components/` - UI components: duplicate-badge, quote-preview, originator-lookup, action-button
 - `src/api/quotewise-api.ts` - Django API client with session auth
 - `src/api/csrf-utils.ts` - CSRF token handling for Django
-- `src/background/service-worker.ts` - Message routing, preloading, badge updates
+- `src/background/service-worker.ts` - Message routing, preloading, resolver/applicator orchestration
+- `src/background/icon-state-resolver.ts` - Pure toolbar icon and badge state resolution
+- `src/background/icon-applicator.ts` - Chrome action icon, badge, and title application
+- `src/config/icon-states.ts` - Canonical toolbar icon state table
 - `src/background/api-handler.ts` - API message handling
 - `src/platforms/twitter/adapter.ts` - Tweet data extraction from DOM
 
