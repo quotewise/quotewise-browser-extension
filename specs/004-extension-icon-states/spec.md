@@ -2,7 +2,7 @@
 
 **Created**: 2026-06-04
 **Status**: Designed (pre-implementation)
-**Last Updated**: 2026-06-04 — Authored from the approved icon-state design (`docs/superpowers/specs/2026-06-02-extension-icon-states-design.md`); tracked by qw-eg3c
+**Last Updated**: 2026-06-04 — Authored from the approved icon-state design (`docs/superpowers/specs/2026-06-02-extension-icon-states-design.md`); tracked by qw-eg3c. Clarified 2026-06-04 (see Clarifications).
 
 ## Overview
 
@@ -106,9 +106,10 @@ A user sees the extension is checking a quote, or that their session needs atten
 **Why this priority**: Avoids a "is it broken or just slow?" gap; errors must be unmissable but not alarmist.
 
 **Acceptance**:
-- **While** a duplicate/preflight check is in flight, the badge **MUST** show a pulsing `●` on `#56B4E9`
-  (sky), tooltip "Quotewise — checking this quote…". The animation **MUST** respect `prefers-reduced-motion`
-  (static dot fallback).
+- **While** a duplicate/preflight check is in flight, the badge **MUST** show a **static** `●` on `#56B4E9`
+  (sky), tooltip "Quotewise — checking this quote…", set once when the check starts and cleared/replaced on
+  completion. The indicator **MUST NOT** be animated (badge/icon animation is unreliable under MV3
+  service-worker termination and is discouraged by Chrome).
 - **When** auth state is `SESSION_EXPIRED` or `INSUFFICIENT_PRIVILEGES`, the badge **MUST** show `!` on
   `#D55E00` (vermillion) with an actionable tooltip; there **MUST NOT** be a ring around the artwork.
 
@@ -145,21 +146,26 @@ A user sees the extension is checking a quote, or that their session needs atten
 - **FR-012**: `SESSION_EXPIRED` / `INSUFFICIENT_PRIVILEGES` MUST show the badge `!` on `#D55E00` on the
   full-color owl (no ring), with an actionable tooltip ("…session expired, log in again" /
   "…additional permissions required").
-- **FR-013**: While a duplicate/preflight check is pending, MUST show a pulsing `●` on `#56B4E9`; the animation
-  MUST honor `prefers-reduced-motion`.
+- **FR-013**: While a duplicate/preflight check is pending, MUST show a **static** `●` on `#56B4E9`, set once
+  at check start and cleared/replaced on completion. The indicator MUST NOT be animated — Chrome badges/icons
+  are static, an MV3 service worker may be terminated mid-animation (leaving frozen "debris"), and the
+  badge/icon state persists in the browser process independently of the worker. (The dominant real-world MV3
+  pattern is exactly this: a static `'...'`/dot set once and cleared on completion.)
 
 **Quote-status badge layer** (rendered on the full-color owl)
-- **FR-020**: `recommendation: new_quote` (no matches) → `★` on `#0072B2`, tooltip "New quote — not in
-  Quotewise yet".
+- **FR-020**: `recommendation: new_quote` / `new_quote_known_author` (no qualifying duplicate) → `★` on
+  `#0072B2`, tooltip "New quote — not in Quotewise yet".
 - **FR-021**: any match with `in_user_collections: true` → `✓` on `#009E73`, tooltip "Already in your
   collection".
-- **FR-022**: `exact_url` or `exact_same_originator` (sim = 1.0), not in collection → `=` on `#E69F00`, tooltip
-  "Exact match already in Quotewise".
-- **FR-023**: `near_same_originator` (0.8 < sim < 1.0) → `~` on `#CC79A7`, tooltip "Similar version already in
-  Quotewise (NN% match)".
+- **FR-022**: `recommendation: duplicate` / `duplicate_known_author` (match_type correlates `exact_url` /
+  `exact_same_originator`, sim = 1.0), not in collection → `=` on `#E69F00`, tooltip "Exact match already in
+  Quotewise".
+- **FR-023**: `recommendation: new_version` / `new_version_known_author` (match_type correlate
+  `near_same_originator`) → `~` on `#CC79A7`, tooltip "Similar version already in Quotewise".
 - **FR-024**: `exact_different_originator` / `near_different_originator` (`recommendation: attribution_conflict`)
   → `⚠` on `#D55E00`, tooltip "Heads up — attributed to someone else in Quotewise".
-- **FR-025**: `match_type: similar` (≤ 0.8) MUST NOT raise an exact/similar badge (treated as New for the icon).
+- **FR-025**: A weak `match_type: similar` (≤ 0.8) MUST NOT raise an exact/similar badge. Under FR-040 this is
+  enforced automatically — a sub-threshold match yields `recommendation: new_quote*`, mapping to **New**.
 
 **Precedence**
 - **FR-030**: When multiple states qualify, the system MUST render exactly one, resolved top-down:
@@ -167,9 +173,14 @@ A user sees the extension is checking a quote, or that their session needs atten
   one quote-status badge in the order `In-your-collection > Attribution-conflict > Exact > Similar > New`.
 
 **Data mapping**
-- **FR-040**: Quote-status selection MUST derive from `DuplicateCheckResult` — `matches[].match_type`,
-  `matches[].in_user_collections`, `recommendation`, and `existing_sightings_for_url[]` — extending
-  `src/utils/duplicate-status.ts`, which today reads only `sighting_status`.
+- **FR-040**: Quote-status selection MUST resolve from `DuplicateCheckResult` in this order: **(1)** if **any**
+  match has `in_user_collections: true` → **In your collection** (`✓`); **(2)** otherwise map the **top-level
+  `recommendation`** (the authoritative backend verdict) to the badge — `duplicate` / `duplicate_known_author`
+  → **Exact** (`=`); `new_version` / `new_version_known_author` → **Similar** (`~`); `attribution_conflict` /
+  `attribution_conflict_resolved` → **Conflict** (`⚠`); `new_quote` / `new_quote_known_author` → **New**
+  (`★`). The extension MUST NOT re-derive the backend's similarity thresholds. `matches[].match_type`,
+  `matches[].similarity`, and `existing_sightings_for_url[]` are retained for the tray, not for icon selection.
+  This extends `src/utils/duplicate-status.ts`, which today reads only `sighting_status`.
 - **FR-041**: When the duplicate check errors or returns nothing, the system MUST fall back to the ambient
   state and MUST NOT display a quote-status badge.
 
@@ -203,13 +214,13 @@ A user sees the extension is checking a quote, or that their session needs atten
 |---|---|---|---|---|
 | Ready | artwork | — (color owl) | — | `AUTHENTICATED` |
 | Logged out | artwork | — (grey owl) | grey owl `#dcdcdc`/`#6f6f6f` | `UNAUTHENTICATED` |
-| Loading | badge | `●` (pulse) | `#56B4E9` | check in flight |
+| Loading | badge | `●` (static) | `#56B4E9` | check in flight |
 | Error | badge | `!` | `#D55E00` | `SESSION_EXPIRED` / `INSUFFICIENT_PRIVILEGES` |
-| New | badge | `★` | `#0072B2` | `new_quote` |
-| In your collection | badge | `✓` | `#009E73` | `in_user_collections: true` |
-| Exact dup exists | badge | `=` | `#E69F00` | `exact_url` / `exact_same_originator` |
-| Similar version | badge | `~` | `#CC79A7` | `near_same_originator` |
-| Attribution conflict | badge | `⚠` | `#D55E00` | `*_different_originator` |
+| New | badge | `★` | `#0072B2` | rec. `new_quote*` |
+| In your collection | badge | `✓` | `#009E73` | any match `in_user_collections: true` |
+| Exact dup exists | badge | `=` | `#E69F00` | rec. `duplicate*` (mt. `exact_url`/`exact_same_originator`) |
+| Similar version | badge | `~` | `#CC79A7` | rec. `new_version*` (mt. `near_same_originator`) |
+| Attribution conflict | badge | `⚠` | `#D55E00` | rec. `attribution_conflict*` (mt. `*_different_originator`) |
 
 ## Success Criteria
 
@@ -279,6 +290,11 @@ A user sees the extension is checking a quote, or that their session needs atten
 - Q: Art source — keep raster or adopt the vector? → A: **Adopt the brand owl**, render color + grey from one
   vector master.
 - Q: Which vector master? → A: **`quotewise.svg`** (5-path, full interior detail); **not** `quotewise-light.svg`.
+
+### Session 2026-06-04
+
+- Q: Loading indicator — animate the badge, or keep it static given MV3 service-worker termination? → A: **Static** single sky `●`, set once at check start and cleared/replaced on completion; **no animation**. Researched real extensions: the dominant MV3 pattern is a static `'...'`/dot (e.g. `robertknight/ocrs`, `remorses/playwriter`, `crimx/ext-saladict`); animated badge/icon loops are MV2-only and discouraged by Chrome (`setIcon` is for static images), and die with the worker.
+- Q: Does the badge derive from per-match `matches[]` or the top-level `recommendation`? → A: **Hybrid (Option A):** show `✓` if any match has `in_user_collections: true`; otherwise map the authoritative top-level `recommendation` (`duplicate*`→`=`, `new_version*`→`~`, `attribution_conflict*`→`⚠`, `new_quote*`→`★`). The extension does **not** re-derive backend similarity thresholds; `match_type`/`similarity` are retained for the tray (FR-040).
 
 ### Decisions
 - **Two-layer model (System B)** — the artwork carries the ambient "is this active / is anything wrong?" signal
