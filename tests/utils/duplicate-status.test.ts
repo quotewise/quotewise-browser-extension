@@ -1,7 +1,24 @@
 import {
   classifyDuplicateSighting,
   getMatchForDuplicateSightingState,
+  mapRecommendationToQuoteStatus,
 } from '../../src/utils/duplicate-status';
+import type { DuplicateCheckResult } from '../../src/types/api';
+
+function duplicate(
+  recommendation: string,
+  overrides: Partial<DuplicateCheckResult> = {},
+): DuplicateCheckResult {
+  return {
+    recommendation: recommendation as DuplicateCheckResult['recommendation'],
+    confidence: 1,
+    in_quotewise: recommendation !== 'new_quote',
+    matches: [],
+    reasoning: 'test',
+    search_metadata: {},
+    ...overrides,
+  };
+}
 
 describe('duplicate sighting status', () => {
   it('classifies existing URL sightings as exact sighting', () => {
@@ -54,5 +71,77 @@ describe('duplicate sighting status', () => {
     }, 'other_platform_sighting');
 
     expect(match?.id).toBe('target');
+  });
+});
+
+describe('quote-status recommendation mapping', () => {
+  it('maps null and errored checks to no quote status', () => {
+    expect(mapRecommendationToQuoteStatus(null)).toBe('None');
+    expect(mapRecommendationToQuoteStatus(
+      duplicate('duplicate', { search_metadata: { error: true } }),
+    )).toBe('None');
+  });
+
+  it('maps new recommendations and weak similar matches to New', () => {
+    expect(mapRecommendationToQuoteStatus(duplicate('new_quote'))).toBe('New');
+    expect(mapRecommendationToQuoteStatus(duplicate('new_quote_known_author'))).toBe('New');
+    expect(mapRecommendationToQuoteStatus(duplicate('new_quote', {
+      matches: [{
+        quote_id: 'q1',
+        version_id: 1,
+        text: 'Quote',
+        similarity: 0.55,
+        match_type: 'similar',
+        in_user_collections: false,
+        originator: {
+          id: 'o1',
+          full_name: 'Author',
+          sort_name: null,
+          birth_year: null,
+          death_year: null,
+        },
+        workflow_status: 'published',
+        likes_count: 0,
+      }],
+    }))).toBe('New');
+  });
+
+  it('defaults unknown recommendations to New without throwing', () => {
+    expect(() => mapRecommendationToQuoteStatus(duplicate('banana'))).not.toThrow();
+    expect(mapRecommendationToQuoteStatus(duplicate('banana'))).toBe('New');
+  });
+
+  it('maps collection matches before recommendation tiers', () => {
+    expect(mapRecommendationToQuoteStatus(duplicate('duplicate', {
+      matches: [{
+        quote_id: 'q1',
+        version_id: 1,
+        text: 'Quote',
+        similarity: 100,
+        match_type: 'exact_same_originator',
+        in_user_collections: true,
+        originator: {
+          id: 'o1',
+          full_name: 'Author',
+          sort_name: null,
+          birth_year: null,
+          death_year: null,
+        },
+        workflow_status: 'published',
+        likes_count: 0,
+      }],
+    }))).toBe('InCollection');
+  });
+
+  it('maps exact and similar recommendation tiers', () => {
+    expect(mapRecommendationToQuoteStatus(duplicate('duplicate'))).toBe('Exact');
+    expect(mapRecommendationToQuoteStatus(duplicate('duplicate_known_author'))).toBe('Exact');
+    expect(mapRecommendationToQuoteStatus(duplicate('new_version'))).toBe('Similar');
+    expect(mapRecommendationToQuoteStatus(duplicate('new_version_known_author'))).toBe('Similar');
+  });
+
+  it('maps attribution conflict recommendations', () => {
+    expect(mapRecommendationToQuoteStatus(duplicate('attribution_conflict'))).toBe('Conflict');
+    expect(mapRecommendationToQuoteStatus(duplicate('attribution_conflict_resolved'))).toBe('Conflict');
   });
 });

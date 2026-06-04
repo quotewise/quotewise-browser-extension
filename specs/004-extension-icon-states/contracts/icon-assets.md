@@ -11,8 +11,9 @@ filenames, sizes, and color values.
 - **`assets/owl.svg`** — vendored from the brand `quotewise.svg` (the **5-path** version with
   explicit eye/nose/feet and an open chest). The 2-path `quotewise-light.svg` MUST NOT be used
   (drops interior detail — FR-061).
-- Composition (per design §6): owl recolored `beige`, centered (~78%) on a `#304f50` rounded square
-  (corner radius ≈ 19%). The grey variant: owl `#dcdcdc` on `#6f6f6f` (FR-062).
+- Composition (per design §6, adjusted after toolbar review): owl recolored `beige`, centered at
+  full source scale on a `#304f50` rounded square (corner radius ≈ 19%). The grey variant: owl
+  `#dcdcdc` on `#6f6f6f` (FR-062).
 
 ## Generator
 

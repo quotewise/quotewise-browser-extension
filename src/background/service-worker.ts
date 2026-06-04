@@ -14,13 +14,17 @@ import { validateTwitterData, ValidationError } from '../utils/validators';
 import { debugLog } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
 import { initiateOAuthFlow, logout } from '../auth/auth-flow';
-import { initializeAuthStateManager, AuthStateManager } from '../auth/auth-state-manager';
-import { AuthState } from '../auth/auth-state-machine';
 import {
-  classifyDuplicateSighting,
-  getMatchForDuplicateSightingState
-} from '../utils/duplicate-status';
-import type { DuplicateSightingState } from '../utils/duplicate-status';
+  initializeAuthStateManager,
+  AuthStateManager,
+  setAuthPresentationUpdater,
+} from '../auth/auth-state-manager';
+import { AuthState } from '../auth/auth-state-machine';
+import { ICON_STATES } from '../config/icon-states';
+import { applyIconPresentation } from './icon-applicator';
+import { resolveIconPresentation, type IconPresentation } from './icon-state-resolver';
+import type { DuplicateCheckResult } from '../types/api';
+import type { CollectionBadgeInfo } from '../types/chrome';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -33,6 +37,10 @@ let servicesInitialized = false;
 
 // Track in-flight duplicate check requests to prevent race conditions
 const pendingDuplicateChecks = new Map<string, Promise<void>>();
+const tabDuplicateResults = new Map<number, DuplicateCheckResult | null>();
+const tabCheckInFlight = new Set<number>();
+const tabScopedPresentationTabIds = new Set<number>();
+let lastActiveTabId: number | null = null;
 
 // Service worker startup is logged once after initialization completes
 
@@ -67,18 +75,89 @@ async function showOverlayInTab(tab: chrome.tabs.Tab): Promise<void> {
   }
 }
 
-function getExistingQuoteConfigTitle(sightingState: DuplicateSightingState, quote: string): string {
-  switch (sightingState) {
-    case 'exact_sighting':
-      return `Exact sighting already in Quotewise: ${quote}`;
-    case 'same_platform_sighting':
-      return `Quote already has a Twitter sighting: ${quote}`;
-    case 'other_platform_sighting':
-      return `Quote exists; add this Twitter sighting: ${quote}`;
-    case 'unknown':
-    default:
-      return `In Quotewise (not collected): ${quote}`;
+function getCurrentAuthState(): AuthState {
+  return authStateManager?.getState() ?? AuthState.UNKNOWN;
+}
+
+async function applyResolvedIconForTab(
+  tabId: number,
+  url?: string,
+  duplicateResult: DuplicateCheckResult | null = tabDuplicateResults.get(tabId) ?? null,
+): Promise<void> {
+  const presentation = resolveIconPresentation(getCurrentAuthState(), duplicateResult, {
+    tabId,
+    isTweetPage: isTweetPageUrl(url),
+    isCheckInFlight: tabCheckInFlight.has(tabId),
+  });
+
+  if (presentation.scope === 'tab') {
+    tabScopedPresentationTabIds.add(tabId);
   }
+
+  await applyIconPresentation(presentation, tabId, {
+    forceTabScope: presentation.scope === 'global',
+  });
+}
+
+async function getAffectedTweetTabIds(): Promise<number[]> {
+  const tabIds = new Set(tabScopedPresentationTabIds);
+
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      if (tab.id && isTweetPageUrl(tab.url)) {
+        tabIds.add(tab.id);
+      }
+    }
+  } catch (error) {
+    debugLog('Error querying tabs for icon auth overwrite:', error);
+  }
+
+  return [...tabIds];
+}
+
+async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
+  const presentation = resolveIconPresentation(authState, null, {
+    tabId: 0,
+    isTweetPage: false,
+    isCheckInFlight: false,
+  });
+
+  await applyIconPresentation(presentation, 0);
+
+  for (const tabId of await getAffectedTweetTabIds()) {
+    try {
+      tabCheckInFlight.delete(tabId);
+      await applyIconPresentation(presentation, tabId, { forceTabScope: true });
+    } catch (error) {
+      debugLog('Error overwriting tab-scoped icon after auth transition:', error);
+    }
+  }
+}
+
+setAuthPresentationUpdater(applyAuthStatePresentation);
+
+function presentationForCollectionBadge(badgeInfo: CollectionBadgeInfo): IconPresentation {
+  switch (badgeInfo.state) {
+    case 'already_collected':
+      return ICON_STATES.InCollection;
+    case 'exists_not_collected':
+      return ICON_STATES.Exact;
+    case 'new_quote':
+      return ICON_STATES.New;
+    case 'processing':
+      return ICON_STATES.Loading;
+    case 'ready':
+    default:
+      return ICON_STATES.Ready;
+  }
+}
+
+async function resolveTargetTabId(tabId?: number): Promise<number | undefined> {
+  if (tabId) return tabId;
+
+  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tabs[0]?.id;
 }
 
 /**
@@ -323,81 +402,13 @@ chrome.runtime.onMessage.addListener((
 });
 
 /**
- * Update extension icon and title for tweet pages
- * Badge system (auth-aware priority):
- * 1. Auth errors (SESSION_EXPIRED) → Red "!" (don't override)
- * 2. Insufficient privileges → Orange "?" (don't override)
- * 3. Not authenticated → Grey (prompt in title, not alarming)
- * 4. Authenticated + tweet processing → Show ★/✓/+/○
- *
- * Key insight: "Not logged in" is not an error - only use red for actual errors.
- */
-async function updateExtensionIconForTweetPage(tweetData?: TwitterData): Promise<void> {
-  try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tabs.length === 0) return;
-
-    const tabId = tabs[0].id;
-    if (!tabId) return;
-
-    // Check auth state first - auth badges take priority
-    if (authStateManager) {
-      const authState = authStateManager.getState();
-
-      // For SESSION_EXPIRED (actual error), don't override with processing badge
-      if (authState === AuthState.SESSION_EXPIRED) {
-        return;
-      }
-
-      // For INSUFFICIENT_PRIVILEGES, don't override
-      if (authState === AuthState.INSUFFICIENT_PRIVILEGES) {
-        return;
-      }
-
-      // For UNAUTHENTICATED, set grey badge with helpful tweet-page-specific title
-      if (authState === AuthState.UNAUTHENTICATED) {
-        chrome.action.setBadgeText({ tabId, text: '' });
-        chrome.action.setBadgeBackgroundColor({ tabId, color: '#9AA0A6' });
-        chrome.action.setTitle({
-          tabId,
-          title: 'Quotewise - Log in to capture this quote'
-        });
-        return;
-      }
-    }
-
-    // When authenticated: don't set a processing badge here.
-    // The content script's TWEET_DATA_EXTRACTED handler sets the processing badge
-    // and then the final collection badge (★/✓/+). Setting ○ here races with that
-    // flow and can overwrite the final badge back to ○ on concurrent SW wakeup.
-    // Auth-state badges (grey, red !) are handled above; collection badges are
-    // handled by updateCollectionBadgeForTweet() in handleTweetDataExtracted().
-    if (tweetData) {
-      chrome.action.setBadgeText({
-        tabId: tabId,
-        text: '✓'
-      });
-      chrome.action.setBadgeBackgroundColor({
-        tabId: tabId,
-        color: '#4CAF50'
-      });
-      chrome.action.setTitle({
-        tabId: tabId,
-        title: `Tweet processed: "${tweetData.text.substring(0, 50)}..."`
-      });
-    }
-  } catch (error) {
-    console.error('Error updating extension icon:', error);
-  }
-}
-
-/**
  * Clear tweet-specific icon updates
  */
-async function clearTweetPageIcon(tabId: number): Promise<void> {
+async function clearTweetPageIcon(tabId: number, url?: string): Promise<void> {
   try {
-    chrome.action.setBadgeText({ tabId: tabId, text: '' });
-    chrome.action.setTitle({ tabId: tabId, title: 'Quotewise Extension' });
+    tabDuplicateResults.delete(tabId);
+    tabCheckInFlight.delete(tabId);
+    await applyResolvedIconForTab(tabId, url, null);
   } catch (error) {
     console.error('Error clearing tweet page icon:', error);
   }
@@ -408,15 +419,48 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
     const isTweetPage = isTweetPageUrl(tab.url);
 
+    await ensureServicesInitialized();
+
     if (isTweetPage) {
-      // Ensure services are initialized before checking auth state
-      await ensureServicesInitialized();
-      // Show analyzing state (or grey badge if unauthenticated)
-      await updateExtensionIconForTweetPage();
+      await applyResolvedIconForTab(tabId, tab.url);
     } else {
-      // Clear tweet-specific icons on non-tweet pages
-      await clearTweetPageIcon(tabId);
+      await clearTweetPageIcon(tabId, tab.url);
     }
+  }
+});
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  await ensureServicesInitialized();
+
+  if (lastActiveTabId !== null && lastActiveTabId !== tabId) {
+    try {
+      const previousTab = await chrome.tabs.get(lastActiveTabId);
+      if (!isTweetPageUrl(previousTab.url)) {
+        await clearTweetPageIcon(lastActiveTabId, previousTab.url);
+      }
+    } catch {
+      tabDuplicateResults.delete(lastActiveTabId);
+      tabCheckInFlight.delete(lastActiveTabId);
+      tabScopedPresentationTabIds.delete(lastActiveTabId);
+    }
+  }
+
+  lastActiveTabId = tabId;
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    await applyResolvedIconForTab(tabId, tab.url);
+  } catch (error) {
+    debugLog('Error resolving icon after tab activation:', error);
+  }
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  tabDuplicateResults.delete(tabId);
+  tabCheckInFlight.delete(tabId);
+  tabScopedPresentationTabIds.delete(tabId);
+  if (lastActiveTabId === tabId) {
+    lastActiveTabId = null;
   }
 });
 
@@ -431,10 +475,8 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
   if (isTweetPage) {
     debugLog('SPA navigation detected to tweet page:', details.url);
 
-    // Ensure services are initialized before checking auth state
     await ensureServicesInitialized();
-    // Show analyzing state (or grey badge if unauthenticated)
-    await updateExtensionIconForTweetPage();
+    await applyResolvedIconForTab(details.tabId, details.url);
 
     // Programmatically inject content script (may already be running)
     try {
@@ -447,6 +489,9 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
       // Script may already be injected or tab may not be accessible - that's OK
       debugLog('Content script injection skipped (likely already running):', error);
     }
+  } else {
+    await ensureServicesInitialized();
+    await clearTweetPageIcon(details.tabId, details.url);
   }
 }, { url: [{ hostSuffix: 'twitter.com' }, { hostSuffix: 'x.com' }] });
 
@@ -505,8 +550,11 @@ async function handleTweetDataExtracted(
       return;
     }
 
-    // Show processing state while we check for duplicates
-    await updateCollectionBadgeForTweet('processing', validatedData.text, tabId);
+    if (tabId) {
+      tabCheckInFlight.add(tabId);
+      tabScopedPresentationTabIds.add(tabId);
+      await applyResolvedIconForTab(tabId, validatedData.url, null);
+    }
 
     // Check if quote already exists in Quotewise (async, don't block response)
     const checkPromise = checkQuoteCollectionStatus(validatedData, tabId).finally(() => {
@@ -531,6 +579,8 @@ async function handleTweetDataExtracted(
  * (Reduces round-trips from 2 API calls to 1)
  */
 async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number): Promise<void> {
+  const targetTabId = await resolveTargetTabId(tabId);
+
   try {
     // Ensure API handler is initialized
     await ensureServicesInitialized();
@@ -540,11 +590,11 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
       return;
     }
 
-    // Check auth state FIRST - only show collection badges when authenticated
-    // Being unauthenticated is NOT an error - just skip collection checking
-    // The badge update functions already handle showing grey badge for unauthenticated
     if (authStateManager && !authStateManager.isAuthenticated()) {
-      debugLog('User not authenticated, skipping collection check (grey badge shown)');
+      debugLog('User not authenticated, skipping collection check');
+      if (targetTabId) {
+        tabDuplicateResults.set(targetTabId, null);
+      }
       return;
     }
 
@@ -552,7 +602,9 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
 
     if (!handle) {
       debugLog('No handle available for preflight check');
-      await updateCollectionBadgeForTweet('new_quote', tweetData.text, tabId);
+      if (targetTabId) {
+        tabDuplicateResults.set(targetTabId, null);
+      }
       return;
     }
 
@@ -571,15 +623,8 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         create_url?: string;
       };
       duplicate_check?: {
-        in_quotewise?: boolean;
-        existing_sightings_for_url?: Array<{ id: number; in_user_collections?: boolean }>;
-        matches?: Array<{
-          similarity: number;
-          in_user_collections?: boolean;
-          sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
-        }>;
-        recommendation?: string;
-      };
+        [key: string]: unknown;
+      } & DuplicateCheckResult;
     }>((resolve) => {
       apiHandler!.handleMessage(
         {
@@ -604,13 +649,13 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         if (authStateManager) {
           await authStateManager.onAuthFailure('Authentication required');
         }
-        // DON'T call updateCollectionBadgeForTweet - let auth badge take precedence
         return;
       }
 
-      // Non-auth failure - show as new quote
-      debugLog('Preflight check failed, showing as new quote');
-      await updateCollectionBadgeForTweet('new_quote', tweetData.text, tabId);
+      debugLog('Preflight check failed, falling back to ambient icon state');
+      if (targetTabId) {
+        tabDuplicateResults.set(targetTabId, null);
+      }
       return;
     }
 
@@ -644,6 +689,10 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
 
     // Cache duplicate check result for overlay to use
     const duplicateResult = preflightResponse.duplicate_check;
+    if (targetTabId) {
+      tabDuplicateResults.set(targetTabId, duplicateResult ?? null);
+    }
+
     if (duplicateResult) {
       await chrome.storage.local.set({
         preloadedDuplicateCheck: {
@@ -653,150 +702,16 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         }
       });
     }
-
-    // Determine badge status from duplicate check result
-    let status: 'already_collected' | 'exists_not_collected' | 'new_quote' = 'new_quote';
-    let sightingState: DuplicateSightingState = 'unknown';
-
-    if (duplicateResult) {
-      sightingState = classifyDuplicateSighting(duplicateResult);
-
-      if (sightingState === 'exact_sighting') {
-        const existingSightings = duplicateResult.existing_sightings_for_url || [];
-        const exactMatch = getMatchForDuplicateSightingState(duplicateResult, sightingState);
-        const inUserCollections = existingSightings.some(s => s.in_user_collections);
-        status = inUserCollections || !!exactMatch?.in_user_collections
-          ? 'already_collected'
-          : 'exists_not_collected';
-      } else if (sightingState === 'same_platform_sighting' || sightingState === 'other_platform_sighting') {
-        const match = getMatchForDuplicateSightingState(duplicateResult, sightingState);
-        status = match?.in_user_collections ? 'already_collected' : 'exists_not_collected';
-      } else {
-        // No exact URL match - check text similarity matches (must be high similarity)
-        const matches = duplicateResult.matches || [];
-        const highSimilarityMatch = matches.find(m => m.similarity >= 85);
-
-        if (highSimilarityMatch?.in_user_collections) {
-          status = 'already_collected';
-        } else if (highSimilarityMatch) {
-          // High similarity match exists but not in user's collection
-          status = 'exists_not_collected';
-        }
-        // Otherwise stays as 'new_quote' - in_quotewise alone doesn't mean THIS quote exists
-      }
-    }
-
-    debugLog('Badge status determined:', status);
-    await updateCollectionBadgeForTweet(status, tweetData.text, tabId, sightingState);
   } catch (error) {
     console.error('Error checking quote collection status:', error);
-    // On error, show as new quote (safe default)
-    await updateCollectionBadgeForTweet('new_quote', tweetData.text, tabId);
-  }
-}
-
-/**
- * Update badge for tweet collection status
- * Only shows collection badges when authenticated - auth badges take priority
- */
-async function updateCollectionBadgeForTweet(
-  state: 'processing' | 'already_collected' | 'exists_not_collected' | 'new_quote',
-  quoteText: string,
-  tabId?: number,
-  sightingState: DuplicateSightingState = 'unknown'
-): Promise<void> {
-  try {
-    // Use provided tabId, or fall back to active tab
-    let targetTabId = tabId;
-    if (!targetTabId) {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tabs.length === 0) return;
-      targetTabId = tabs[0].id;
+    if (targetTabId) {
+      tabDuplicateResults.set(targetTabId, null);
     }
-    if (!targetTabId) return;
-
-    // Check auth state first - auth badges take priority over collection badges
-    if (authStateManager) {
-      const authState = authStateManager.getState();
-
-      // For SESSION_EXPIRED (actual error), don't override with collection badge
-      if (authState === AuthState.SESSION_EXPIRED) {
-        return;
-      }
-
-      // For INSUFFICIENT_PRIVILEGES, don't override
-      if (authState === AuthState.INSUFFICIENT_PRIVILEGES) {
-        return;
-      }
-
-      // For UNAUTHENTICATED, set grey badge (not collection badges)
-      if (authState === AuthState.UNAUTHENTICATED) {
-        chrome.action.setBadgeText({ tabId: targetTabId, text: '' });
-        chrome.action.setBadgeBackgroundColor({ tabId: targetTabId, color: '#9AA0A6' });
-        chrome.action.setTitle({
-          tabId: targetTabId,
-          title: 'Quotewise - Log in to capture this quote'
-        });
-        return;
-      }
+  } finally {
+    if (targetTabId) {
+      tabCheckInFlight.delete(targetTabId);
+      await applyResolvedIconForTab(targetTabId, tweetData.url, tabDuplicateResults.get(targetTabId) ?? null);
     }
-
-    // Only show collection badges when authenticated
-    const preview = quoteText.substring(0, 50);
-    let badge: { text: string; color: string; title: string };
-
-    switch (state) {
-      case 'processing':
-        badge = {
-          text: '○',
-          color: '#2196F3', // Blue
-          title: 'Checking quote status...'
-        };
-        break;
-      case 'already_collected':
-        badge = {
-          text: '✓',
-          color: '#4CAF50', // Green
-          title: `Already in your collection: "${preview}..."`
-        };
-        break;
-      case 'exists_not_collected':
-        badge = {
-          text: '+',
-          color: '#FF9800', // Orange - exists but not in your collection
-          title: getExistingQuoteBadgeTitle(sightingState, preview)
-        };
-        break;
-      case 'new_quote':
-        badge = {
-          text: '★',
-          color: '#4CAF50', // Green - new quote to add
-          title: `New quote: "${preview}..."`
-        };
-        break;
-    }
-
-    chrome.action.setBadgeText({ tabId: targetTabId, text: badge.text });
-    chrome.action.setBadgeBackgroundColor({ tabId: targetTabId, color: badge.color });
-    chrome.action.setTitle({ tabId: targetTabId, title: badge.title });
-
-    debugLog(`Badge updated for tab ${targetTabId}: ${state}`, badge);
-  } catch (error) {
-    console.error('Error updating collection badge:', error);
-  }
-}
-
-function getExistingQuoteBadgeTitle(sightingState: DuplicateSightingState, preview: string): string {
-  switch (sightingState) {
-    case 'exact_sighting':
-      return `Exact sighting already in Quotewise: "${preview}..."`;
-    case 'same_platform_sighting':
-      return `Quote already has a Twitter sighting: "${preview}..."`;
-    case 'other_platform_sighting':
-      return `Quote exists; add this Twitter sighting: "${preview}..."`;
-    case 'unknown':
-    default:
-      return `In Quotewise (not in your collection): "${preview}..."`;
   }
 }
 
@@ -878,94 +793,29 @@ async function handleGetTweetData(
  * Handle collection badge update from popup
  */
 async function handleUpdateCollectionBadge(
-  badgeInfo: import('../types/chrome').CollectionBadgeInfo,
+  badgeInfo: CollectionBadgeInfo,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendResponse: (response: any) => void
 ) {
   try {
-    await updateCollectionBadge(badgeInfo);
+    const tabId = await resolveTargetTabId();
+    if (!tabId) {
+      sendResponse({ success: false, error: 'No active tab found' });
+      return;
+    }
+
+    const presentation = presentationForCollectionBadge(badgeInfo);
+    if (presentation.scope === 'tab') {
+      tabScopedPresentationTabIds.add(tabId);
+    }
+
+    await applyIconPresentation(presentation, tabId, {
+      forceTabScope: presentation.scope === 'global',
+    });
+
     sendResponse({ success: true });
   } catch (error) {
     console.error('Error updating collection badge:', error);
     sendResponse({ success: false, error: 'Failed to update badge' });
-  }
-}
-
-/**
- * Update extension badge based on collection status
- */
-async function updateCollectionBadge(badgeInfo: import('../types/chrome').CollectionBadgeInfo): Promise<void> {
-  try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tabs.length === 0) return;
-    
-    const tabId = tabs[0].id;
-    if (!tabId) return;
-    
-    const badgeConfig = getCollectionBadgeConfig(badgeInfo);
-    
-    chrome.action.setBadgeText({ 
-      tabId: tabId, 
-      text: badgeConfig.text 
-    });
-    chrome.action.setBadgeBackgroundColor({ 
-      tabId: tabId, 
-      color: badgeConfig.color 
-    });
-    chrome.action.setTitle({
-      tabId: tabId,
-      title: badgeConfig.title
-    });
-  } catch (error) {
-    console.error('Error updating collection badge:', error);
-  }
-}
-
-/**
- * Get badge configuration for collection status
- */
-function getCollectionBadgeConfig(badgeInfo: import('../types/chrome').CollectionBadgeInfo): { 
-  text: string; 
-  color: string; 
-  title: string 
-} {
-  const quote = badgeInfo.quoteText ? `"${badgeInfo.quoteText}..."` : 'quote';
-  
-  switch (badgeInfo.state) {
-    case 'already_collected':
-      return {
-        text: '✓',
-        color: '#4CAF50', // Green check
-        title: `Already collected: ${quote}`
-      };
-    
-    case 'exists_not_collected':
-      return {
-        text: '+',
-        color: '#FF9800', // Orange - exists but not in your collection
-        title: getExistingQuoteConfigTitle(badgeInfo.duplicateSightingState || 'unknown', quote)
-      };
-    
-    case 'new_quote':
-      return {
-        text: '★',
-        color: '#4CAF50', // Green star - new quote to add
-        title: `New quote: ${quote}`
-      };
-    
-    case 'processing':
-      return {
-        text: '○',
-        color: '#2196F3', // Blue circle - processing
-        title: 'Analyzing quote...'
-      };
-    
-    case 'ready':
-    default:
-      return {
-        text: '',
-        color: '#1a73e8', // Regular blue - authenticated and ready
-        title: 'Quotewise Extension - Ready to analyze'
-      };
   }
 }
