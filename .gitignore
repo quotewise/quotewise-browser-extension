@@ -4,6 +4,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# This project uses Bun (bun.lock) — keep other package managers' lockfiles out.
+# A stale package-lock.json diverges from the bun tree and gets scanned by
+# Dependabot in isolation (see CLAUDE.md "Always use Bun").
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
 # Build outputs
 dist/
 build/
