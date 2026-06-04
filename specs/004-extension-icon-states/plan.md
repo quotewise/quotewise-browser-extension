@@ -11,7 +11,8 @@ resolver** that drives the MV3 toolbar action across a **two-layer model**: an a
 artwork** layer (`chrome.action.setIcon`, color vs. greyed) and a **quote-status badge** layer
 (`setBadgeText` + `setBadgeBackgroundColor`). The resolver is a pure function of
 `(AuthState, DuplicateCheckResult | null, TabContext)` → `IconPresentation`, applied per the
-FR-030 precedence. Quote-status selection is wired from the API's authoritative top-level
+FR-030 precedence, including a neutral auth-pending state for `UNKNOWN`/`CHECKING`/`AUTHENTICATING`
+that does not flash "ready to capture". Quote-status selection is wired from the API's authoritative top-level
 `recommendation` plus `in_user_collections` (extending `src/utils/duplicate-status.ts`, which today
 reads only `sighting_status`). A new build-time **art pipeline** rasterizes one vector master
 (`assets/owl.svg`, from the brand `quotewise.svg`) into the color and `-grey` PNG sets via
@@ -39,7 +40,8 @@ Icon/badge state is rendered from inputs, never persisted (Constitution V.1 — 
 in-memory/persisted state).
 
 **Testing**: Jest + ts-jest in jsdom (`jest.config.js`); Chrome APIs mocked in `tests/setup.ts`.
-New: resolver truth-table unit tests, duplicate-status mapping tests, and an asset-pipeline check.
+New: resolver truth-table unit tests, duplicate-status mapping tests, applicator scoping/clear tests,
+and an asset-pipeline check.
 
 **Target Platform**: Chrome (Manifest V3) — `chrome.action` reference APIs; toolbar renders the
 action icon at 16px (32px HiDPI), badge holds a single glyph (~4 char ceiling).
@@ -56,9 +58,11 @@ every change pairs a self-contained `setTitle` (FR-050, Constitution VII.2). Res
 function so it is exhaustively testable and survives worker termination (rebuildable, V.1). No badge
 animation — MV3 workers terminate mid-animation (FR-013, static `●`).
 
-**Scale/Scope**: 9 canonical states (Ready, Logged-out, Loading, Error, New, In-collection, Exact,
-Similar, Conflict) over `AuthState (7) × DuplicateCheckResult.recommendation (8) × TabContext`. One
-new resolver module, one extended util, one build script, one new asset (greyed owl) per size, and a
+**Scale/Scope**: 10 canonical states (Ready, Auth-pending, Logged-out, Loading, Error, New,
+In-collection, Conflict, Exact, Similar) over `AuthState (7) × DuplicateCheckResult.recommendation
+(8) × TabContext`. The canonical table has 11 title rows because Error has separate
+session-expired and insufficient-privilege tooltips. One new resolver module, one extended util,
+one build script, one new asset (greyed owl) per size, and a
 manifest `default_title` copy change. Consolidation deletes/retires three legacy config paths.
 
 **Unknowns**: None remaining — see [research.md](./research.md) (all design tensions, including the
@@ -98,7 +102,8 @@ permission, or platform-adapter changes).
   no overstated "verified" claims (VII.3).
 - **Article VIII — Platform Scope**: **PASS.** No new platform abstraction; Twitter/X only.
 - **Article IX — Release Discipline**: **NOTE.** Manifest `default_title` changes ("Capture Quote"
-  → "Quotewise") in `manifest.prod.json`/`manifest.dev.json`/`manifest.json` — keep all in sync
+  → "Quotewise") in `manifest.prod.json`/`manifest.dev.json` plus root `manifest.json` for local
+  consistency (prod/dev are build-effective; root is not copied by webpack) — keep all in sync
   (single-source rule). No version-field change required by this feature itself.
 
 **Result: PASS — no violations, Complexity Tracking empty.**
@@ -128,11 +133,13 @@ src/
 │   ├── icon-state-resolver.ts        # NEW — single authority: (AuthState, DuplicateCheckResult|null,
 │   │                                  #       TabContext) → IconPresentation (pure, no chrome.* calls)
 │   ├── icon-applicator.ts            # NEW (or folded into service-worker) — applies IconPresentation
-│   │                                  #       via chrome.action.setIcon/setBadge*/setTitle, scoping
+│   │                                  #       via chrome.action.setIcon/setBadge*/setTitle, including
+│   │                                  #       auth-transition tab overwrites
 │   ├── service-worker.ts             # EDIT — call resolver; DELETE updateExtensionIconForTweetPage,
 │   │                                  #       updateCollectionBadgeForTweet, getCollectionBadgeConfig,
 │   │                                  #       updateCollectionBadge
-│   └── auth-monitor.ts               # EDIT — REMOVE getBadgeConfig/updateBadgeState (duplicate source)
+│   └── auth-monitor.ts               # EDIT — REMOVE getBadgeConfig/updateBadgeState/
+│                                      #       updateBadgeFromAuthStatus (duplicate source)
 ├── auth/
 │   └── auth-state-machine.ts         # EDIT — retire presentation halves (getStateBadgeText/Color);
 │                                      #         resolver owns presentation. Keep FSM/transitions.
@@ -154,11 +161,13 @@ public/icons/                         # GENERATED + committed (copy-webpack-plug
 scripts/
 └── generate-icons.mjs                # NEW — resvg rasterize owl.svg → public/icons/*.png
 
-manifest.json / manifest.prod.json / manifest.dev.json   # EDIT — action.default_title → "Quotewise"
+manifest.prod.json / manifest.dev.json / manifest.json   # EDIT — action.default_title → "Quotewise"
+                                                        # (prod/dev build-effective; root consistency-only)
 
 tests/
 ├── background/
-│   └── icon-state-resolver.test.ts   # NEW — truth-table over AuthState × DuplicateCheckResult + ties
+│   ├── icon-state-resolver.test.ts   # NEW — truth-table over AuthState × DuplicateCheckResult + ties
+│   └── icon-applicator.test.ts       # NEW — chrome.action scoping, icon paths, auth-transition clears
 ├── utils/
 │   └── duplicate-status.test.ts      # EDIT — add match_type/in_user_collections mapping cases
 └── assets/

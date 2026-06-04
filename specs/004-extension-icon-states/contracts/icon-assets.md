@@ -50,7 +50,8 @@ public/icons/
 
 ## Manifest references (must stay in sync — Constitution IX)
 
-`manifest.json`, `manifest.prod.json`, `manifest.dev.json`:
+`manifest.prod.json`, `manifest.dev.json`, and root `manifest.json` (root is consistency-only; prod/dev
+are build-effective):
 - `icons` and `action.default_icon` keep the **color** set (`icons/icon{16,32,48,128}.png`).
 - `action.default_title`: change `"Capture Quote"` → `"Quotewise"` (FR-071).
 - The `-grey` set is **not** declared in the manifest (it is applied only at runtime via `setIcon`).
