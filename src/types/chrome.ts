@@ -45,6 +45,7 @@ export enum MessageType {
   // Storage management
   CLEANUP_STORAGE = 'CLEANUP_STORAGE',
   GET_STORAGE_STATS = 'GET_STORAGE_STATS',
+  GET_DIAGNOSTICS = 'GET_DIAGNOSTICS',
 
   // UI control
   OPEN_POPUP = 'OPEN_POPUP',

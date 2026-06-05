@@ -1,4 +1,4 @@
-import { applyIconPresentation } from '../../src/background/icon-applicator';
+import { applyIconPresentation, getIconApplicatorDiagnostics } from '../../src/background/icon-applicator';
 import type { IconPresentation } from '../../src/background/icon-state-resolver';
 
 const colorPaths = {
@@ -101,6 +101,25 @@ describe('applyIconPresentation', () => {
     expect(chrome.action.setTitle).toHaveBeenCalledWith({
       tabId: 11,
       title: 'Exact match already in Quotewise',
+    });
+    expect(getIconApplicatorDiagnostics()).toEqual({
+      lastAttempt: expect.objectContaining({
+        scope: 'tab',
+        tabId: 11,
+        iconVariant: 'color',
+        badgeText: '=',
+        badgeColor: '#E69F00',
+        title: 'Exact match already in Quotewise',
+        path: colorPaths,
+      }),
+      lastArtworkError: expect.objectContaining({
+        message: 'Failed to fetch',
+        name: 'Error',
+        scope: 'tab',
+        tabId: 11,
+        iconVariant: 'color',
+        path: colorPaths,
+      }),
     });
   });
 

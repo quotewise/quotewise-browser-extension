@@ -4,6 +4,33 @@ export interface ApplyIconPresentationOptions {
   forceTabScope?: boolean;
 }
 
+export interface IconApplicationAttempt {
+  timestamp: number;
+  scope: IconPresentation['scope'];
+  tabId?: number;
+  forceTabScope: boolean;
+  iconVariant: IconPresentation['iconVariant'];
+  badgeText: string;
+  badgeColor: string;
+  title: string;
+  path: Record<number, string>;
+}
+
+export interface IconArtworkErrorDiagnostic {
+  timestamp: number;
+  message: string;
+  name?: string;
+  scope: IconPresentation['scope'];
+  tabId?: number;
+  iconVariant: IconPresentation['iconVariant'];
+  path: Record<number, string>;
+}
+
+export interface IconApplicatorDiagnostics {
+  lastAttempt: IconApplicationAttempt | null;
+  lastArtworkError: IconArtworkErrorDiagnostic | null;
+}
+
 const COLOR_ICON_PATHS = {
   16: '/icons/icon16.png',
   32: '/icons/icon32.png',
@@ -19,6 +46,37 @@ const GREY_ICON_PATHS = {
 };
 
 let warnedIconArtworkFailure = false;
+let lastAttempt: IconApplicationAttempt | null = null;
+let lastArtworkError: IconArtworkErrorDiagnostic | null = null;
+
+function clonePath(path: Record<number, string>): Record<number, string> {
+  return { ...path };
+}
+
+function errorDiagnostic(error: unknown): Pick<IconArtworkErrorDiagnostic, 'message' | 'name'> {
+  if (error instanceof Error) {
+    return { message: error.message, name: error.name };
+  }
+
+  return { message: String(error) };
+}
+
+export function getIconApplicatorDiagnostics(): IconApplicatorDiagnostics {
+  return {
+    lastAttempt: lastAttempt
+      ? {
+        ...lastAttempt,
+        path: clonePath(lastAttempt.path),
+      }
+      : null,
+    lastArtworkError: lastArtworkError
+      ? {
+        ...lastArtworkError,
+        path: clonePath(lastArtworkError.path),
+      }
+      : null,
+  };
+}
 
 export async function applyIconPresentation(
   presentation: IconPresentation,
@@ -28,10 +86,30 @@ export async function applyIconPresentation(
   const effectiveScope = options.forceTabScope ? 'tab' : presentation.scope;
   const scopeArgs = effectiveScope === 'tab' ? { tabId } : {};
   const path = presentation.iconVariant === 'grey' ? GREY_ICON_PATHS : COLOR_ICON_PATHS;
+  lastAttempt = {
+    timestamp: Date.now(),
+    scope: effectiveScope,
+    ...(effectiveScope === 'tab' ? { tabId } : {}),
+    forceTabScope: options.forceTabScope === true,
+    iconVariant: presentation.iconVariant,
+    badgeText: presentation.badgeText,
+    badgeColor: presentation.badgeColor,
+    title: presentation.title,
+    path: clonePath(path),
+  };
 
   try {
     await chrome.action.setIcon({ ...scopeArgs, path });
   } catch (error) {
+    lastArtworkError = {
+      timestamp: Date.now(),
+      ...errorDiagnostic(error),
+      scope: effectiveScope,
+      ...(effectiveScope === 'tab' ? { tabId } : {}),
+      iconVariant: presentation.iconVariant,
+      path: clonePath(path),
+    };
+
     if (!warnedIconArtworkFailure) {
       warnedIconArtworkFailure = true;
       console.warn('Unable to update extension icon artwork:', error);
