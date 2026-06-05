@@ -54,11 +54,13 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     jest.resetModules();
     resetChromeMocks();
     capturedAuthPresentationUpdater = null;
+    delete (globalThis as { __quotewiseDiagnostics?: unknown }).__quotewiseDiagnostics;
   });
 
   function mockServiceWorkerDependencies(options: {
     handleMessage?: jest.Mock;
     authState?: string;
+    authStateData?: Record<string, unknown>;
   } = {}): void {
     jest.doMock('../../src/background/api-handler', () => ({
       initializeApiHandler: jest.fn(() => ({
@@ -85,7 +87,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         initializeAuthStateManager: jest.fn().mockResolvedValue({
           getState: jest.fn(() => state),
           isAuthenticated: jest.fn(() => state === AuthState.AUTHENTICATED),
-          getStateData: jest.fn(() => ({ state })),
+          getStateData: jest.fn(() => ({ state, ...options.authStateData })),
           startAuthenticating: jest.fn(),
           onAuthSuccess: jest.fn(),
           onAuthFailure: jest.fn(),
@@ -191,6 +193,143 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     });
     expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 22, text: '●' });
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '=' });
+
+    const getDiagnostics = (globalThis as {
+      __quotewiseDiagnostics?: () => Promise<Record<string, any>>;
+    }).__quotewiseDiagnostics;
+    expect(getDiagnostics).toEqual(expect.any(Function));
+
+    const diagnostics = await getDiagnostics!();
+    expect(diagnostics.extraction).toEqual(expect.objectContaining({
+      status: 'succeeded',
+      tabId: 22,
+      url: 'https://x.com/test/status/123',
+    }));
+    expect(diagnostics.preflight).toEqual(expect.objectContaining({
+      status: 'succeeded',
+      trigger: 'automatic-preflight',
+      tabId: 22,
+      url: 'https://x.com/test/status/123',
+      handle: 'test',
+      duplicate: expect.objectContaining({
+        recommendation: 'duplicate',
+        inQuotewise: true,
+      }),
+    }));
+  });
+
+  it('returns token-safe runtime diagnostics via message', async () => {
+    const { AuthState } = await import('../../src/auth/auth-state-machine');
+    mockServiceWorkerDependencies({
+      authState: AuthState.AUTHENTICATED,
+      authStateData: {
+        username: 'chris',
+        scopes: ['quotes:write'],
+        expiresAt: 1710000000000,
+        lastCheckedAt: 1700000000000,
+      },
+    });
+
+    chrome.tabs.query = jest.fn().mockResolvedValue([
+      {
+        id: 22,
+        url: 'https://x.com/test/status/123',
+      },
+    ]);
+    chrome.storage.local.get = jest.fn().mockResolvedValue({
+      currentTweet: {
+        data: tweetData,
+        timestamp: 1700000000100,
+        url: tweetData.url,
+      },
+      preloadedDuplicateCheck: {
+        url: tweetData.url,
+        result: duplicateResult,
+        timestamp: 1700000000200,
+      },
+      preloadedOriginator: {
+        handle: 'test',
+        originator: {
+          full_name: 'Test User',
+          unique_id: 'test-user',
+        },
+        timestamp: 1700000000300,
+      },
+    });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const startupListener = (chrome.runtime.onStartup.addListener as jest.Mock).mock.calls[0][0];
+    await startupListener();
+
+    const listener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+    const sendResponse = jest.fn();
+
+    listener(
+      { type: MessageType.GET_DIAGNOSTICS },
+      {},
+      sendResponse,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        manifest: expect.objectContaining({ version: '1.3.0' }),
+        services: expect.objectContaining({
+          initialized: true,
+          apiHandler: true,
+          authStateManager: true,
+        }),
+        auth: expect.objectContaining({
+          initialized: true,
+          state: AuthState.AUTHENTICATED,
+          username: 'chris',
+          scopes: ['quotes:write'],
+        }),
+        activeTab: expect.objectContaining({
+          id: 22,
+          url: 'https://x.com/test/status/123',
+          isTweetPage: true,
+        }),
+        activeTabState: expect.objectContaining({
+          tabId: 22,
+          isTweetPage: true,
+        }),
+        storage: expect.objectContaining({
+          currentTweet: expect.objectContaining({
+            url: 'https://x.com/test/status/123',
+            authorUsername: 'test',
+            tweetId: '123',
+          }),
+          preloadedDuplicateCheck: expect.objectContaining({
+            url: 'https://x.com/test/status/123',
+            duplicate: expect.objectContaining({
+              recommendation: 'duplicate',
+            }),
+          }),
+          preloadedOriginator: expect.objectContaining({
+            handle: 'test',
+            fullName: 'Test User',
+            uniqueId: 'test-user',
+          }),
+        }),
+        icon: expect.objectContaining({
+          lastAttempt: null,
+          lastArtworkError: null,
+        }),
+      }),
+    }));
+
+    const response = sendResponse.mock.calls[0][0];
+    expect(response.data.auth).not.toHaveProperty('accessToken');
+    expect(response.data.auth).not.toHaveProperty('refreshToken');
+    expect(response.data.storage.currentTweet).not.toHaveProperty('data');
+    expect(response.data.storage.currentTweet).not.toHaveProperty('text');
   });
 
   it('restores a tweet badge from preloaded duplicate cache after tab activation', async () => {
