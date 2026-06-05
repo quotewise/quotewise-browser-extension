@@ -264,10 +264,10 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
 
     expect(chrome.action.setIcon).toHaveBeenLastCalledWith({
       path: {
-        16: 'icons/icon16-grey.png',
-        32: 'icons/icon32-grey.png',
-        48: 'icons/icon48-grey.png',
-        128: 'icons/icon128-grey.png',
+        16: '/icons/icon16-grey.png',
+        32: '/icons/icon32-grey.png',
+        48: '/icons/icon48-grey.png',
+        128: '/icons/icon128-grey.png',
       },
     });
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ text: '' });

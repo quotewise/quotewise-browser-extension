@@ -2,17 +2,17 @@ import { applyIconPresentation } from '../../src/background/icon-applicator';
 import type { IconPresentation } from '../../src/background/icon-state-resolver';
 
 const colorPaths = {
-  16: 'icons/icon16.png',
-  32: 'icons/icon32.png',
-  48: 'icons/icon48.png',
-  128: 'icons/icon128.png',
+  16: '/icons/icon16.png',
+  32: '/icons/icon32.png',
+  48: '/icons/icon48.png',
+  128: '/icons/icon128.png',
 };
 
 const greyPaths = {
-  16: 'icons/icon16-grey.png',
-  32: 'icons/icon32-grey.png',
-  48: 'icons/icon48-grey.png',
-  128: 'icons/icon128-grey.png',
+  16: '/icons/icon16-grey.png',
+  32: '/icons/icon32-grey.png',
+  48: '/icons/icon48-grey.png',
+  128: '/icons/icon128-grey.png',
 };
 
 function presentation(overrides: Partial<IconPresentation> = {}): IconPresentation {
@@ -78,6 +78,30 @@ describe('applyIconPresentation', () => {
     await applyIconPresentation(presentation({ badgeText: '★', scope: 'tab' }), 3);
 
     expect(chrome.action.setBadgeTextColor).not.toHaveBeenCalled();
+  });
+
+  it('still applies the badge and title when Chrome cannot fetch icon artwork', async () => {
+    chrome.action.setIcon = jest.fn().mockRejectedValue(new Error('Failed to fetch'));
+
+    await applyIconPresentation(
+      presentation({
+        badgeText: '=',
+        badgeColor: '#E69F00',
+        title: 'Exact match already in Quotewise',
+        scope: 'tab',
+      }),
+      11,
+    );
+
+    expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: '=' });
+    expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
+      tabId: 11,
+      color: '#E69F00',
+    });
+    expect(chrome.action.setTitle).toHaveBeenCalledWith({
+      tabId: 11,
+      title: 'Exact match already in Quotewise',
+    });
   });
 
   it('can overwrite a prior tab-scoped star on logout or session expiry', async () => {
