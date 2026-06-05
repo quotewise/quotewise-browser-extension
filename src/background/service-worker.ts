@@ -107,6 +107,12 @@ interface AffectedTab {
   url?: string;
 }
 
+interface TweetExtractionResponse {
+  success?: boolean;
+  data?: unknown;
+  error?: string;
+}
+
 async function getAffectedTabs(): Promise<AffectedTab[]> {
   const tabsById = new Map<number, AffectedTab>();
 
@@ -515,6 +521,41 @@ chrome.runtime.onMessage.addListener((
   return true; // Keep message port open for async response
 });
 
+async function sendExtractTweetDataMessage(tabId: number, url?: string): Promise<TweetExtractionResponse | undefined> {
+  try {
+    return await chrome.tabs.sendMessage(tabId, { type: MessageType.EXTRACT_TWEET_DATA });
+  } catch (error) {
+    if (!isMissingContentScriptError(error) || !isTweetPageUrl(url)) {
+      throw error;
+    }
+
+    debugLog('Content script missing on tweet tab; injecting before extracting data');
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [CONTENT_SCRIPT_FILE]
+    });
+
+    return await chrome.tabs.sendMessage(tabId, { type: MessageType.EXTRACT_TWEET_DATA });
+  }
+}
+
+async function requestTweetDataExtraction(tabId: number, url?: string): Promise<void> {
+  if (!isTweetPageUrl(url)) {
+    return;
+  }
+
+  try {
+    const response = await sendExtractTweetDataMessage(tabId, url);
+    if (response?.success && response.data) {
+      await handleTweetDataExtracted(response.data, tabId, () => undefined);
+    } else if (response?.error) {
+      debugLog('Tweet extraction request returned no data:', response.error);
+    }
+  } catch (error) {
+    debugLog('Unable to request tweet extraction for icon preflight:', error);
+  }
+}
+
 /**
  * Clear tweet-specific icon updates
  */
@@ -537,6 +578,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
     if (isTweetPage) {
       await applyResolvedIconForTab(tabId, tab.url);
+      await requestTweetDataExtraction(tabId, tab.url);
     } else {
       await clearTweetPageIcon(tabId, tab.url);
     }
@@ -591,18 +633,7 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
 
     await ensureServicesInitialized();
     await applyResolvedIconForTab(details.tabId, details.url);
-
-    // Programmatically inject content script (may already be running)
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: details.tabId },
-        files: [CONTENT_SCRIPT_FILE]
-      });
-      debugLog('Content script injected for SPA navigation');
-    } catch (error) {
-      // Script may already be injected or tab may not be accessible - that's OK
-      debugLog('Content script injection skipped (likely already running):', error);
-    }
+    await requestTweetDataExtraction(details.tabId, details.url);
   } else {
     await ensureServicesInitialized();
     await clearTweetPageIcon(details.tabId, details.url);
@@ -649,11 +680,6 @@ async function handleTweetDataExtracted(
 
     debugLog('Tweet data stored:', validatedData.text.substring(0, 50) + '...');
 
-    // Clear stale preloaded caches to prevent race conditions
-    // This ensures overlay won't read outdated originator/duplicate data
-    // while new preflight is in progress
-    await chrome.storage.local.remove(['preloadedOriginator', 'preloadedDuplicateCheck']);
-
     const cacheKey = validatedData.url;
 
     // Check if there's already a pending request for this URL (prevent race conditions)
@@ -663,6 +689,11 @@ async function handleTweetDataExtracted(
       sendResponse({ success: true });
       return;
     }
+
+    // Clear stale preloaded caches to prevent race conditions.
+    // Do this only when starting a new preflight; forced extraction can race with
+    // the content script's own auto-send for the same tweet.
+    await chrome.storage.local.remove(['preloadedOriginator', 'preloadedDuplicateCheck']);
 
     if (tabId) {
       tabCheckInFlight.add(tabId);
