@@ -67,6 +67,9 @@ const mockChrome = {
       addListener: jest.fn()
     }
   },
+  scripting: {
+    executeScript: jest.fn().mockResolvedValue(undefined)
+  },
   alarms: {
     create: jest.fn(),
     clear: jest.fn().mockResolvedValue(true),

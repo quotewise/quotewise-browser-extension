@@ -1,4 +1,5 @@
 import type { DuplicateCheckResult } from '../../src/types/api';
+import type { TwitterData } from '../../src/types/chrome';
 
 const duplicateResult: DuplicateCheckResult = {
   recommendation: 'duplicate',
@@ -9,12 +10,37 @@ const duplicateResult: DuplicateCheckResult = {
   search_metadata: {},
 };
 
+const tweetData: TwitterData = {
+  text: 'Test quote',
+  author: {
+    username: 'test',
+    displayName: 'Test User',
+  },
+  url: 'https://x.com/test/status/123',
+  date: null,
+  likes: 0,
+  retweets: 0,
+  replies: 0,
+  views: 0,
+  bookmarks: 0,
+  tweetType: 'original',
+  platform_data: {
+    tweet_id: '123',
+    reply_count: 0,
+    retweet_count: 0,
+    quote_count: 0,
+    bookmark_count: 0,
+    view_count: 0,
+  },
+};
+
 function resetChromeMocks(): void {
   jest.clearAllMocks();
   chrome.storage.local.get = jest.fn().mockResolvedValue({});
   chrome.storage.local.set = jest.fn().mockResolvedValue(undefined);
   chrome.storage.local.remove = jest.fn().mockResolvedValue(undefined);
   chrome.tabs.query = jest.fn().mockResolvedValue([]);
+  chrome.tabs.sendMessage = jest.fn();
   chrome.action.setIcon = jest.fn().mockResolvedValue(undefined);
   chrome.action.setTitle = jest.fn().mockResolvedValue(undefined);
   chrome.action.setBadgeText = jest.fn().mockResolvedValue(undefined);
@@ -129,6 +155,42 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
       success: true,
       result: duplicateResult,
     }));
+  });
+
+  it('requests tweet extraction on tab load and applies the preflight badge without clicking the toolbar', async () => {
+    mockServiceWorkerDependencies({
+      handleMessage: jest.fn(async (message, _sender, sendResponse) => {
+        if (message.type === 'PREFLIGHT_CHECK') {
+          sendResponse({
+            success: true,
+            originator: { found: false },
+            duplicate_check: duplicateResult,
+          });
+        }
+      }),
+    });
+
+    chrome.tabs.sendMessage = jest.fn().mockResolvedValue({
+      success: true,
+      data: tweetData,
+    });
+
+    await import('../../src/background/service-worker');
+
+    const listener = (chrome.tabs.onUpdated.addListener as jest.Mock).mock.calls[0][0];
+    await listener(22, { status: 'complete' }, {
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(22, {
+      type: 'EXTRACT_TWEET_DATA',
+    });
+    expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 22, text: '●' });
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '=' });
   });
 
   it('restores a tweet badge from preloaded duplicate cache after tab activation', async () => {
