@@ -49,6 +49,8 @@ describe('TwitterAdapter extraction', () => {
     const adapter = new TwitterAdapter();
     expect(adapter.matches(new URL('https://twitter.com/alice/status/1234567890') as any)).toBe(true);
     expect(adapter.matches(new URL('https://x.com/alice/status/1234567890') as any)).toBe(true);
+    expect(adapter.matches(new URL('https://x.com/i/web/status/1234567890') as any)).toBe(true);
+    expect(adapter.matches(new URL('https://x.com/home') as any)).toBe(false);
     expect(adapter.matches(new URL('https://example.com/') as any)).toBe(false);
   });
 

@@ -3,7 +3,7 @@ import type { ExtensionMessage, TwitterData } from '../../types';
 import { MessageType } from '../../types';
 import type { PlatformAdapter } from '../types';
 
-const TWEET_PATH_REGEX = /^\/[^/]+\/status\/\d+/;
+const TWEET_PATH_REGEX = /\/status\/\d+/;
 
 export class TwitterAdapter implements PlatformAdapter<TwitterData> {
   public readonly id = 'twitter' as const;

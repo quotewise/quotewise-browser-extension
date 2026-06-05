@@ -46,7 +46,8 @@ let lastActiveTabId: number | null = null;
 
 const CONTENT_SCRIPT_FILE = 'content/index.js';
 const MISSING_CONTENT_SCRIPT_MESSAGE = 'Receiving end does not exist';
-const TWEET_PAGE_REGEX = /^https:\/\/(twitter\.com|x\.com)\/[^/]+\/status\/\d+/;
+const TWEET_PAGE_REGEX = /^https:\/\/(twitter\.com|x\.com)\/.*\/status\/\d+/;
+const PRELOADED_DUPLICATE_MAX_AGE_MS = 60_000;
 
 function isTweetPageUrl(url?: string): boolean {
   return !!url && TWEET_PAGE_REGEX.test(url);
@@ -82,9 +83,11 @@ function getCurrentAuthState(): AuthState {
 async function applyResolvedIconForTab(
   tabId: number,
   url?: string,
-  duplicateResult: DuplicateCheckResult | null = tabDuplicateResults.get(tabId) ?? null,
+  duplicateResult?: DuplicateCheckResult | null,
+  authState: AuthState = getCurrentAuthState(),
 ): Promise<void> {
-  const presentation = resolveIconPresentation(getCurrentAuthState(), duplicateResult, {
+  const resolvedDuplicateResult = await resolveDuplicateResultForTab(tabId, url, duplicateResult);
+  const presentation = resolveIconPresentation(authState, resolvedDuplicateResult, {
     tabId,
     isTweetPage: isTweetPageUrl(url),
     isCheckInFlight: tabCheckInFlight.has(tabId),
@@ -99,21 +102,37 @@ async function applyResolvedIconForTab(
   });
 }
 
-async function getAffectedTweetTabIds(): Promise<number[]> {
-  const tabIds = new Set(tabScopedPresentationTabIds);
+interface AffectedTab {
+  id: number;
+  url?: string;
+}
+
+async function getAffectedTabs(): Promise<AffectedTab[]> {
+  const tabsById = new Map<number, AffectedTab>();
 
   try {
     const tabs = await chrome.tabs.query({});
     for (const tab of tabs) {
-      if (tab.id && isTweetPageUrl(tab.url)) {
-        tabIds.add(tab.id);
+      if (tab.id && (isTweetPageUrl(tab.url) || tabScopedPresentationTabIds.has(tab.id))) {
+        tabsById.set(tab.id, { id: tab.id, url: tab.url });
       }
     }
   } catch (error) {
     debugLog('Error querying tabs for icon auth overwrite:', error);
   }
 
-  return [...tabIds];
+  for (const tabId of tabScopedPresentationTabIds) {
+    if (tabsById.has(tabId)) continue;
+
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      tabsById.set(tabId, { id: tabId, url: tab?.url });
+    } catch {
+      tabsById.set(tabId, { id: tabId });
+    }
+  }
+
+  return [...tabsById.values()];
 }
 
 async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
@@ -125,10 +144,22 @@ async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
 
   await applyIconPresentation(presentation, 0);
 
-  for (const tabId of await getAffectedTweetTabIds()) {
+  for (const tab of await getAffectedTabs()) {
     try {
-      tabCheckInFlight.delete(tabId);
-      await applyIconPresentation(presentation, tabId, { forceTabScope: true });
+      if (authState === AuthState.AUTHENTICATED && isTweetPageUrl(tab.url)) {
+        await applyResolvedIconForTab(tab.id, tab.url, undefined, authState);
+        continue;
+      }
+
+      if (
+        authState === AuthState.UNAUTHENTICATED ||
+        authState === AuthState.SESSION_EXPIRED ||
+        authState === AuthState.INSUFFICIENT_PRIVILEGES
+      ) {
+        tabCheckInFlight.delete(tab.id);
+      }
+
+      await applyIconPresentation(presentation, tab.id, { forceTabScope: true });
     } catch (error) {
       debugLog('Error overwriting tab-scoped icon after auth transition:', error);
     }
@@ -151,6 +182,80 @@ function presentationForCollectionBadge(badgeInfo: CollectionBadgeInfo): IconPre
     default:
       return ICON_STATES.Ready;
   }
+}
+
+function sourceUrlFromMessage(message: ExtensionMessage, sender: chrome.runtime.MessageSender): string | undefined {
+  const data = message.data as Record<string, unknown> | undefined;
+  const sourceUrl = data?.source_url ?? data?.sourceUrl ?? sender.tab?.url;
+  return typeof sourceUrl === 'string' ? sourceUrl : undefined;
+}
+
+function duplicateResultFromResponse(response: unknown): DuplicateCheckResult | null {
+  if (!response || typeof response !== 'object') {
+    return null;
+  }
+
+  const value = response as {
+    success?: unknown;
+    result?: unknown;
+    recommendation?: unknown;
+  };
+
+  const candidate = value.result ?? response;
+  if (
+    value.success !== true ||
+    !candidate ||
+    typeof candidate !== 'object' ||
+    typeof (candidate as { recommendation?: unknown }).recommendation !== 'string'
+  ) {
+    return null;
+  }
+
+  return candidate as DuplicateCheckResult;
+}
+
+async function resolveDuplicateResultForTab(
+  tabId: number,
+  url: string | undefined,
+  duplicateResult: DuplicateCheckResult | null | undefined,
+): Promise<DuplicateCheckResult | null> {
+  if (duplicateResult !== undefined) {
+    return duplicateResult;
+  }
+
+  if (tabDuplicateResults.has(tabId)) {
+    return tabDuplicateResults.get(tabId) ?? null;
+  }
+
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const storage = await chrome.storage.local.get(['preloadedDuplicateCheck']);
+    const preloaded = storage.preloadedDuplicateCheck as {
+      url?: unknown;
+      result?: unknown;
+      timestamp?: unknown;
+    } | undefined;
+
+    if (
+      preloaded?.url === url &&
+      typeof preloaded.timestamp === 'number' &&
+      Date.now() - preloaded.timestamp < PRELOADED_DUPLICATE_MAX_AGE_MS
+    ) {
+      const storedDuplicateResult = duplicateResultFromResponse({
+        success: true,
+        result: preloaded.result,
+      });
+      tabDuplicateResults.set(tabId, storedDuplicateResult);
+      return storedDuplicateResult;
+    }
+  } catch (error) {
+    debugLog('Error reading preloaded duplicate cache for icon state:', error);
+  }
+
+  return null;
 }
 
 async function resolveTargetTabId(tabId?: number): Promise<number | undefined> {
@@ -285,7 +390,6 @@ chrome.runtime.onMessage.addListener((
 
       // Delegate API messages to API handler
       case MessageType.SEARCH_ORIGINATORS:
-      case MessageType.CHECK_DUPLICATE:
       case MessageType.SUBMIT_QUOTE:
       case MessageType.LOOKUP_ORIGINATOR_BY_HANDLE:
         // Delegate to API handler (guaranteed initialized by ensureServicesInitialized)
@@ -294,6 +398,16 @@ chrome.runtime.onMessage.addListener((
           sendResponse({
             success: false,
             error: error.message || 'API request failed'
+          });
+        });
+        break;
+
+      case MessageType.CHECK_DUPLICATE:
+        handleCheckDuplicate(message, sender, sendResponse).catch(error => {
+          console.error('Duplicate check handler error:', error);
+          sendResponse({
+            success: false,
+            error: error.message || 'Duplicate check failed'
           });
         });
         break;
@@ -570,6 +684,78 @@ async function handleTweetDataExtracted(
   } catch (error) {
     console.error('Error storing tweet data:', error);
     sendResponse({ error: 'Failed to store tweet data' });
+  }
+}
+
+async function updateIconAfterDuplicateCheckResponse(
+  response: unknown,
+  tabId: number | undefined,
+  sourceUrl: string | undefined,
+): Promise<void> {
+  if (!tabId) {
+    return;
+  }
+
+  const duplicateResult = duplicateResultFromResponse(response);
+  tabDuplicateResults.set(tabId, duplicateResult);
+  tabCheckInFlight.delete(tabId);
+
+  if (duplicateResult) {
+    tabScopedPresentationTabIds.add(tabId);
+    if (sourceUrl) {
+      await chrome.storage.local.set({
+        preloadedDuplicateCheck: {
+          url: sourceUrl,
+          result: duplicateResult,
+          timestamp: Date.now(),
+        },
+      });
+    }
+  }
+
+  await applyResolvedIconForTab(tabId, sourceUrl, duplicateResult);
+}
+
+async function handleCheckDuplicate(
+  message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sendResponse: (response: any) => void
+): Promise<void> {
+  const tabId = sender.tab?.id;
+  const sourceUrl = sourceUrlFromMessage(message, sender);
+
+  if (tabId && isTweetPageUrl(sourceUrl)) {
+    tabCheckInFlight.add(tabId);
+    tabScopedPresentationTabIds.add(tabId);
+    try {
+      await applyResolvedIconForTab(tabId, sourceUrl, null);
+    } catch (error) {
+      debugLog('Error applying duplicate-check loading icon:', error);
+    }
+  }
+
+  try {
+    await apiHandler!.handleMessage(message, sender, (response) => {
+      updateIconAfterDuplicateCheckResponse(response, tabId, sourceUrl)
+        .catch(error => {
+          debugLog('Error applying duplicate-check result icon:', error);
+        })
+        .finally(() => {
+          sendResponse(response);
+        });
+    });
+  } catch (error) {
+    if (tabId) {
+      tabDuplicateResults.set(tabId, null);
+      tabCheckInFlight.delete(tabId);
+      try {
+        await applyResolvedIconForTab(tabId, sourceUrl, null);
+      } catch (iconError) {
+        debugLog('Error clearing duplicate-check loading icon:', iconError);
+      }
+    }
+    throw error;
   }
 }
 
