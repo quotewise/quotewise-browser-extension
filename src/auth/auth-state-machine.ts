@@ -61,6 +61,7 @@ export const VALID_TRANSITIONS: Record<AuthState, AuthState[]> = {
   [AuthState.AUTHENTICATED]: [
     AuthState.UNAUTHENTICATED,    // Logout
     AuthState.SESSION_EXPIRED,    // Token expired
+    AuthState.INSUFFICIENT_PRIVILEGES, // Authenticated but missing required scopes
     AuthState.CHECKING,           // Manual re-check
   ],
   [AuthState.UNAUTHENTICATED]: [

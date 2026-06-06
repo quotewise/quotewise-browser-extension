@@ -6,7 +6,31 @@ export const DEBUG_MODE = true;
 
 export const debugLog = jest.fn();
 
-export const detectEnvironment = jest.fn(() => 'development');
+function detectMockEnvironment(): 'development' | 'staging' | 'production' {
+  if (typeof chrome !== 'undefined' && chrome.runtime?.getManifest) {
+    const manifest = chrome.runtime.getManifest();
+    const name = manifest.name ?? '';
+    const version = manifest.version ?? '';
+
+    if (name.toLowerCase().includes('dev') || version.includes('-dev') || version.includes('-alpha')) {
+      return 'development';
+    }
+
+    if (name.toLowerCase().includes('staging')) {
+      return 'staging';
+    }
+
+    return 'production';
+  }
+
+  return process.env.NODE_ENV === 'production' ? 'production' : 'development';
+}
+
+export const detectEnvironment = jest.fn(() => detectMockEnvironment());
+
+export const isDevelopment = jest.fn(() => detectEnvironment() === 'development');
+
+export const isProduction = jest.fn(() => detectEnvironment() === 'production');
 
 export const getEnvironmentConfig = jest.fn((env?: string) => {
   if (env === 'production') {

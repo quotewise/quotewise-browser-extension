@@ -21,6 +21,43 @@ export class ApiHandler {
         const config = getEnvironmentConfig(this.environment);
         this.apiClient = new QuotewiseApiClientImpl(config.apiBaseUrl);
     }
+
+    private isAuthenticationError(error: unknown): boolean {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        return error instanceof Error &&
+            (error.name === 'AuthenticationError' ||
+             message.includes('401') ||
+             message.includes('403') ||
+             message.includes('authentication') ||
+             message.includes('insufficient'));
+    }
+
+    private authFailureType(error: unknown): 'session_expired' | 'insufficient_privileges' {
+        const message = error instanceof Error ? error.message.toLowerCase() : '';
+        if (
+            message.includes('403') ||
+            message.includes('insufficient') ||
+            message.includes('permission')
+        ) {
+            return 'insufficient_privileges';
+        }
+
+        return 'session_expired';
+    }
+
+    private authFailureFields(error: unknown): {
+        authRequired?: boolean;
+        authFailureType?: 'session_expired' | 'insufficient_privileges';
+    } {
+        if (!this.isAuthenticationError(error)) {
+            return {};
+        }
+
+        return {
+            authRequired: true,
+            authFailureType: this.authFailureType(error),
+        };
+    }
     
     /**
      * Handle incoming extension messages (called by service worker)
@@ -65,6 +102,7 @@ export class ApiHandler {
             console.error('API handler error:', error);
             sendResponse({
                 success: false,
+                ...this.authFailureFields(error),
                 error: error instanceof Error ? error.message : 'API request failed'
             });
         }
@@ -102,6 +140,7 @@ export class ApiHandler {
             console.error('Error searching originators:', error);
             sendResponse({
                 success: false,
+                ...this.authFailureFields(error),
                 error: error instanceof Error ? error.message : 'Search failed',
                 results: []
             });
@@ -148,6 +187,7 @@ export class ApiHandler {
             console.error('Error checking duplicates:', error);
             sendResponse({
                 success: false,
+                ...this.authFailureFields(error),
                 error: error instanceof Error ? error.message : 'Duplicate check failed',
                 hasDuplicates: false,
                 duplicates: [],
@@ -182,6 +222,7 @@ export class ApiHandler {
             console.error('Error submitting quote:', error);
             sendResponse({
                 success: false,
+                ...this.authFailureFields(error),
                 message: error instanceof Error ? error.message : 'Quote submission failed',
                 error: error instanceof Error ? error.message : 'Quote submission failed'
             });
@@ -221,6 +262,7 @@ export class ApiHandler {
             console.error('Error looking up originator by handle:', error);
             sendResponse({
                 success: false,
+                ...this.authFailureFields(error),
                 error: error instanceof Error ? error.message : 'Lookup failed',
                 found: false
             });
@@ -269,15 +311,9 @@ export class ApiHandler {
         } catch (error) {
             console.error('Error in preflight check:', error);
 
-            // Check if this is an authentication error (401)
-            const isAuthError = error instanceof Error &&
-                (error.name === 'AuthenticationError' ||
-                 error.message.includes('401') ||
-                 error.message.includes('Authentication'));
-
             sendResponse({
                 success: false,
-                authRequired: isAuthError,  // Flag for caller to handle auth state
+                ...this.authFailureFields(error),
                 error: error instanceof Error ? error.message : 'Preflight check failed',
                 originator: { found: false },
                 duplicate_check: {

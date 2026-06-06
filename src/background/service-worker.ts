@@ -11,7 +11,7 @@ import { initializeApiHandler } from './api-handler';
 import { AuthenticationMonitor } from './auth-monitor';
 import { initializeStorageCleanup } from './storage-cleanup';
 import { validateTwitterData, ValidationError } from '../utils/validators';
-import { debugLog } from '../config/environment';
+import { DEBUG_MODE, debugLog, getWebBaseUrl, isProduction } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
 import { initiateOAuthFlow, logout } from '../auth/auth-flow';
 import {
@@ -38,7 +38,9 @@ let servicesInitialized = false;
 // Track in-flight duplicate check requests to prevent race conditions
 const pendingDuplicateChecks = new Map<string, Promise<void>>();
 const tabDuplicateResults = new Map<number, DuplicateCheckResult | null>();
-const tabCheckInFlight = new Set<number>();
+const tabDuplicateResultUrls = new Map<number, string>();
+const tabMissingOriginators = new Map<number, MissingOriginatorInfo>();
+const tabInFlightOperations = new Map<number, InFlightIconOperation>();
 const tabScopedPresentationTabIds = new Set<number>();
 let lastActiveTabId: number | null = null;
 
@@ -47,7 +49,17 @@ let lastActiveTabId: number | null = null;
 const CONTENT_SCRIPT_FILE = 'content/index.js';
 const MISSING_CONTENT_SCRIPT_MESSAGE = 'Receiving end does not exist';
 const TWEET_PAGE_REGEX = /^https:\/\/(twitter\.com|x\.com)\/.*\/status\/\d+/;
+const SUPPORTED_PLATFORM_REGEX = /^https:\/\/(twitter\.com|x\.com)(?:\/|$)/;
 const PRELOADED_DUPLICATE_MAX_AGE_MS = 60_000;
+const TWEET_EXTRACTION_RETRY_DELAYS_MS = [1_000, 2_500, 5_000] as const;
+const AUTOMATIC_PREFLIGHT_TIMEOUT_MS = 8_000;
+const AUTOMATIC_ORIGINATOR_PROBE_DELAY_MS = 300;
+const ORIGINATOR_FALLBACK_TIMEOUT_MS = 3_000;
+const AUTOMATIC_PREFLIGHT_KEEPALIVE_MS = AUTOMATIC_PREFLIGHT_TIMEOUT_MS + ORIGINATOR_FALLBACK_TIMEOUT_MS + 1_000;
+const PREFLIGHT_OPERATION_STORAGE_KEY = 'automaticPreflightOperations';
+const PREFLIGHT_TIMEOUT_ALARM_PREFIX = 'automatic-preflight-timeout:';
+const DIAGNOSTIC_EVENT_TRAIL_LIMIT = 20;
+const DIAGNOSTIC_EVENT_TRAIL_ENABLED = DEBUG_MODE && !isProduction();
 const serviceWorkerLoadedAt = Date.now();
 
 interface DuplicateResultDiagnostic {
@@ -68,11 +80,41 @@ interface OriginatorDiagnostic {
   confidence?: number;
   fullName?: string;
   slug?: string;
+  createUrl?: string;
+}
+
+interface MissingOriginatorInfo {
+  handle: string;
+  url: string;
+  createUrl?: string;
+  timestamp: number;
 }
 
 type PreflightDiagnosticStatus = 'idle' | 'loading' | 'skipped' | 'succeeded' | 'failed';
 type ExtractionDiagnosticStatus = 'idle' | 'requested' | 'skipped' | 'succeeded' | 'no_data' | 'failed';
-type DiagnosticTrigger = 'automatic-preflight' | 'explicit-duplicate-check';
+type DiagnosticClassification =
+  | 'extraction_retry_before_preflight'
+  | 'probe_lookup_timeout'
+  | 'probe_stale_after_navigation'
+  | 'combined_preflight_timeout'
+  | 'preflight_won_before_probe';
+type DiagnosticTrigger =
+  | 'automatic-preflight'
+  | 'automatic-originator-probe'
+  | 'automatic-originator-fallback'
+  | 'explicit-duplicate-check'
+  | 'originator-lookup';
+
+interface InFlightIconOperation {
+  tabId: number;
+  url: string;
+  statusId: string;
+  operationId: string;
+  trigger: DiagnosticTrigger;
+  startedAt: number;
+  timeoutAt?: number;
+  handle?: string;
+}
 
 interface PreflightDiagnostic {
   timestamp: number;
@@ -81,7 +123,10 @@ interface PreflightDiagnostic {
   tabId?: number;
   url?: string;
   handle?: string;
+  operationId?: string;
+  durationMs?: number;
   reason?: string;
+  classification?: DiagnosticClassification;
   error?: string;
   authRequired?: boolean;
   duplicate?: DuplicateResultDiagnostic | null;
@@ -94,7 +139,28 @@ interface ExtractionDiagnostic {
   tabId?: number;
   url?: string;
   reason?: string;
+  classification?: DiagnosticClassification;
   error?: string;
+  attempt?: number;
+  retryAfterMs?: number;
+}
+
+interface DiagnosticTimingEvent {
+  timestamp: number;
+  event: string;
+  tabId?: number;
+  sourceUrl?: string;
+  source_url?: string;
+  statusId?: string;
+  handle?: string;
+  operationId?: string;
+  trigger?: DiagnosticTrigger;
+  reason?: string;
+  classification?: DiagnosticClassification;
+  error?: string;
+  durationMs?: number;
+  attempt?: number;
+  retryAfterMs?: number;
 }
 
 interface RuntimeDiagnostics {
@@ -123,16 +189,20 @@ interface RuntimeDiagnostics {
   activeTab: {
     id?: number;
     url?: string;
+    isSupportedPlatform: boolean;
     isTweetPage: boolean;
     queryError?: string;
   } | null;
   activeTabState: {
     tabId: number;
+    isSupportedPlatform: boolean;
     isTweetPage: boolean;
     isCheckInFlight: boolean;
+    isOriginatorMissing: boolean;
     hasDuplicateResult: boolean;
     hasTabScopedPresentation: boolean;
     duplicate: DuplicateResultDiagnostic | null;
+    missingOriginator: MissingOriginatorInfo | null;
   } | null;
   lastActiveTabId: number | null;
   pendingDuplicateChecks: {
@@ -154,13 +224,16 @@ interface RuntimeDiagnostics {
     preloadedOriginator: {
       handle?: string;
       timestamp?: number;
+      found?: boolean;
       fullName?: string;
       uniqueId?: string;
+      createUrl?: string;
     } | null;
     error?: string;
   };
   extraction: ExtractionDiagnostic;
   preflight: PreflightDiagnostic;
+  events: DiagnosticTimingEvent[];
   icon: ReturnType<typeof getIconApplicatorDiagnostics>;
 }
 
@@ -175,8 +248,339 @@ let lastPreflightDiagnostic: PreflightDiagnostic = {
   trigger: 'automatic-preflight',
 };
 
+const diagnosticTimingEvents: DiagnosticTimingEvent[] = [];
+
+const tweetExtractionRetryTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const automaticTweetExtractionRequests = new Map<string, Promise<void>>();
+const automaticOriginatorProbeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 function isTweetPageUrl(url?: string): boolean {
   return !!url && TWEET_PAGE_REGEX.test(url);
+}
+
+function isSupportedPlatformUrl(url?: string): boolean {
+  return !!url && SUPPORTED_PLATFORM_REGEX.test(url);
+}
+
+function tweetStatusId(url?: string): string | null {
+  return url?.match(/\/status\/(\d+)/)?.[1] ?? null;
+}
+
+function automaticTweetOperationKey(tabId: number | undefined, url?: string): string | null {
+  const statusId = tweetStatusId(url);
+  return tabId !== undefined && statusId ? `${tabId}:${statusId}` : null;
+}
+
+function automaticPreflightCacheKey(tabId: number | undefined, url: string): string {
+  return automaticTweetOperationKey(tabId, url) ?? url;
+}
+
+function tweetStatusIdFromExtractedData(data: unknown): string | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const value = data as {
+    url?: unknown;
+    platform_data?: {
+      tweet_id?: unknown;
+    };
+  };
+
+  if (typeof value.platform_data?.tweet_id === 'string') {
+    return value.platform_data.tweet_id;
+  }
+
+  return typeof value.url === 'string' ? tweetStatusId(value.url) : null;
+}
+
+function isSameTweetPageUrl(expectedUrl?: string, currentUrl?: string): boolean {
+  const expectedStatusId = tweetStatusId(expectedUrl);
+  const currentStatusId = tweetStatusId(currentUrl);
+
+  return expectedStatusId !== null && expectedStatusId === currentStatusId;
+}
+
+function isExtractedTweetDataForUrl(data: unknown, url?: string): boolean {
+  const expectedStatusId = tweetStatusId(url);
+  const actualStatusId = tweetStatusIdFromExtractedData(data);
+
+  return expectedStatusId === null || actualStatusId === null || expectedStatusId === actualStatusId;
+}
+
+function createOperationId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function preflightTimeoutAlarmName(operation: InFlightIconOperation): string {
+  return `${PREFLIGHT_TIMEOUT_ALARM_PREFIX}${operation.tabId}:${operation.operationId}`;
+}
+
+function automaticOriginatorProbeKey(operation: InFlightIconOperation): string {
+  return `${operation.tabId}:${operation.operationId}`;
+}
+
+function clearAutomaticOriginatorProbeTimer(operation: InFlightIconOperation): void {
+  const key = automaticOriginatorProbeKey(operation);
+  const timer = automaticOriginatorProbeTimers.get(key);
+  if (!timer) {
+    return;
+  }
+
+  clearTimeout(timer);
+  automaticOriginatorProbeTimers.delete(key);
+}
+
+function hasAutomaticOriginatorProbeTimer(operation: InFlightIconOperation | null): boolean {
+  return operation !== null && automaticOriginatorProbeTimers.has(automaticOriginatorProbeKey(operation));
+}
+
+function parsePreflightTimeoutAlarmName(name: string): { tabId: number; operationId: string } | null {
+  if (!name.startsWith(PREFLIGHT_TIMEOUT_ALARM_PREFIX)) {
+    return null;
+  }
+
+  const value = name.slice(PREFLIGHT_TIMEOUT_ALARM_PREFIX.length);
+  const separatorIndex = value.indexOf(':');
+  if (separatorIndex <= 0) {
+    return null;
+  }
+
+  const tabId = Number(value.slice(0, separatorIndex));
+  const operationId = value.slice(separatorIndex + 1);
+  if (!Number.isInteger(tabId) || operationId === '') {
+    return null;
+  }
+
+  return { tabId, operationId };
+}
+
+function getMatchingInFlightOperation(tabId: number, url?: string): InFlightIconOperation | null {
+  const operation = tabInFlightOperations.get(tabId);
+  if (!operation) {
+    return null;
+  }
+
+  if (url && !isSameTweetPageUrl(operation.url, url)) {
+    return null;
+  }
+
+  return operation;
+}
+
+function isCheckInFlightForTab(tabId: number, url?: string): boolean {
+  return getMatchingInFlightOperation(tabId, url) !== null;
+}
+
+function serializableAutomaticPreflightOperations(): InFlightIconOperation[] {
+  return [...tabInFlightOperations.values()].filter(
+    operation => operation.trigger === 'automatic-preflight' && operation.timeoutAt !== undefined,
+  );
+}
+
+async function persistAutomaticPreflightOperations(): Promise<void> {
+  try {
+    await chrome.storage.session.set({
+      [PREFLIGHT_OPERATION_STORAGE_KEY]: serializableAutomaticPreflightOperations(),
+    });
+  } catch (error) {
+    debugLog('Unable to persist automatic preflight operations:', error);
+  }
+}
+
+function isValidPersistedInFlightOperation(value: unknown): value is InFlightIconOperation {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const operation = value as Partial<InFlightIconOperation>;
+  return (
+    typeof operation.tabId === 'number' &&
+    typeof operation.url === 'string' &&
+    typeof operation.statusId === 'string' &&
+    typeof operation.operationId === 'string' &&
+    operation.trigger === 'automatic-preflight' &&
+    typeof operation.startedAt === 'number' &&
+    typeof operation.timeoutAt === 'number' &&
+    tweetStatusId(operation.url) === operation.statusId
+  );
+}
+
+async function readPersistedAutomaticPreflightOperations(): Promise<InFlightIconOperation[]> {
+  try {
+    const storage = await chrome.storage.session.get([PREFLIGHT_OPERATION_STORAGE_KEY]);
+    const value = storage[PREFLIGHT_OPERATION_STORAGE_KEY];
+    return Array.isArray(value) ? value.filter(isValidPersistedInFlightOperation) : [];
+  } catch (error) {
+    debugLog('Unable to read automatic preflight operations:', error);
+    return [];
+  }
+}
+
+async function clearInFlightOperation(
+  tabId: number,
+  options: {
+    url?: string;
+    operationId?: string;
+    triggers?: DiagnosticTrigger[];
+  } = {},
+): Promise<boolean> {
+  const operation = tabInFlightOperations.get(tabId);
+  if (!operation) {
+    return false;
+  }
+
+  if (options.url && !isSameTweetPageUrl(operation.url, options.url)) {
+    return false;
+  }
+
+  if (options.operationId && operation.operationId !== options.operationId) {
+    return false;
+  }
+
+  if (options.triggers && !options.triggers.includes(operation.trigger)) {
+    return false;
+  }
+
+  tabInFlightOperations.delete(tabId);
+
+  if (operation.trigger === 'automatic-preflight') {
+    clearAutomaticOriginatorProbeTimer(operation);
+    try {
+      await chrome.alarms.clear(preflightTimeoutAlarmName(operation));
+    } catch (error) {
+      debugLog('Unable to clear automatic preflight timeout alarm:', error);
+    }
+    await persistAutomaticPreflightOperations();
+  }
+
+  return true;
+}
+
+async function startInFlightOperation(
+  tabId: number,
+  url: string | undefined,
+  trigger: DiagnosticTrigger,
+  handle?: string,
+): Promise<InFlightIconOperation | null> {
+  const statusId = tweetStatusId(url);
+  if (!url || !statusId) {
+    return null;
+  }
+
+  await clearInFlightOperation(tabId);
+
+  const now = Date.now();
+  const operation: InFlightIconOperation = {
+    tabId,
+    url,
+    statusId,
+    operationId: createOperationId(),
+    trigger,
+    startedAt: now,
+    ...(trigger === 'automatic-preflight' ? { timeoutAt: now + AUTOMATIC_PREFLIGHT_TIMEOUT_MS } : {}),
+    ...(handle ? { handle } : {}),
+  };
+
+  tabInFlightOperations.set(tabId, operation);
+
+  if (operation.trigger === 'automatic-preflight' && operation.timeoutAt !== undefined) {
+    recordDiagnosticTimingEvent({
+      event: 'automatic_preflight_started',
+      ...operationTimingFields(operation),
+      durationMs: 0,
+    });
+    await persistAutomaticPreflightOperations();
+    chrome.alarms.create(preflightTimeoutAlarmName(operation), { when: operation.timeoutAt });
+    scheduleAutomaticOriginatorProbe(operation);
+  }
+
+  return operation;
+}
+
+async function isCurrentTweetOperation(
+  operation: InFlightIconOperation | null,
+): Promise<boolean> {
+  if (!operation) {
+    return false;
+  }
+
+  try {
+    const tab = await chrome.tabs.get(operation.tabId);
+    return isSameTweetPageUrl(operation.url, tab.url);
+  } catch {
+    return false;
+  }
+}
+
+function clearTweetDataExtractionRetry(tabId: number): void {
+  const timer = tweetExtractionRetryTimers.get(tabId);
+  if (!timer) {
+    return;
+  }
+
+  clearTimeout(timer);
+  tweetExtractionRetryTimers.delete(tabId);
+}
+
+function clearAutomaticTweetExtractionRequestsForTab(tabId: number): void {
+  const keyPrefix = `${tabId}:`;
+  for (const key of automaticTweetExtractionRequests.keys()) {
+    if (key.startsWith(keyPrefix)) {
+      automaticTweetExtractionRequests.delete(key);
+    }
+  }
+}
+
+function clearAutomaticTweetExtractionRequestIfCurrent(key: string, promise: Promise<void>): void {
+  if (automaticTweetExtractionRequests.get(key) === promise) {
+    automaticTweetExtractionRequests.delete(key);
+  }
+}
+
+function waitForPromiseOrTimeout(
+  promise: Promise<unknown>,
+  timeoutMs: number,
+): Promise<'settled' | 'timeout'> {
+  return new Promise(resolve => {
+    let completed = false;
+
+    const timeoutId = setTimeout(() => {
+      if (completed) {
+        return;
+      }
+
+      completed = true;
+      resolve('timeout');
+    }, timeoutMs);
+
+    promise.then(
+      () => {
+        if (completed) {
+          return;
+        }
+
+        completed = true;
+        clearTimeout(timeoutId);
+        resolve('settled');
+      },
+      () => {
+        if (completed) {
+          return;
+        }
+
+        completed = true;
+        clearTimeout(timeoutId);
+        resolve('settled');
+      },
+    );
+  });
+}
+
+function clearPendingDuplicateCheckIfCurrent(cacheKey: string, promise: Promise<void>): void {
+  if (pendingDuplicateChecks.get(cacheKey) === promise) {
+    pendingDuplicateChecks.delete(cacheKey);
+  }
 }
 
 function isMissingContentScriptError(error: unknown): boolean {
@@ -219,8 +623,76 @@ function summarizeOriginatorResult(originator: PreflightOriginatorResult | undef
     matchPlatform: originator.match_platform,
     confidence: originator.confidence,
     fullName: originator.originator?.full_name,
-    slug: originator.originator?.slug,
+    slug: originator.originator?.slug ?? originator.originator?.unique_id,
+    createUrl: originator.create_url,
   };
+}
+
+function resolveOriginatorCreateUrl(handle: string, createUrl?: unknown): string {
+  if (typeof createUrl === 'string' && createUrl) {
+    return createUrl;
+  }
+
+  const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
+  return `${baseUrl}/originators/add/?suggested_handle=${encodeURIComponent(handle)}&platform=twitter`;
+}
+
+function originatorSlugFromPreflight(originator: PreflightOriginatorResult | undefined): string | undefined {
+  return originator?.originator?.slug ?? originator?.originator?.unique_id;
+}
+
+function recordDiagnosticTimingEvent(update: Omit<DiagnosticTimingEvent, 'timestamp'>): void {
+  if (!DIAGNOSTIC_EVENT_TRAIL_ENABLED) {
+    return;
+  }
+
+  const event: DiagnosticTimingEvent = {
+    timestamp: Date.now(),
+    ...update,
+  };
+
+  if (!event.statusId && event.sourceUrl) {
+    const statusId = tweetStatusId(event.sourceUrl);
+    if (statusId) {
+      event.statusId = statusId;
+    }
+  }
+
+  if (event.sourceUrl && !event.source_url) {
+    event.source_url = event.sourceUrl;
+  }
+
+  diagnosticTimingEvents.push(event);
+  if (diagnosticTimingEvents.length > DIAGNOSTIC_EVENT_TRAIL_LIMIT) {
+    diagnosticTimingEvents.splice(0, diagnosticTimingEvents.length - DIAGNOSTIC_EVENT_TRAIL_LIMIT);
+  }
+}
+
+function operationTimingFields(operation: InFlightIconOperation): Pick<
+  DiagnosticTimingEvent,
+  'tabId' | 'sourceUrl' | 'statusId' | 'handle' | 'operationId' | 'trigger'
+> {
+  return {
+    tabId: operation.tabId,
+    sourceUrl: operation.url,
+    statusId: operation.statusId,
+    handle: operation.handle,
+    operationId: operation.operationId,
+    trigger: operation.trigger,
+  };
+}
+
+function durationSince(startedAt: number | undefined): number | undefined {
+  return typeof startedAt === 'number' ? Date.now() - startedAt : undefined;
+}
+
+function isAutomaticOriginatorProbeTimeoutResponse(response: unknown): boolean {
+  if (!response || typeof response !== 'object') {
+    return false;
+  }
+
+  const error = (response as { error?: unknown }).error;
+  return typeof error === 'string' && error === 'Automatic originator probe timed out';
 }
 
 function recordExtractionDiagnostic(update: Omit<ExtractionDiagnostic, 'timestamp'>): void {
@@ -268,10 +740,12 @@ async function getActiveTabDiagnostics(): Promise<RuntimeDiagnostics['activeTab'
     return {
       id: tab.id,
       url: tab.url,
+      isSupportedPlatform: isSupportedPlatformUrl(tab.url),
       isTweetPage: isTweetPageUrl(tab.url),
     };
   } catch (error) {
     return {
+      isSupportedPlatform: false,
       isTweetPage: false,
       queryError: errorMessage(error),
     };
@@ -286,15 +760,66 @@ function getTabStateDiagnostics(
     return null;
   }
 
-  const duplicateResult = tabDuplicateResults.get(tabId) ?? null;
+  const cachedDuplicate = getCachedDuplicateResultForTab(tabId, url);
+  const missingOriginator = getMissingOriginatorForTab(tabId, url);
 
   return {
     tabId,
+    isSupportedPlatform: isSupportedPlatformUrl(url),
     isTweetPage: isTweetPageUrl(url),
-    isCheckInFlight: tabCheckInFlight.has(tabId),
-    hasDuplicateResult: tabDuplicateResults.has(tabId),
+    isCheckInFlight: isCheckInFlightForTab(tabId, url),
+    isOriginatorMissing: missingOriginator !== null,
+    hasDuplicateResult: cachedDuplicate.hasResult,
     hasTabScopedPresentation: tabScopedPresentationTabIds.has(tabId),
-    duplicate: summarizeDuplicateResult(duplicateResult),
+    duplicate: summarizeDuplicateResult(cachedDuplicate.result),
+    missingOriginator,
+  };
+}
+
+function getMissingOriginatorForTab(tabId: number, url?: string): MissingOriginatorInfo | null {
+  const info = tabMissingOriginators.get(tabId);
+  if (!info) {
+    return null;
+  }
+
+  if (url && !isSameTweetPageUrl(info.url, url)) {
+    return null;
+  }
+
+  return { ...info };
+}
+
+function setTabDuplicateResult(tabId: number, result: DuplicateCheckResult | null, url?: string): void {
+  tabDuplicateResults.set(tabId, result);
+  if (url) {
+    tabDuplicateResultUrls.set(tabId, url);
+  } else {
+    tabDuplicateResultUrls.delete(tabId);
+  }
+}
+
+function clearTabDuplicateResult(tabId: number): void {
+  tabDuplicateResults.delete(tabId);
+  tabDuplicateResultUrls.delete(tabId);
+}
+
+function getCachedDuplicateResultForTab(
+  tabId: number,
+  url?: string,
+): { hasResult: boolean; result: DuplicateCheckResult | null } {
+  if (!tabDuplicateResults.has(tabId)) {
+    return { hasResult: false, result: null };
+  }
+
+  const cachedUrl = tabDuplicateResultUrls.get(tabId);
+  if (url && cachedUrl && !isSameTweetPageUrl(cachedUrl, url)) {
+    clearTabDuplicateResult(tabId);
+    return { hasResult: false, result: null };
+  }
+
+  return {
+    hasResult: true,
+    result: tabDuplicateResults.get(tabId) ?? null,
   };
 }
 
@@ -318,10 +843,11 @@ async function getStorageDiagnostics(): Promise<RuntimeDiagnostics['storage']> {
     const preloadedOriginator = storage.preloadedOriginator as {
       handle?: unknown;
       timestamp?: unknown;
+      create_url?: unknown;
       originator?: {
         full_name?: unknown;
         unique_id?: unknown;
-      };
+      } | null;
     } | undefined;
 
     return {
@@ -353,11 +879,15 @@ async function getStorageDiagnostics(): Promise<RuntimeDiagnostics['storage']> {
           timestamp: typeof preloadedOriginator.timestamp === 'number'
             ? preloadedOriginator.timestamp
             : undefined,
+          found: !!preloadedOriginator.originator,
           fullName: typeof preloadedOriginator.originator?.full_name === 'string'
             ? preloadedOriginator.originator.full_name
             : undefined,
           uniqueId: typeof preloadedOriginator.originator?.unique_id === 'string'
             ? preloadedOriginator.originator.unique_id
+            : undefined,
+          createUrl: typeof preloadedOriginator.create_url === 'string'
+            ? preloadedOriginator.create_url
             : undefined,
         }
         : null,
@@ -402,6 +932,7 @@ async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
     storage: await getStorageDiagnostics(),
     extraction: { ...lastExtractionDiagnostic },
     preflight: { ...lastPreflightDiagnostic },
+    events: diagnosticTimingEvents.map(event => ({ ...event })),
     icon: getIconApplicatorDiagnostics(),
   };
 }
@@ -442,8 +973,10 @@ async function applyResolvedIconForTab(
   const resolvedDuplicateResult = await resolveDuplicateResultForTab(tabId, url, duplicateResult);
   const presentation = resolveIconPresentation(authState, resolvedDuplicateResult, {
     tabId,
+    isSupportedPlatform: isSupportedPlatformUrl(url),
     isTweetPage: isTweetPageUrl(url),
-    isCheckInFlight: tabCheckInFlight.has(tabId),
+    isCheckInFlight: isCheckInFlightForTab(tabId, url),
+    isOriginatorMissing: getMissingOriginatorForTab(tabId, url) !== null,
   });
 
   if (presentation.scope === 'tab') {
@@ -472,7 +1005,7 @@ async function getAffectedTabs(): Promise<AffectedTab[]> {
   try {
     const tabs = await chrome.tabs.query({});
     for (const tab of tabs) {
-      if (tab.id && (isTweetPageUrl(tab.url) || tabScopedPresentationTabIds.has(tab.id))) {
+      if (tab.id && (isSupportedPlatformUrl(tab.url) || tabScopedPresentationTabIds.has(tab.id))) {
         tabsById.set(tab.id, { id: tab.id, url: tab.url });
       }
     }
@@ -497,6 +1030,7 @@ async function getAffectedTabs(): Promise<AffectedTab[]> {
 async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
   const presentation = resolveIconPresentation(authState, null, {
     tabId: 0,
+    isSupportedPlatform: false,
     isTweetPage: false,
     isCheckInFlight: false,
   });
@@ -505,7 +1039,7 @@ async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
 
   for (const tab of await getAffectedTabs()) {
     try {
-      if (authState === AuthState.AUTHENTICATED && isTweetPageUrl(tab.url)) {
+      if (authState === AuthState.AUTHENTICATED && isSupportedPlatformUrl(tab.url)) {
         await applyResolvedIconForTab(tab.id, tab.url, undefined, authState);
         continue;
       }
@@ -515,7 +1049,10 @@ async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
         authState === AuthState.SESSION_EXPIRED ||
         authState === AuthState.INSUFFICIENT_PRIVILEGES
       ) {
-        tabCheckInFlight.delete(tab.id);
+        clearTweetDataExtractionRetry(tab.id);
+        clearAutomaticTweetExtractionRequestsForTab(tab.id);
+        await clearInFlightOperation(tab.id);
+        tabMissingOriginators.delete(tab.id);
       }
 
       await applyIconPresentation(presentation, tab.id, { forceTabScope: true });
@@ -526,6 +1063,210 @@ async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
 }
 
 setAuthPresentationUpdater(applyAuthStatePresentation);
+
+function currentAutomaticPreflightOperation(operation: InFlightIconOperation): InFlightIconOperation | null {
+  const currentOperation = getMatchingInFlightOperation(operation.tabId, operation.url);
+  if (
+    !currentOperation ||
+    currentOperation.operationId !== operation.operationId ||
+    currentOperation.trigger !== 'automatic-preflight'
+  ) {
+    return null;
+  }
+
+  return currentOperation;
+}
+
+async function shouldApplyAutomaticOriginatorProbeResult(
+  operation: InFlightIconOperation,
+): Promise<boolean> {
+  if (!currentAutomaticPreflightOperation(operation)) {
+    return false;
+  }
+
+  return isSenderTabStillOnSourceUrl(operation.tabId, operation.url);
+}
+
+function scheduleAutomaticOriginatorProbe(operation: InFlightIconOperation): void {
+  if (operation.trigger !== 'automatic-preflight') {
+    return;
+  }
+
+  if (!operation.handle) {
+    recordDiagnosticTimingEvent({
+      event: 'originator_probe_skipped',
+      ...operationTimingFields(operation),
+      reason: 'missing_handle',
+      durationMs: durationSince(operation.startedAt),
+    });
+    return;
+  }
+
+  clearAutomaticOriginatorProbeTimer(operation);
+
+  const key = automaticOriginatorProbeKey(operation);
+  const timer = setTimeout(() => {
+    automaticOriginatorProbeTimers.delete(key);
+    void runAutomaticOriginatorProbe(operation).catch(error => {
+      debugLog('Automatic originator probe failed:', error);
+    });
+  }, AUTOMATIC_ORIGINATOR_PROBE_DELAY_MS);
+
+  automaticOriginatorProbeTimers.set(key, timer);
+  recordDiagnosticTimingEvent({
+    event: 'originator_probe_scheduled',
+    ...operationTimingFields(operation),
+    reason: 'after_automatic_preflight_start',
+    durationMs: durationSince(operation.startedAt),
+  });
+}
+
+async function handleAutomaticPreflightTimeout(operation: InFlightIconOperation): Promise<void> {
+  if (!await isCurrentTweetOperation(operation)) {
+    await clearInFlightOperation(operation.tabId, { operationId: operation.operationId });
+    recordPreflightDiagnostic({
+      status: 'skipped',
+      trigger: 'automatic-preflight',
+      tabId: operation.tabId,
+      url: operation.url,
+      handle: operation.handle,
+      operationId: operation.operationId,
+      durationMs: durationSince(operation.startedAt),
+      reason: 'preflight_timeout_url_changed',
+    });
+    recordDiagnosticTimingEvent({
+      event: 'automatic_preflight_timeout_skipped',
+      ...operationTimingFields(operation),
+      reason: 'preflight_timeout_url_changed',
+      durationMs: durationSince(operation.startedAt),
+    });
+    return;
+  }
+
+  await clearInFlightOperation(operation.tabId, { operationId: operation.operationId });
+  recordPreflightDiagnostic({
+    status: 'failed',
+    trigger: 'automatic-preflight',
+    tabId: operation.tabId,
+    url: operation.url,
+    handle: operation.handle,
+    operationId: operation.operationId,
+    durationMs: durationSince(operation.startedAt),
+    reason: 'preflight_timeout',
+    classification: 'combined_preflight_timeout',
+  });
+  recordDiagnosticTimingEvent({
+    event: 'automatic_preflight_timeout',
+    ...operationTimingFields(operation),
+    reason: 'preflight_timeout',
+    classification: 'combined_preflight_timeout',
+    durationMs: durationSince(operation.startedAt),
+  });
+
+  if (await runAutomaticOriginatorFallback(operation)) {
+    return;
+  }
+
+  setTabDuplicateResult(operation.tabId, null, operation.url);
+  tabMissingOriginators.delete(operation.tabId);
+  await applyResolvedIconForTab(operation.tabId, operation.url, null);
+}
+
+async function handleAutomaticPreflightTimeoutAlarm(alarmName: string): Promise<void> {
+  const parsed = parsePreflightTimeoutAlarmName(alarmName);
+  if (!parsed) {
+    return;
+  }
+
+  const operation = tabInFlightOperations.get(parsed.tabId);
+  if (!operation || operation.operationId !== parsed.operationId) {
+    await persistAutomaticPreflightOperations();
+    return;
+  }
+
+  await handleAutomaticPreflightTimeout(operation);
+}
+
+async function reconcileAutomaticPreflightOperations(): Promise<void> {
+  const persistedOperations = await readPersistedAutomaticPreflightOperations();
+  if (persistedOperations.length === 0) {
+    return;
+  }
+
+  const now = Date.now();
+
+  for (const operation of persistedOperations) {
+    if (tabInFlightOperations.has(operation.tabId)) {
+      continue;
+    }
+
+    tabInFlightOperations.set(operation.tabId, operation);
+
+    if (operation.timeoutAt !== undefined && operation.timeoutAt <= now) {
+      await handleAutomaticPreflightTimeout(operation);
+      continue;
+    }
+
+    if (!await isCurrentTweetOperation(operation)) {
+      await clearInFlightOperation(operation.tabId, { operationId: operation.operationId });
+      continue;
+    }
+
+    if (operation.timeoutAt !== undefined) {
+      chrome.alarms.create(preflightTimeoutAlarmName(operation), { when: operation.timeoutAt });
+    }
+
+    try {
+      await applyResolvedIconForTab(operation.tabId, operation.url, getCachedDuplicateResultForTab(operation.tabId, operation.url).result);
+    } catch (error) {
+      debugLog('Unable to restore automatic preflight loading icon:', error);
+    }
+  }
+
+  await persistAutomaticPreflightOperations();
+}
+
+async function shouldApplyPreflightOperationResult(
+  tabId: number | undefined,
+  url: string,
+  operation: InFlightIconOperation | null,
+): Promise<boolean> {
+  if (!tabId) {
+    return true;
+  }
+
+  const currentOperation = tabInFlightOperations.get(tabId);
+  if (
+    currentOperation &&
+    operation &&
+    currentOperation.operationId !== operation.operationId &&
+    !isSameTweetPageUrl(currentOperation.url, url)
+  ) {
+    return false;
+  }
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return isSameTweetPageUrl(url, tab.url);
+  } catch {
+    const matchingOperation = getMatchingInFlightOperation(tabId, url);
+    return (
+      matchingOperation !== null &&
+      operation !== null &&
+      matchingOperation.operationId === operation.operationId
+    );
+  }
+}
+
+async function isSenderTabStillOnSourceUrl(tabId: number, sourceUrl: string): Promise<boolean> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    return isSameTweetPageUrl(sourceUrl, tab.url);
+  } catch {
+    const matchingOperation = getMatchingInFlightOperation(tabId, sourceUrl);
+    return matchingOperation !== null;
+  }
+}
 
 function presentationForCollectionBadge(badgeInfo: CollectionBadgeInfo): IconPresentation {
   switch (badgeInfo.state) {
@@ -547,6 +1288,76 @@ function sourceUrlFromMessage(message: ExtensionMessage, sender: chrome.runtime.
   const data = message.data as Record<string, unknown> | undefined;
   const sourceUrl = data?.source_url ?? data?.sourceUrl ?? sender.tab?.url;
   return typeof sourceUrl === 'string' ? sourceUrl : undefined;
+}
+
+function authRequiredResponseState(response: unknown): AuthState | null {
+  if (!response || typeof response !== 'object') {
+    return null;
+  }
+
+  const value = response as {
+    authRequired?: unknown;
+    authFailureType?: unknown;
+  };
+
+  if (value.authRequired !== true) {
+    return null;
+  }
+
+  return value.authFailureType === 'insufficient_privileges'
+    ? AuthState.INSUFFICIENT_PRIVILEGES
+    : AuthState.SESSION_EXPIRED;
+}
+
+async function applyAuthRequiredApiResponse(
+  response: unknown,
+  context: {
+    tabId?: number;
+    url?: string;
+    trigger?: DiagnosticTrigger;
+    handle?: string;
+  },
+): Promise<boolean> {
+  const authState = authRequiredResponseState(response);
+  if (!authState) {
+    return false;
+  }
+
+  const error = response && typeof response === 'object'
+    ? (response as { error?: unknown; message?: unknown }).error ?? (response as { message?: unknown }).message
+    : undefined;
+  const errorText = typeof error === 'string' ? error : undefined;
+
+  if (authStateManager) {
+    if (authState === AuthState.INSUFFICIENT_PRIVILEGES) {
+      await authStateManager.onInsufficientPrivileges(errorText);
+    } else {
+      await authStateManager.onTokenRefreshFailed(errorText);
+    }
+  }
+
+  const { tabId, url, trigger, handle } = context;
+  if (tabId) {
+    recordPreflightDiagnostic({
+      status: 'failed',
+      trigger: trigger ?? 'explicit-duplicate-check',
+      tabId,
+      url,
+      handle,
+      reason: 'authentication_required',
+      authRequired: true,
+      ...(errorText ? { error: errorText } : {}),
+    });
+    clearTweetDataExtractionRetry(tabId);
+    clearAutomaticTweetExtractionRequestsForTab(tabId);
+    clearTabDuplicateResult(tabId);
+    tabMissingOriginators.delete(tabId);
+    await clearInFlightOperation(tabId);
+    tabScopedPresentationTabIds.add(tabId);
+    await applyResolvedIconForTab(tabId, url, null, authState);
+  }
+
+  return true;
 }
 
 function duplicateResultFromResponse(response: unknown): DuplicateCheckResult | null {
@@ -582,8 +1393,9 @@ async function resolveDuplicateResultForTab(
     return duplicateResult;
   }
 
-  if (tabDuplicateResults.has(tabId)) {
-    return tabDuplicateResults.get(tabId) ?? null;
+  const cachedDuplicate = getCachedDuplicateResultForTab(tabId, url);
+  if (cachedDuplicate.hasResult) {
+    return cachedDuplicate.result;
   }
 
   if (!url) {
@@ -599,7 +1411,8 @@ async function resolveDuplicateResultForTab(
     } | undefined;
 
     if (
-      preloaded?.url === url &&
+      typeof preloaded?.url === 'string' &&
+      isSameTweetPageUrl(preloaded.url, url) &&
       typeof preloaded.timestamp === 'number' &&
       Date.now() - preloaded.timestamp < PRELOADED_DUPLICATE_MAX_AGE_MS
     ) {
@@ -607,7 +1420,7 @@ async function resolveDuplicateResultForTab(
         success: true,
         result: preloaded.result,
       });
-      tabDuplicateResults.set(tabId, storedDuplicateResult);
+      setTabDuplicateResult(tabId, storedDuplicateResult, preloaded.url);
       return storedDuplicateResult;
     }
   } catch (error) {
@@ -656,6 +1469,8 @@ async function ensureServicesInitialized(): Promise<void> {
   // Start periodic cleanup (quiet mode - no startup logs)
   storageCleanup.startPeriodicCleanup(true);
 
+  await reconcileAutomaticPreflightOperations();
+
   servicesInitialized = true;
 }
 
@@ -682,6 +1497,13 @@ chrome.runtime.onStartup.addListener(async () => {
 
 // Handle alarms for token refresh — route results through AuthStateManager (FR-021)
 chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name.startsWith(PREFLIGHT_TIMEOUT_ALARM_PREFIX)) {
+    debugLog('Automatic preflight timeout alarm triggered');
+    await ensureServicesInitialized();
+    await handleAutomaticPreflightTimeoutAlarm(alarm.name);
+    return;
+  }
+
   if (alarm.name === 'token-refresh') {
     debugLog('Token refresh alarm triggered');
     await ensureServicesInitialized();
@@ -730,7 +1552,9 @@ chrome.runtime.onMessage.addListener((
   ensureServicesInitialized().then(() => {
     switch (message.type) {
       case MessageType.TWEET_DATA_EXTRACTED:
-        handleTweetDataExtracted(message.data, sender.tab?.id, sendResponse);
+        handleTweetDataExtracted(message.data, sender.tab?.id, sendResponse, {
+          keepAliveUntilIconApplied: true,
+        });
         break;
 
       case MessageType.GET_TWEET_DATA:
@@ -760,13 +1584,43 @@ chrome.runtime.onMessage.addListener((
       // Delegate API messages to API handler
       case MessageType.SEARCH_ORIGINATORS:
       case MessageType.SUBMIT_QUOTE:
-      case MessageType.LOOKUP_ORIGINATOR_BY_HANDLE:
         // Delegate to API handler (guaranteed initialized by ensureServicesInitialized)
-        apiHandler!.handleMessage(message, sender, sendResponse).catch(error => {
+        apiHandler!.handleMessage(message, sender, (response) => {
+          applyAuthRequiredApiResponse(response, {
+            tabId: sender.tab?.id,
+            url: sourceUrlFromMessage(message, sender),
+          })
+            .catch(error => {
+              debugLog('Error applying API auth-required icon state:', error);
+            })
+            .finally(() => {
+              sendResponse(response);
+            });
+        }).catch(error => {
           console.error('API handler error:', error);
           sendResponse({
             success: false,
             error: error.message || 'API request failed'
+          });
+        });
+        break;
+
+      case MessageType.LOOKUP_ORIGINATOR_BY_HANDLE:
+        handleLookupOriginatorByHandle(message, sender, sendResponse).catch(error => {
+          console.error('Originator lookup handler error:', error);
+          sendResponse({
+            success: false,
+            error: error.message || 'API request failed'
+          });
+        });
+        break;
+
+      case MessageType.ORIGINATOR_LOOKUP_STATUS:
+        handleOriginatorLookupStatus(message, sender, sendResponse).catch(error => {
+          console.error('Originator lookup status handler error:', error);
+          sendResponse({
+            success: false,
+            error: error.message || 'Unable to apply originator lookup status'
           });
         });
         break;
@@ -902,56 +1756,243 @@ async function sendExtractTweetDataMessage(tabId: number, url?: string): Promise
   }
 }
 
-async function requestTweetDataExtraction(tabId: number, url?: string): Promise<void> {
+function scheduleTweetDataExtractionRetry(tabId: number, url: string | undefined, attempt: number): void {
+  const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
+  if (!isTweetPageUrl(url) || retryAfterMs === undefined) {
+    return;
+  }
+
+  clearTweetDataExtractionRetry(tabId);
+
+  const timer = setTimeout(() => {
+    const nextAttempt = attempt + 2;
+    tweetExtractionRetryTimers.delete(tabId);
+    void (async () => {
+      try {
+        const tab = await chrome.tabs.get(tabId);
+        if (!isSameTweetPageUrl(url, tab.url)) {
+          recordExtractionDiagnostic({
+            status: 'skipped',
+            tabId,
+            url: tab.url,
+            reason: 'retry_url_changed',
+            attempt: nextAttempt,
+          });
+          recordDiagnosticTimingEvent({
+            event: 'extraction_retry_skipped',
+            tabId,
+            sourceUrl: tab.url,
+            trigger: 'automatic-preflight',
+            reason: 'retry_url_changed',
+            attempt: nextAttempt,
+          });
+          return;
+        }
+
+        await requestTweetDataExtraction(tabId, url, attempt + 1);
+      } catch (error) {
+        recordExtractionDiagnostic({
+          status: 'failed',
+          tabId,
+          url,
+          reason: 'retry_tab_unavailable',
+          error: errorMessage(error),
+          attempt: nextAttempt,
+        });
+        recordDiagnosticTimingEvent({
+          event: 'extraction_retry_failed',
+          tabId,
+          sourceUrl: url,
+          trigger: 'automatic-preflight',
+          reason: 'retry_tab_unavailable',
+          error: errorMessage(error),
+          attempt: nextAttempt,
+        });
+        debugLog('Unable to retry tweet extraction for icon preflight:', error);
+      }
+    })();
+  }, retryAfterMs);
+
+  tweetExtractionRetryTimers.set(tabId, timer);
+}
+
+async function requestTweetDataExtraction(tabId: number, url?: string, attempt = 0): Promise<void> {
+  const extractionKey = attempt === 0 ? automaticTweetOperationKey(tabId, url) : null;
+  if (extractionKey) {
+    const pendingExtraction = automaticTweetExtractionRequests.get(extractionKey);
+    if (pendingExtraction) {
+      recordDiagnosticTimingEvent({
+        event: 'extraction_request_deduped',
+        tabId,
+        sourceUrl: url,
+        trigger: 'automatic-preflight',
+        reason: 'same_tweet_extraction_in_flight',
+        attempt: attempt + 1,
+      });
+      await pendingExtraction;
+      return;
+    }
+  }
+
+  const extractionPromise = performTweetDataExtraction(tabId, url, attempt);
+  if (!extractionKey) {
+    await extractionPromise;
+    return;
+  }
+
+  automaticTweetExtractionRequests.set(extractionKey, extractionPromise);
+  try {
+    await extractionPromise;
+  } finally {
+    clearAutomaticTweetExtractionRequestIfCurrent(extractionKey, extractionPromise);
+  }
+}
+
+async function performTweetDataExtraction(tabId: number, url?: string, attempt = 0): Promise<void> {
   if (!isTweetPageUrl(url)) {
+    clearTweetDataExtractionRetry(tabId);
     recordExtractionDiagnostic({
       status: 'skipped',
       tabId,
       url,
       reason: 'not_tweet_page',
     });
+    recordDiagnosticTimingEvent({
+      event: 'extraction_skipped',
+      tabId,
+      sourceUrl: url,
+      trigger: 'automatic-preflight',
+      reason: 'not_tweet_page',
+      attempt: attempt + 1,
+    });
     return;
+  }
+
+  if (attempt === 0) {
+    clearTweetDataExtractionRetry(tabId);
   }
 
   recordExtractionDiagnostic({
     status: 'requested',
     tabId,
     url,
+    attempt: attempt + 1,
+  });
+  recordDiagnosticTimingEvent({
+    event: 'extraction_requested',
+    tabId,
+    sourceUrl: url,
+    trigger: 'automatic-preflight',
+    attempt: attempt + 1,
   });
 
   try {
     const response = await sendExtractTweetDataMessage(tabId, url);
     if (response?.success && response.data) {
+      if (!isExtractedTweetDataForUrl(response.data, url)) {
+        const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
+        recordExtractionDiagnostic({
+          status: 'no_data',
+          tabId,
+          url,
+          reason: 'stale_tweet_data',
+          classification: 'extraction_retry_before_preflight',
+          attempt: attempt + 1,
+          retryAfterMs,
+        });
+        recordDiagnosticTimingEvent({
+          event: 'extraction_retry_scheduled',
+          tabId,
+          sourceUrl: url,
+          trigger: 'automatic-preflight',
+          reason: 'stale_tweet_data',
+          classification: 'extraction_retry_before_preflight',
+          attempt: attempt + 1,
+          retryAfterMs,
+        });
+        debugLog('Tweet extraction returned stale data for a different status ID');
+        scheduleTweetDataExtractionRetry(tabId, url, attempt);
+        return;
+      }
+
+      clearTweetDataExtractionRetry(tabId);
       recordExtractionDiagnostic({
         status: 'succeeded',
         tabId,
         url,
+        attempt: attempt + 1,
       });
       await handleTweetDataExtracted(response.data, tabId, () => undefined);
     } else if (response?.error) {
+      const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
       recordExtractionDiagnostic({
         status: 'no_data',
         tabId,
         url,
         error: response.error,
+        classification: 'extraction_retry_before_preflight',
+        attempt: attempt + 1,
+        retryAfterMs,
+      });
+      recordDiagnosticTimingEvent({
+        event: 'extraction_retry_scheduled',
+        tabId,
+        sourceUrl: url,
+        trigger: 'automatic-preflight',
+        reason: 'no_tweet_data',
+        classification: 'extraction_retry_before_preflight',
+        attempt: attempt + 1,
+        retryAfterMs,
       });
       debugLog('Tweet extraction request returned no data:', response.error);
+      scheduleTweetDataExtractionRetry(tabId, url, attempt);
     } else {
+      const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
       recordExtractionDiagnostic({
         status: 'no_data',
         tabId,
         url,
         reason: 'empty_response',
+        classification: 'extraction_retry_before_preflight',
+        attempt: attempt + 1,
+        retryAfterMs,
       });
+      recordDiagnosticTimingEvent({
+        event: 'extraction_retry_scheduled',
+        tabId,
+        sourceUrl: url,
+        trigger: 'automatic-preflight',
+        reason: 'empty_response',
+        classification: 'extraction_retry_before_preflight',
+        attempt: attempt + 1,
+        retryAfterMs,
+      });
+      scheduleTweetDataExtractionRetry(tabId, url, attempt);
     }
   } catch (error) {
+    const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
     recordExtractionDiagnostic({
       status: 'failed',
       tabId,
       url,
       error: errorMessage(error),
+      ...(retryAfterMs !== undefined ? { classification: 'extraction_retry_before_preflight' as const } : {}),
+      attempt: attempt + 1,
+      retryAfterMs,
+    });
+    recordDiagnosticTimingEvent({
+      event: retryAfterMs !== undefined ? 'extraction_retry_scheduled' : 'extraction_failed',
+      tabId,
+      sourceUrl: url,
+      trigger: 'automatic-preflight',
+      reason: 'request_failed',
+      ...(retryAfterMs !== undefined ? { classification: 'extraction_retry_before_preflight' as const } : {}),
+      error: errorMessage(error),
+      attempt: attempt + 1,
+      retryAfterMs,
     });
     debugLog('Unable to request tweet extraction for icon preflight:', error);
+    scheduleTweetDataExtractionRetry(tabId, url, attempt);
   }
 }
 
@@ -960,8 +2001,10 @@ async function requestTweetDataExtraction(tabId: number, url?: string): Promise<
  */
 async function clearTweetPageIcon(tabId: number, url?: string): Promise<void> {
   try {
-    tabDuplicateResults.delete(tabId);
-    tabCheckInFlight.delete(tabId);
+    clearTweetDataExtractionRetry(tabId);
+    clearTabDuplicateResult(tabId);
+    tabMissingOriginators.delete(tabId);
+    await clearInFlightOperation(tabId);
     await applyResolvedIconForTab(tabId, url, null);
   } catch (error) {
     console.error('Error clearing tweet page icon:', error);
@@ -976,6 +2019,13 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     await ensureServicesInitialized();
 
     if (isTweetPage) {
+      recordDiagnosticTimingEvent({
+        event: 'tweet_navigation_detected',
+        tabId,
+        sourceUrl: tab.url,
+        trigger: 'automatic-preflight',
+        reason: 'tabs_on_updated_complete',
+      });
       await applyResolvedIconForTab(tabId, tab.url);
       await requestTweetDataExtraction(tabId, tab.url);
     } else {
@@ -994,8 +2044,11 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
         await clearTweetPageIcon(lastActiveTabId, previousTab.url);
       }
     } catch {
-      tabDuplicateResults.delete(lastActiveTabId);
-      tabCheckInFlight.delete(lastActiveTabId);
+      clearTweetDataExtractionRetry(lastActiveTabId);
+      clearAutomaticTweetExtractionRequestsForTab(lastActiveTabId);
+      clearTabDuplicateResult(lastActiveTabId);
+      tabMissingOriginators.delete(lastActiveTabId);
+      await clearInFlightOperation(lastActiveTabId);
       tabScopedPresentationTabIds.delete(lastActiveTabId);
     }
   }
@@ -1011,8 +2064,11 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  tabDuplicateResults.delete(tabId);
-  tabCheckInFlight.delete(tabId);
+  clearTweetDataExtractionRetry(tabId);
+  clearAutomaticTweetExtractionRequestsForTab(tabId);
+  clearTabDuplicateResult(tabId);
+  tabMissingOriginators.delete(tabId);
+  void clearInFlightOperation(tabId);
   tabScopedPresentationTabIds.delete(tabId);
   if (lastActiveTabId === tabId) {
     lastActiveTabId = null;
@@ -1031,6 +2087,13 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
     debugLog('SPA navigation detected to tweet page:', details.url);
 
     await ensureServicesInitialized();
+    recordDiagnosticTimingEvent({
+      event: 'tweet_navigation_detected',
+      tabId: details.tabId,
+      sourceUrl: details.url,
+      trigger: 'automatic-preflight',
+      reason: 'history_state_updated',
+    });
     await applyResolvedIconForTab(details.tabId, details.url);
     await requestTweetDataExtraction(details.tabId, details.url);
   } else {
@@ -1043,11 +2106,49 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
  * Handle tweet data extracted from content script
  * Validates incoming data before storage for security
  */
+async function runAutomaticPreflightForExtractedTweet(
+  validatedData: TwitterData,
+  tabId: number | undefined,
+): Promise<void> {
+  // Store the extracted data for popup access
+  await chrome.storage.local.set({
+    currentTweet: {
+      data: validatedData,
+      timestamp: Date.now(),
+      url: validatedData.url
+    }
+  });
+
+  debugLog('Tweet data stored:', validatedData.text.substring(0, 50) + '...');
+
+  // Clear stale preloaded caches to prevent race conditions.
+  // Do this only when starting a new preflight; forced extraction can race with
+  // the content script's own auto-send for the same tweet.
+  await chrome.storage.local.remove(['preloadedOriginator', 'preloadedDuplicateCheck']);
+
+  let preflightOperation: InFlightIconOperation | null = null;
+  if (tabId) {
+    preflightOperation = await startInFlightOperation(
+      tabId,
+      validatedData.url,
+      'automatic-preflight',
+      validatedData.author?.username,
+    );
+    tabScopedPresentationTabIds.add(tabId);
+    await applyResolvedIconForTab(tabId, validatedData.url);
+  }
+
+  await checkQuoteCollectionStatus(validatedData, tabId, preflightOperation);
+}
+
 async function handleTweetDataExtracted(
   tweetData: unknown,
   tabId: number | undefined,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sendResponse: (response: any) => void
+  sendResponse: (response: any) => void,
+  options: {
+    keepAliveUntilIconApplied?: boolean;
+  } = {},
 ) {
   try {
     // Validate incoming data before processing (security hardening)
@@ -1078,49 +2179,64 @@ async function handleTweetDataExtracted(
       url: validatedData.url,
       reason: 'tweet_data_received',
     });
-
-    // Store the extracted data for popup access
-    await chrome.storage.local.set({
-      currentTweet: {
-        data: validatedData,
-        timestamp: Date.now(),
-        url: validatedData.url
-      }
+    recordDiagnosticTimingEvent({
+      event: 'valid_tweet_data_accepted',
+      tabId,
+      sourceUrl: validatedData.url,
+      statusId: validatedData.platform_data?.tweet_id ?? tweetStatusId(validatedData.url) ?? undefined,
+      handle: validatedData.author?.username,
+      trigger: 'automatic-preflight',
+      reason: 'tweet_data_received',
     });
+    if (tabId) {
+      clearTweetDataExtractionRetry(tabId);
+      tabMissingOriginators.delete(tabId);
+    }
 
-    debugLog('Tweet data stored:', validatedData.text.substring(0, 50) + '...');
-
-    const cacheKey = validatedData.url;
+    const cacheKey = automaticPreflightCacheKey(tabId, validatedData.url);
 
     // Check if there's already a pending request for this URL (prevent race conditions)
     const pending = pendingDuplicateChecks.get(cacheKey);
     if (pending) {
       debugLog('Duplicate check already in progress for:', cacheKey);
+      recordDiagnosticTimingEvent({
+        event: 'automatic_preflight_deduped',
+        tabId,
+        sourceUrl: validatedData.url,
+        statusId: validatedData.platform_data?.tweet_id ?? tweetStatusId(validatedData.url) ?? undefined,
+        handle: validatedData.author?.username,
+        trigger: 'automatic-preflight',
+        reason: 'same_tweet_preflight_in_flight',
+      });
+      if (options.keepAliveUntilIconApplied) {
+        const waitResult = await waitForPromiseOrTimeout(pending, AUTOMATIC_PREFLIGHT_KEEPALIVE_MS);
+        if (waitResult === 'timeout') {
+          clearPendingDuplicateCheckIfCurrent(cacheKey, pending);
+        }
+      }
       sendResponse({ success: true });
       return;
     }
 
-    // Clear stale preloaded caches to prevent race conditions.
-    // Do this only when starting a new preflight; forced extraction can race with
-    // the content script's own auto-send for the same tweet.
-    await chrome.storage.local.remove(['preloadedOriginator', 'preloadedDuplicateCheck']);
-
-    if (tabId) {
-      tabCheckInFlight.add(tabId);
-      tabScopedPresentationTabIds.add(tabId);
-      await applyResolvedIconForTab(tabId, validatedData.url, null);
-    }
-
-    // Check if quote already exists in Quotewise (async, don't block response)
-    const checkPromise = checkQuoteCollectionStatus(validatedData, tabId).finally(() => {
-      pendingDuplicateChecks.delete(cacheKey);
-    });
+    // Keep the message port alive long enough for the automatic icon write. Without this,
+    // MV3 may suspend the worker after the content-script response while the tray is closed.
+    const checkPromise = runAutomaticPreflightForExtractedTweet(validatedData, tabId);
     pendingDuplicateChecks.set(cacheKey, checkPromise);
 
-    checkPromise.catch(error => {
-      console.error('Error checking quote collection status:', error);
-    });
+    void checkPromise
+      .catch(error => {
+        console.error('Error checking quote collection status:', error);
+      })
+      .finally(() => {
+        clearPendingDuplicateCheckIfCurrent(cacheKey, checkPromise);
+      });
 
+    if (options.keepAliveUntilIconApplied) {
+      const waitResult = await waitForPromiseOrTimeout(checkPromise, AUTOMATIC_PREFLIGHT_KEEPALIVE_MS);
+      if (waitResult === 'timeout') {
+        clearPendingDuplicateCheckIfCurrent(cacheKey, checkPromise);
+      }
+    }
     sendResponse({ success: true });
   } catch (error) {
     console.error('Error storing tweet data:', error);
@@ -1142,9 +2258,37 @@ async function updateIconAfterDuplicateCheckResponse(
     return;
   }
 
+  if (await applyAuthRequiredApiResponse(response, {
+    tabId,
+    url: sourceUrl,
+    trigger: 'explicit-duplicate-check',
+  })) {
+    return;
+  }
+
+  if (sourceUrl && !await isSenderTabStillOnSourceUrl(tabId, sourceUrl)) {
+    await clearInFlightOperation(tabId, {
+      url: sourceUrl,
+      triggers: ['explicit-duplicate-check'],
+    });
+    recordPreflightDiagnostic({
+      status: 'skipped',
+      trigger: 'explicit-duplicate-check',
+      tabId,
+      url: sourceUrl,
+      reason: 'stale_duplicate_check_response',
+    });
+    return;
+  }
+
   const duplicateResult = duplicateResultFromResponse(response);
-  tabDuplicateResults.set(tabId, duplicateResult);
-  tabCheckInFlight.delete(tabId);
+  setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
+  clearTweetDataExtractionRetry(tabId);
+  tabMissingOriginators.delete(tabId);
+  await clearInFlightOperation(tabId, {
+    url: sourceUrl,
+    triggers: ['explicit-duplicate-check'],
+  });
   recordPreflightDiagnostic({
     status: 'succeeded',
     trigger: 'explicit-duplicate-check',
@@ -1170,6 +2314,686 @@ async function updateIconAfterDuplicateCheckResponse(
   await applyResolvedIconForTab(tabId, sourceUrl, duplicateResult);
 }
 
+async function applyOriginatorLookupLoading(
+  message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
+): Promise<void> {
+  const tabId = sender.tab?.id;
+  const sourceUrl = sourceUrlFromMessage(message, sender);
+  if (!tabId || !sourceUrl || !isTweetPageUrl(sourceUrl)) {
+    return;
+  }
+
+  const handle = typeof message.data?.handle === 'string' ? message.data.handle : undefined;
+  await clearInFlightOperation(tabId, {
+    url: sourceUrl,
+    triggers: ['automatic-preflight'],
+  });
+
+  recordPreflightDiagnostic({
+    status: 'loading',
+    trigger: 'originator-lookup',
+    tabId,
+    url: sourceUrl,
+    handle,
+  });
+  await startInFlightOperation(tabId, sourceUrl, 'originator-lookup', handle);
+  tabScopedPresentationTabIds.add(tabId);
+  await applyResolvedIconForTab(tabId, sourceUrl, getCachedDuplicateResultForTab(tabId, sourceUrl).result);
+}
+
+interface OriginatorLookupApplicationContext {
+  tabId: number;
+  sourceUrl: string;
+  trigger: DiagnosticTrigger;
+  handle?: string;
+  operation?: InFlightIconOperation | null;
+  staleReason?: string;
+}
+
+async function clearOriginatorLookupOperation(context: OriginatorLookupApplicationContext): Promise<void> {
+  if (context.operation) {
+    await clearInFlightOperation(context.tabId, {
+      url: context.sourceUrl,
+      operationId: context.operation.operationId,
+    });
+    return;
+  }
+
+  await clearInFlightOperation(context.tabId, {
+    url: context.sourceUrl,
+    triggers: ['automatic-preflight', 'automatic-originator-fallback', 'originator-lookup'],
+  });
+}
+
+async function shouldApplyOriginatorLookupResult(
+  context: OriginatorLookupApplicationContext,
+): Promise<boolean> {
+  if (context.operation) {
+    const currentOperation = getMatchingInFlightOperation(context.tabId, context.sourceUrl);
+    if (!currentOperation || currentOperation.operationId !== context.operation.operationId) {
+      return false;
+    }
+  }
+
+  return isSenderTabStillOnSourceUrl(context.tabId, context.sourceUrl);
+}
+
+async function applyOriginatorLookupResponse(
+  response: unknown,
+  context: OriginatorLookupApplicationContext,
+): Promise<void> {
+  const { tabId, sourceUrl, trigger } = context;
+
+  if (await applyAuthRequiredApiResponse(response, {
+    tabId,
+    url: sourceUrl,
+    trigger,
+    handle: context.handle,
+  })) {
+    return;
+  }
+
+  if (!await shouldApplyOriginatorLookupResult(context)) {
+    await clearOriginatorLookupOperation(context);
+    recordPreflightDiagnostic({
+      status: 'skipped',
+      trigger,
+      tabId,
+      url: sourceUrl,
+      handle: context.handle,
+      reason: context.staleReason ?? 'stale_originator_lookup_response',
+    });
+    return;
+  }
+
+  const lookup = response as {
+    success?: unknown;
+    found?: unknown;
+    handle?: unknown;
+    platform?: unknown;
+    create_url?: unknown;
+    originator?: unknown;
+    error?: unknown;
+  };
+
+  if (lookup.success !== true) {
+    await clearOriginatorLookupOperation(context);
+    recordPreflightDiagnostic({
+      status: 'failed',
+      trigger,
+      tabId,
+      url: sourceUrl,
+      handle: context.handle,
+      reason: 'originator_lookup_unsuccessful',
+      error: typeof lookup.error === 'string' ? lookup.error : undefined,
+    });
+    await applyResolvedIconForTab(tabId, sourceUrl, getCachedDuplicateResultForTab(tabId, sourceUrl).result);
+    return;
+  }
+
+  const handle = typeof lookup.handle === 'string'
+    ? lookup.handle
+    : context.handle;
+  if (!handle) {
+    await clearOriginatorLookupOperation(context);
+    await applyResolvedIconForTab(tabId, sourceUrl, getCachedDuplicateResultForTab(tabId, sourceUrl).result);
+    return;
+  }
+
+  await clearOriginatorLookupOperation(context);
+
+  if (lookup.found === false) {
+    const createUrl = resolveOriginatorCreateUrl(handle, lookup.create_url);
+    const normalizedHandle = handle.toLowerCase();
+    const existingDuplicate = getCachedDuplicateResultForTab(tabId, sourceUrl);
+
+    tabMissingOriginators.set(tabId, {
+      handle: normalizedHandle,
+      url: sourceUrl,
+      createUrl,
+      timestamp: Date.now(),
+    });
+    await chrome.storage.local.set({
+      preloadedOriginator: {
+        handle: normalizedHandle,
+        originator: null,
+        ...(createUrl ? { create_url: createUrl } : {}),
+        timestamp: Date.now(),
+      },
+    });
+
+    if (!existingDuplicate.hasResult) {
+      setTabDuplicateResult(tabId, null, sourceUrl);
+    }
+    tabScopedPresentationTabIds.add(tabId);
+    await applyResolvedIconForTab(tabId, sourceUrl, existingDuplicate.result);
+    return;
+  }
+
+  if (lookup.found === true) {
+    tabMissingOriginators.delete(tabId);
+    await applyResolvedIconForTab(tabId, sourceUrl, getCachedDuplicateResultForTab(tabId, sourceUrl).result);
+  }
+}
+
+async function updateIconAfterOriginatorLookupResponse(
+  response: unknown,
+  message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
+): Promise<void> {
+  const tabId = sender.tab?.id;
+  const sourceUrl = sourceUrlFromMessage(message, sender);
+  if (!tabId || !sourceUrl || !isTweetPageUrl(sourceUrl)) {
+    return;
+  }
+
+  const data = message.data as Record<string, unknown> | undefined;
+  const handle = typeof data?.handle === 'string' ? data.handle : undefined;
+  await applyOriginatorLookupResponse(response, {
+    tabId,
+    sourceUrl,
+    trigger: 'originator-lookup',
+    handle,
+  });
+}
+
+function originatorNameFromLookup(lookup: { originator?: unknown }): string | undefined {
+  const originator = lookup.originator;
+  if (!originator || typeof originator !== 'object') {
+    return undefined;
+  }
+
+  const value = originator as { full_name?: unknown };
+  return typeof value.full_name === 'string' ? value.full_name : undefined;
+}
+
+function originatorSlugFromLookup(lookup: { originator?: unknown }): string | undefined {
+  const originator = lookup.originator;
+  if (!originator || typeof originator !== 'object') {
+    return undefined;
+  }
+
+  const value = originator as { unique_id?: unknown; slug?: unknown };
+  if (typeof value.unique_id === 'string') {
+    return value.unique_id;
+  }
+
+  return typeof value.slug === 'string' ? value.slug : undefined;
+}
+
+function summarizeHandleLookupResult(
+  lookup: { found?: unknown; handle?: unknown; platform?: unknown; match_platform?: unknown; confidence?: unknown; create_url?: unknown; originator?: unknown },
+  fallbackHandle?: string,
+): OriginatorDiagnostic | null {
+  if (typeof lookup.found !== 'boolean') {
+    return null;
+  }
+
+  return {
+    found: lookup.found,
+    handle: typeof lookup.handle === 'string' ? lookup.handle : fallbackHandle,
+    platform: typeof lookup.platform === 'string' ? lookup.platform : 'twitter',
+    matchPlatform: typeof lookup.match_platform === 'string' ? lookup.match_platform : undefined,
+    confidence: typeof lookup.confidence === 'number' ? lookup.confidence : undefined,
+    fullName: originatorNameFromLookup(lookup),
+    slug: originatorSlugFromLookup(lookup),
+    createUrl: typeof lookup.create_url === 'string' ? lookup.create_url : undefined,
+  };
+}
+
+async function cacheFoundOriginatorFromLookup(
+  handle: string,
+  lookup: { originator?: unknown; confidence?: unknown },
+): Promise<void> {
+  const originator = lookup.originator;
+  if (!originator || typeof originator !== 'object') {
+    return;
+  }
+
+  const value = originator as {
+    id?: unknown;
+    unique_id?: unknown;
+    slug?: unknown;
+    full_name?: unknown;
+    sort_name_display?: unknown;
+    confidence?: unknown;
+  };
+  const uniqueId = typeof value.unique_id === 'string'
+    ? value.unique_id
+    : typeof value.slug === 'string'
+      ? value.slug
+      : undefined;
+  if (typeof value.id !== 'number' || typeof value.full_name !== 'string' || !uniqueId) {
+    return;
+  }
+
+  const confidence = typeof value.confidence === 'number'
+    ? value.confidence
+    : typeof lookup.confidence === 'number'
+      ? lookup.confidence
+      : 1.0;
+
+  await chrome.storage.local.set({
+    preloadedOriginator: {
+      handle: handle.toLowerCase(),
+      originator: {
+        id: value.id,
+        full_name: value.full_name,
+        unique_id: uniqueId,
+        sort_name_display: typeof value.sort_name_display === 'string'
+          ? value.sort_name_display
+          : value.full_name,
+        confidence,
+      },
+      timestamp: Date.now(),
+    },
+  });
+}
+
+async function requestOriginatorLookupForOperation(
+  operation: InFlightIconOperation,
+  messages: {
+    unavailable: string;
+    timedOut: string;
+  },
+): Promise<unknown> {
+  if (!apiHandler || !operation.handle) {
+    return {
+      success: false,
+      error: messages.unavailable,
+    };
+  }
+
+  return new Promise<unknown>((resolve) => {
+    let settled = false;
+
+    const timeoutId = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      resolve({
+        success: false,
+        error: messages.timedOut,
+      });
+    }, ORIGINATOR_FALLBACK_TIMEOUT_MS);
+
+    const settle = (response: unknown): void => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      clearTimeout(timeoutId);
+      resolve(response);
+    };
+
+    Promise.resolve(apiHandler!.handleMessage(
+      {
+        type: MessageType.LOOKUP_ORIGINATOR_BY_HANDLE,
+        data: {
+          handle: operation.handle,
+          platform: 'twitter',
+          source_url: operation.url,
+        },
+      },
+      {
+        tab: {
+          id: operation.tabId,
+          url: operation.url,
+        },
+      } as chrome.runtime.MessageSender,
+      settle,
+    )).catch(error => {
+      settle({
+        success: false,
+        error: errorMessage(error),
+      });
+    });
+  });
+}
+
+async function requestOriginatorFallback(
+  operation: InFlightIconOperation,
+): Promise<unknown> {
+  return requestOriginatorLookupForOperation(operation, {
+    unavailable: 'Originator fallback unavailable',
+    timedOut: 'Originator fallback timed out',
+  });
+}
+
+async function requestAutomaticOriginatorProbe(
+  operation: InFlightIconOperation,
+): Promise<unknown> {
+  const requestedAt = Date.now();
+  recordDiagnosticTimingEvent({
+    event: 'originator_probe_request_sent',
+    ...operationTimingFields(operation),
+    durationMs: durationSince(operation.startedAt),
+  });
+
+  const response = await requestOriginatorLookupForOperation(operation, {
+    unavailable: 'Automatic originator probe unavailable',
+    timedOut: 'Automatic originator probe timed out',
+  });
+  const isTimeout = isAutomaticOriginatorProbeTimeoutResponse(response);
+  recordDiagnosticTimingEvent({
+    event: 'originator_probe_response_received',
+    ...operationTimingFields(operation),
+    reason: isTimeout ? 'originator_probe_lookup_timeout' : undefined,
+    ...(isTimeout ? { classification: 'probe_lookup_timeout' as const } : {}),
+    durationMs: Date.now() - requestedAt,
+  });
+
+  return response;
+}
+
+async function applyAutomaticOriginatorProbeResponse(
+  response: unknown,
+  operation: InFlightIconOperation,
+): Promise<void> {
+  if (!await shouldApplyAutomaticOriginatorProbeResult(operation)) {
+    recordPreflightDiagnostic({
+      status: 'skipped',
+      trigger: 'automatic-originator-probe',
+      tabId: operation.tabId,
+      url: operation.url,
+      handle: operation.handle,
+      operationId: operation.operationId,
+      durationMs: durationSince(operation.startedAt),
+      reason: 'stale_originator_probe_response',
+      classification: 'probe_stale_after_navigation',
+    });
+    recordDiagnosticTimingEvent({
+      event: 'originator_probe_skipped',
+      ...operationTimingFields(operation),
+      reason: 'stale_originator_probe_response',
+      classification: 'probe_stale_after_navigation',
+      durationMs: durationSince(operation.startedAt),
+    });
+    return;
+  }
+
+  if (await applyAuthRequiredApiResponse(response, {
+    tabId: operation.tabId,
+    url: operation.url,
+    trigger: 'automatic-originator-probe',
+    handle: operation.handle,
+  })) {
+    return;
+  }
+
+  const lookup = response as {
+    success?: unknown;
+    found?: unknown;
+    handle?: unknown;
+    platform?: unknown;
+    match_platform?: unknown;
+    confidence?: unknown;
+    create_url?: unknown;
+    originator?: unknown;
+    error?: unknown;
+  };
+
+  if (lookup.success !== true || typeof lookup.found !== 'boolean') {
+    const isTimeout = isAutomaticOriginatorProbeTimeoutResponse(response);
+    recordPreflightDiagnostic({
+      status: 'failed',
+      trigger: 'automatic-originator-probe',
+      tabId: operation.tabId,
+      url: operation.url,
+      handle: operation.handle,
+      operationId: operation.operationId,
+      durationMs: durationSince(operation.startedAt),
+      reason: 'originator_probe_unsuccessful',
+      ...(isTimeout ? { classification: 'probe_lookup_timeout' as const } : {}),
+      error: typeof lookup.error === 'string' ? lookup.error : undefined,
+    });
+    recordDiagnosticTimingEvent({
+      event: 'originator_probe_failed',
+      ...operationTimingFields(operation),
+      reason: isTimeout ? 'originator_probe_lookup_timeout' : 'originator_probe_unsuccessful',
+      ...(isTimeout ? { classification: 'probe_lookup_timeout' as const } : {}),
+      durationMs: durationSince(operation.startedAt),
+      error: typeof lookup.error === 'string' ? lookup.error : undefined,
+    });
+    return;
+  }
+
+  const handle = typeof lookup.handle === 'string'
+    ? lookup.handle
+    : operation.handle;
+  if (!handle) {
+    recordPreflightDiagnostic({
+      status: 'failed',
+      trigger: 'automatic-originator-probe',
+      tabId: operation.tabId,
+      url: operation.url,
+      operationId: operation.operationId,
+      durationMs: durationSince(operation.startedAt),
+      reason: 'originator_probe_missing_handle',
+      originator: summarizeHandleLookupResult(lookup, operation.handle),
+    });
+    recordDiagnosticTimingEvent({
+      event: 'originator_probe_failed',
+      ...operationTimingFields(operation),
+      reason: 'originator_probe_missing_handle',
+      durationMs: durationSince(operation.startedAt),
+    });
+    return;
+  }
+
+  const normalizedHandle = handle.toLowerCase();
+
+  if (lookup.found === false) {
+    const createUrl = resolveOriginatorCreateUrl(handle, lookup.create_url);
+
+    tabMissingOriginators.set(operation.tabId, {
+      handle: normalizedHandle,
+      url: operation.url,
+      createUrl,
+      timestamp: Date.now(),
+    });
+    await chrome.storage.local.set({
+      preloadedOriginator: {
+        handle: normalizedHandle,
+        originator: null,
+        ...(createUrl ? { create_url: createUrl } : {}),
+        timestamp: Date.now(),
+      },
+    });
+
+    setTabDuplicateResult(operation.tabId, null, operation.url);
+
+    await clearInFlightOperation(operation.tabId, {
+      url: operation.url,
+      operationId: operation.operationId,
+      triggers: ['automatic-preflight'],
+    });
+    tabScopedPresentationTabIds.add(operation.tabId);
+    recordPreflightDiagnostic({
+      status: 'succeeded',
+      trigger: 'automatic-originator-probe',
+      tabId: operation.tabId,
+      url: operation.url,
+      handle: normalizedHandle,
+      operationId: operation.operationId,
+      durationMs: durationSince(operation.startedAt),
+      reason: 'originator_probe_not_found',
+      originator: summarizeHandleLookupResult(lookup, normalizedHandle),
+    });
+    recordDiagnosticTimingEvent({
+      event: 'originator_probe_applied',
+      ...operationTimingFields(operation),
+      handle: normalizedHandle,
+      reason: 'originator_probe_not_found',
+      durationMs: durationSince(operation.startedAt),
+    });
+    await applyResolvedIconForTab(operation.tabId, operation.url, null);
+    return;
+  }
+
+  tabMissingOriginators.delete(operation.tabId);
+  await cacheFoundOriginatorFromLookup(normalizedHandle, lookup);
+  recordPreflightDiagnostic({
+    status: 'succeeded',
+    trigger: 'automatic-originator-probe',
+    tabId: operation.tabId,
+    url: operation.url,
+    handle: normalizedHandle,
+    operationId: operation.operationId,
+    durationMs: durationSince(operation.startedAt),
+    reason: 'originator_probe_found',
+    originator: summarizeHandleLookupResult(lookup, normalizedHandle),
+  });
+  recordDiagnosticTimingEvent({
+    event: 'originator_probe_applied',
+    ...operationTimingFields(operation),
+    handle: normalizedHandle,
+    reason: 'originator_probe_found',
+    durationMs: durationSince(operation.startedAt),
+  });
+}
+
+async function runAutomaticOriginatorProbe(operation: InFlightIconOperation): Promise<void> {
+  if (!operation.handle || !apiHandler) {
+    recordDiagnosticTimingEvent({
+      event: 'originator_probe_skipped',
+      ...operationTimingFields(operation),
+      reason: !operation.handle ? 'missing_handle' : 'api_handler_unavailable',
+      durationMs: durationSince(operation.startedAt),
+    });
+    return;
+  }
+
+  if (!await shouldApplyAutomaticOriginatorProbeResult(operation)) {
+    recordDiagnosticTimingEvent({
+      event: 'originator_probe_skipped',
+      ...operationTimingFields(operation),
+      reason: 'stale_before_probe_request',
+      classification: 'probe_stale_after_navigation',
+      durationMs: durationSince(operation.startedAt),
+    });
+    return;
+  }
+
+  const response = await requestAutomaticOriginatorProbe(operation);
+  await applyAutomaticOriginatorProbeResponse(response, operation);
+}
+
+async function runAutomaticOriginatorFallback(
+  timedOutOperation: InFlightIconOperation,
+): Promise<boolean> {
+  if (!timedOutOperation.handle || !apiHandler) {
+    recordDiagnosticTimingEvent({
+      event: 'automatic_preflight_timeout_fallback_skipped',
+      ...operationTimingFields(timedOutOperation),
+      reason: !timedOutOperation.handle ? 'missing_handle' : 'api_handler_unavailable',
+      classification: 'combined_preflight_timeout',
+      durationMs: durationSince(timedOutOperation.startedAt),
+    });
+    return false;
+  }
+
+  recordDiagnosticTimingEvent({
+    event: 'automatic_preflight_timeout_fallback_started',
+    ...operationTimingFields(timedOutOperation),
+    reason: 'preflight_timeout_fallback',
+    classification: 'combined_preflight_timeout',
+    durationMs: durationSince(timedOutOperation.startedAt),
+  });
+
+  const fallbackOperation = await startInFlightOperation(
+    timedOutOperation.tabId,
+    timedOutOperation.url,
+    'automatic-originator-fallback',
+    timedOutOperation.handle,
+  );
+  if (!fallbackOperation) {
+    recordDiagnosticTimingEvent({
+      event: 'automatic_preflight_timeout_fallback_skipped',
+      ...operationTimingFields(timedOutOperation),
+      reason: 'fallback_operation_unavailable',
+      classification: 'combined_preflight_timeout',
+      durationMs: durationSince(timedOutOperation.startedAt),
+    });
+    return false;
+  }
+
+  recordPreflightDiagnostic({
+    status: 'loading',
+    trigger: 'automatic-originator-fallback',
+    tabId: timedOutOperation.tabId,
+    url: timedOutOperation.url,
+    handle: timedOutOperation.handle,
+    operationId: fallbackOperation.operationId,
+    durationMs: durationSince(timedOutOperation.startedAt),
+    reason: 'preflight_timeout_fallback',
+    classification: 'combined_preflight_timeout',
+  });
+  tabScopedPresentationTabIds.add(timedOutOperation.tabId);
+  await applyResolvedIconForTab(
+    timedOutOperation.tabId,
+    timedOutOperation.url,
+    getCachedDuplicateResultForTab(timedOutOperation.tabId, timedOutOperation.url).result,
+  );
+
+  const response = await requestOriginatorFallback(fallbackOperation);
+  await applyOriginatorLookupResponse(response, {
+    tabId: fallbackOperation.tabId,
+    sourceUrl: fallbackOperation.url,
+    trigger: 'automatic-originator-fallback',
+    handle: fallbackOperation.handle,
+    operation: fallbackOperation,
+    staleReason: 'stale_originator_fallback_response',
+  });
+  recordDiagnosticTimingEvent({
+    event: 'automatic_preflight_timeout_fallback_applied',
+    ...operationTimingFields(fallbackOperation),
+    reason: 'preflight_timeout_fallback',
+    classification: 'combined_preflight_timeout',
+    durationMs: durationSince(timedOutOperation.startedAt),
+  });
+  return true;
+}
+
+async function handleOriginatorLookupStatus(
+  message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sendResponse: (response: any) => void,
+): Promise<void> {
+  await updateIconAfterOriginatorLookupResponse(
+    {
+      success: true,
+      ...(message.data ?? {}),
+    },
+    message,
+    sender,
+  );
+  sendResponse({ success: true });
+}
+
+async function handleLookupOriginatorByHandle(
+  message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sendResponse: (response: any) => void,
+): Promise<void> {
+  await applyOriginatorLookupLoading(message, sender);
+  await apiHandler!.handleMessage(message, sender, (response) => {
+    updateIconAfterOriginatorLookupResponse(response, message, sender)
+      .catch(error => {
+        debugLog('Error applying originator lookup icon state:', error);
+      })
+      .finally(() => {
+        sendResponse(response);
+      });
+  });
+}
+
 async function handleCheckDuplicate(
   message: ExtensionMessage,
   sender: chrome.runtime.MessageSender,
@@ -1186,7 +3010,7 @@ async function handleCheckDuplicate(
       tabId,
       url: sourceUrl,
     });
-    tabCheckInFlight.add(tabId);
+    await startInFlightOperation(tabId, sourceUrl, 'explicit-duplicate-check');
     tabScopedPresentationTabIds.add(tabId);
     try {
       await applyResolvedIconForTab(tabId, sourceUrl, null);
@@ -1207,8 +3031,11 @@ async function handleCheckDuplicate(
     });
   } catch (error) {
     if (tabId) {
-      tabDuplicateResults.set(tabId, null);
-      tabCheckInFlight.delete(tabId);
+      setTabDuplicateResult(tabId, null, sourceUrl);
+      await clearInFlightOperation(tabId, {
+        url: sourceUrl,
+        triggers: ['explicit-duplicate-check'],
+      });
       recordPreflightDiagnostic({
         status: 'failed',
         trigger: 'explicit-duplicate-check',
@@ -1231,15 +3058,37 @@ async function handleCheckDuplicate(
  * Uses single preflight API call for both originator lookup and duplicate check
  * (Reduces round-trips from 2 API calls to 1)
  */
-async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number): Promise<void> {
+async function checkQuoteCollectionStatus(
+  tweetData: TwitterData,
+  tabId?: number,
+  operation: InFlightIconOperation | null = null,
+): Promise<void> {
   const targetTabId = await resolveTargetTabId(tabId);
   const handle = tweetData.author?.username;
+  let preflightOperation = operation;
+  let shouldApplyFinalIcon = true;
+
+  if (targetTabId && !preflightOperation) {
+    preflightOperation = await startInFlightOperation(
+      targetTabId,
+      tweetData.url,
+      'automatic-preflight',
+      handle,
+    );
+    if (preflightOperation) {
+      tabScopedPresentationTabIds.add(targetTabId);
+      await applyResolvedIconForTab(targetTabId, tweetData.url);
+    }
+  }
+
   recordPreflightDiagnostic({
     status: 'loading',
     trigger: 'automatic-preflight',
     tabId: targetTabId,
     url: tweetData.url,
     handle,
+    operationId: preflightOperation?.operationId,
+    durationMs: durationSince(preflightOperation?.startedAt),
   });
 
   try {
@@ -1253,9 +3102,14 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         tabId: targetTabId,
         url: tweetData.url,
         handle,
+        operationId: preflightOperation?.operationId,
+        durationMs: durationSince(preflightOperation?.startedAt),
         reason: 'api_handler_unavailable',
       });
       debugLog('API handler not available for collection check');
+      if (targetTabId) {
+        tabMissingOriginators.delete(targetTabId);
+      }
       return;
     }
 
@@ -1266,11 +3120,14 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         tabId: targetTabId,
         url: tweetData.url,
         handle,
+        operationId: preflightOperation?.operationId,
+        durationMs: durationSince(preflightOperation?.startedAt),
         reason: 'not_authenticated',
       });
       debugLog('User not authenticated, skipping collection check');
       if (targetTabId) {
-        tabDuplicateResults.set(targetTabId, null);
+        setTabDuplicateResult(targetTabId, null, tweetData.url);
+        tabMissingOriginators.delete(targetTabId);
       }
       return;
     }
@@ -1281,17 +3138,21 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         trigger: 'automatic-preflight',
         tabId: targetTabId,
         url: tweetData.url,
+        operationId: preflightOperation?.operationId,
+        durationMs: durationSince(preflightOperation?.startedAt),
         reason: 'missing_handle',
       });
       debugLog('No handle available for preflight check');
       if (targetTabId) {
-        tabDuplicateResults.set(targetTabId, null);
+        setTabDuplicateResult(targetTabId, null, tweetData.url);
+        tabMissingOriginators.delete(targetTabId);
       }
       return;
     }
 
     // Single preflight call combines originator lookup + duplicate check
     debugLog('Running preflight check for handle:', handle);
+    const preflightRequestStartedAt = Date.now();
     const preflightResponse = await new Promise<{
       success: boolean;
       authRequired?: boolean;  // True when 401/authentication error occurred
@@ -1314,6 +3175,44 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         resolve
       );
     });
+    recordDiagnosticTimingEvent({
+      event: 'automatic_preflight_response_received',
+      ...(preflightOperation
+        ? operationTimingFields(preflightOperation)
+        : {
+          ...(targetTabId ? { tabId: targetTabId } : {}),
+          sourceUrl: tweetData.url,
+          handle,
+          trigger: 'automatic-preflight' as const,
+        }),
+      reason: preflightResponse.success ? 'preflight_success' : 'preflight_unsuccessful',
+      durationMs: Date.now() - preflightRequestStartedAt,
+    });
+
+    if (!await shouldApplyPreflightOperationResult(targetTabId, tweetData.url, preflightOperation)) {
+      shouldApplyFinalIcon = false;
+      recordPreflightDiagnostic({
+        status: 'skipped',
+        trigger: 'automatic-preflight',
+        tabId: targetTabId,
+        url: tweetData.url,
+        handle,
+        operationId: preflightOperation?.operationId,
+        durationMs: durationSince(preflightOperation?.startedAt),
+        reason: 'stale_preflight_result',
+      });
+      return;
+    }
+
+    if (preflightOperation && hasAutomaticOriginatorProbeTimer(preflightOperation)) {
+      recordDiagnosticTimingEvent({
+        event: 'originator_probe_skipped',
+        ...operationTimingFields(preflightOperation),
+        reason: 'preflight_completed_before_probe',
+        classification: 'preflight_won_before_probe',
+        durationMs: durationSince(preflightOperation.startedAt),
+      });
+    }
 
     if (!preflightResponse.success) {
       // Check if this is an authentication error
@@ -1324,14 +3223,18 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
           tabId: targetTabId,
           url: tweetData.url,
           handle,
+          operationId: preflightOperation?.operationId,
+          durationMs: durationSince(preflightOperation?.startedAt),
           reason: 'authentication_required',
           authRequired: true,
         });
         debugLog('Preflight failed: authentication required');
-        // Notify AuthStateManager - it will set the "!" badge (per spec FR-005)
-        if (authStateManager) {
-          await authStateManager.onAuthFailure('Authentication required');
-        }
+        await applyAuthRequiredApiResponse(preflightResponse, {
+          tabId: targetTabId,
+          url: tweetData.url,
+          trigger: 'automatic-preflight',
+          handle,
+        });
         return;
       }
 
@@ -1341,11 +3244,14 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
         tabId: targetTabId,
         url: tweetData.url,
         handle,
+        operationId: preflightOperation?.operationId,
+        durationMs: durationSince(preflightOperation?.startedAt),
         reason: 'preflight_unsuccessful',
       });
       debugLog('Preflight check failed, falling back to ambient icon state');
       if (targetTabId) {
-        tabDuplicateResults.set(targetTabId, null);
+        setTabDuplicateResult(targetTabId, null, tweetData.url);
+        tabMissingOriginators.delete(targetTabId);
       }
       return;
     }
@@ -1354,34 +3260,88 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
 
     // Cache originator result for overlay to use
     const originatorResult = preflightResponse.originator;
+    const duplicateResult = preflightResponse.duplicate_check;
+    const originatorSlug = originatorSlugFromPreflight(originatorResult);
+    const isUnusableFoundOriginator = originatorResult?.found === true &&
+      !!originatorResult.originator &&
+      !originatorSlug;
+    const isMissingOriginator = (
+      originatorResult?.found === false ||
+      isUnusableFoundOriginator
+    ) && duplicateResult?.search_metadata?.error !== true;
+
     if (originatorResult) {
       if (originatorResult.found && originatorResult.originator) {
-        // Transform to match expected overlay format
-        await chrome.storage.local.set({
-          preloadedOriginator: {
-            handle: handle.toLowerCase(),
-            originator: {
-              id: originatorResult.originator.id,
-              full_name: originatorResult.originator.full_name,
-              unique_id: originatorResult.originator.slug,
-              sort_name_display: originatorResult.originator.full_name,
-              confidence: originatorResult.confidence ?? 1.0
-            },
-            timestamp: Date.now()
+        if (targetTabId) {
+          if (isMissingOriginator) {
+            tabMissingOriginators.set(targetTabId, {
+              handle: handle.toLowerCase(),
+              url: tweetData.url,
+              createUrl: resolveOriginatorCreateUrl(handle, originatorResult.create_url),
+              timestamp: Date.now(),
+            });
+          } else {
+            tabMissingOriginators.delete(targetTabId);
           }
-        });
-        debugLog('Originator found:', originatorResult.originator.full_name);
+        }
+        if (originatorSlug) {
+          // Transform to match expected overlay format.
+          await chrome.storage.local.set({
+            preloadedOriginator: {
+              handle: handle.toLowerCase(),
+              originator: {
+                id: originatorResult.originator.id,
+                full_name: originatorResult.originator.full_name,
+                unique_id: originatorSlug,
+                sort_name_display: originatorResult.originator.full_name,
+                confidence: originatorResult.confidence ?? 1.0
+              },
+              timestamp: Date.now()
+            }
+          });
+          debugLog('Originator found:', originatorResult.originator.full_name);
+        } else {
+          const createUrl = resolveOriginatorCreateUrl(handle, originatorResult.create_url);
+          debugLog('Preflight originator found without slug:', originatorResult.originator.full_name);
+          await chrome.storage.local.set({
+            preloadedOriginator: {
+              handle: handle.toLowerCase(),
+              originator: null,
+              create_url: createUrl,
+              timestamp: Date.now()
+            }
+          });
+        }
       } else {
-        // Don't cache not-found results - we want fresh lookups each time
-        // in case the user creates the originator between visits
+        const createUrl = resolveOriginatorCreateUrl(handle, originatorResult.create_url);
+        const preloadedOriginator = {
+          handle: handle.toLowerCase(),
+          originator: null,
+          create_url: createUrl,
+          timestamp: Date.now()
+        };
+        await chrome.storage.local.set({
+          preloadedOriginator
+        });
+        if (targetTabId && isMissingOriginator) {
+          tabMissingOriginators.set(targetTabId, {
+            handle: handle.toLowerCase(),
+            url: tweetData.url,
+            createUrl,
+            timestamp: Date.now(),
+          });
+        } else if (targetTabId) {
+          tabMissingOriginators.delete(targetTabId);
+        }
         debugLog('Originator not found for handle:', handle);
       }
+    } else if (targetTabId) {
+      tabMissingOriginators.delete(targetTabId);
     }
 
     // Cache duplicate check result for overlay to use
-    const duplicateResult = preflightResponse.duplicate_check;
     if (targetTabId) {
-      tabDuplicateResults.set(targetTabId, duplicateResult ?? null);
+      setTabDuplicateResult(targetTabId, duplicateResult ?? null, tweetData.url);
     }
 
     if (duplicateResult) {
@@ -1400,6 +3360,8 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
       tabId: targetTabId,
       url: tweetData.url,
       handle,
+      operationId: preflightOperation?.operationId,
+      durationMs: durationSince(preflightOperation?.startedAt),
       duplicate: summarizeDuplicateResult(duplicateResult ?? null),
       originator: summarizeOriginatorResult(originatorResult),
     });
@@ -1411,15 +3373,33 @@ async function checkQuoteCollectionStatus(tweetData: TwitterData, tabId?: number
       tabId: targetTabId,
       url: tweetData.url,
       handle,
+      operationId: preflightOperation?.operationId,
+      durationMs: durationSince(preflightOperation?.startedAt),
       error: errorMessage(error),
     });
     if (targetTabId) {
-      tabDuplicateResults.set(targetTabId, null);
+      setTabDuplicateResult(targetTabId, null, tweetData.url);
+      tabMissingOriginators.delete(targetTabId);
     }
   } finally {
     if (targetTabId) {
-      tabCheckInFlight.delete(targetTabId);
-      await applyResolvedIconForTab(targetTabId, tweetData.url, tabDuplicateResults.get(targetTabId) ?? null);
+      const clearedOriginalOperation = await clearInFlightOperation(targetTabId, {
+        url: tweetData.url,
+        ...(preflightOperation ? { operationId: preflightOperation.operationId } : {}),
+      });
+      if (!clearedOriginalOperation && shouldApplyFinalIcon) {
+        await clearInFlightOperation(targetTabId, {
+          url: tweetData.url,
+          triggers: ['automatic-originator-fallback'],
+        });
+      }
+      if (shouldApplyFinalIcon) {
+        await applyResolvedIconForTab(
+          targetTabId,
+          tweetData.url,
+          getCachedDuplicateResultForTab(targetTabId, tweetData.url).result,
+        );
+      }
     }
   }
 }

@@ -334,9 +334,18 @@ export class AuthStateManager {
   /**
    * Called when token refresh fails
    */
-  async onTokenRefreshFailed(): Promise<void> {
+  async onTokenRefreshFailed(error = 'Session expired, please log in again'): Promise<void> {
     await this.transitionTo(AuthState.SESSION_EXPIRED, {
-      error: 'Session expired, please log in again',
+      error,
+    });
+  }
+
+  /**
+   * Called when the API reports the token lacks the required scopes
+   */
+  async onInsufficientPrivileges(error = 'Additional permissions required'): Promise<void> {
+    await this.transitionTo(AuthState.INSUFFICIENT_PRIVILEGES, {
+      error,
     });
   }
 

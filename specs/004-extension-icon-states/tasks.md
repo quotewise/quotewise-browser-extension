@@ -11,7 +11,7 @@ description: "Task list for Extension Toolbar Icon States"
 resolver + duplicate-status mapping), and spec.md §Implementation/§Testing request them. Per-story
 tests are written **red before** their implementation.
 
-**Organization**: Tasks are grouped by user story (US1–US6 from spec.md, in priority order) so each
+**Organization**: Tasks are grouped by user story (US1–US7 from spec.md, in priority order) so each
 delivers an independently testable increment. NOTE: this is a **consolidation** feature — all stories
 share one pure resolver (`icon-state-resolver.ts`) and one mapping (`duplicate-status.ts`); the
 resolver grows one precedence branch per story (test-first). Tasks on the same file across stories
@@ -20,7 +20,7 @@ are therefore **sequential**, not `[P]`.
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependency on an incomplete task)
-- **[Story]**: US1–US6; Setup/Foundational/Polish carry no story label
+- **[Story]**: US1–US7; Setup/Foundational/Polish carry no story label
 - File paths are repo-relative (single-project MV3 layout per plan.md)
 
 ---
@@ -43,11 +43,18 @@ are therefore **sequential**, not `[P]`.
 **⚠️ CRITICAL**: No user story can begin until this phase completes.
 
 - [X] T005 [P] Define presentation types: `IconPresentation` and `TabContext` in `src/background/icon-state-resolver.ts`; `QuoteStatus` type in `src/utils/duplicate-status.ts` (per data-model §3 / contracts/icon-state-resolver.md C1–C2)
-- [X] T006 [P] Create the canonical state/title table `src/config/icon-states.ts` — 10 canonical states / 11 title rows of `{ iconVariant, badgeText, badgeColor, title, scope }` from data-model §4 (Error has two tooltips), single voice "Quotewise — …" (including neutral AuthPending; no `setBadgeTextColor` field; FR-003)
+- [X] T006 [P] Create the initial canonical state/title table `src/config/icon-states.ts` — 11 canonical states / 12 title rows of `{ iconVariant, badgeText, badgeColor, title, scope }` from data-model §4 at implementation time (Error has two tooltips), single voice "Quotewise — …" (including neutral AuthPending and Missing-originator; no `setBadgeTextColor` field; FR-003/FR-026). T049 expands this for Supported-idle and Unsupported-page.
 - [X] T007 Implement the **pure** `resolveIconPresentation(auth, dup, tab)` precedence **skeleton** in `src/background/icon-state-resolver.ts`: total, no-throw, no `chrome.*`; precedence ladder shell per data-model §6 returning ambient **Ready** as the default and reserving the AuthPending branch. Per-state branches are added in the story phases (contracts C1)
 - [X] T008 Implement `applyIconPresentation(p, tabId, options?)` in `src/background/icon-applicator.ts` — the **only** `chrome.action` caller: `setIcon` color/grey by `iconVariant`; `setBadgeText`/`setBadgeBackgroundColor`; `setTitle`; include `{ tabId }` **iff** `scope==='tab'` or `options.forceTabScope===true`; **never** call `setBadgeTextColor` (FR-003, contracts C3)
 - [X] T009 Implement `mapRecommendationToQuoteStatus(result)` scaffold in `src/utils/duplicate-status.ts` returning `'None'` for `null`/`search_metadata.error` (FR-041); keep existing `classifyDuplicateSighting`/`getMatchForDuplicateSightingState` for the tray (contracts/duplicate-status-mapping.md)
 - [X] T010 Wire resolver→applicator into `src/background/service-worker.ts` at all event points (`tabs.onUpdated` complete, `tabs.onActivated`, `webNavigation.onHistoryStateUpdated`, `TWEET_DATA_EXTRACTED`, and `AuthStateManager` state-change/`updateBadge`) and implement the **clearing/overwrite** paths: non-tweet page / tab-switch-away clears `setBadgeText({tabId,text:''})` and reapplies the resolved ambient/auth state for that tab; auth transitions also apply the resolved global auth state with `forceTabScope` to all open tweet tabs/recorded tab ids so prior tab-scoped badge/icon state cannot shadow LoggedOut/AuthPending/Ready/Error (FR-002, SC-003, SC-007; contracts C4)
+- [X] T010a Normalize API `authRequired:true` responses into auth presentation transitions in `src/background/service-worker.ts`; update `AuthStateManager` and immediately force the resolved Error icon/badge/title onto the sender tab so tray login/permissions states cannot leave stale tweet badges visible (FR-012a, contracts C4)
+- [X] T010b Replace bare in-flight tab flags with tweet-bound operation records for automatic preflight; persist records in `chrome.storage.session`, enforce the 8-second timeout alarm, ignore stale different-tweet completions, and let tray-originator status supersede automatic Loading for the same tweet (FR-013a, contracts C5)
+- [X] T010c Apply the same current-status guard to tray-originator and explicit duplicate responses: before cache/icon mutation, compare response `source_url` against the sender tab's current status ID and ignore stale results after navigation (FR-013b, contracts C5)
+- [X] T010d Add timeout-driven originator fallback for automatic preflight: after the 8-second same-tweet timeout, run one bounded handle-only lookup, apply not-found through the shared originator path directly to `@`, ignore superseded fallback responses, and avoid clearing to Ready before `@` (FR-013a/FR-043, contracts C5)
+- [X] T010e Keep adapter-pushed `TWEET_DATA_EXTRACTED` runtime messages open until automatic preflight/probe/fallback applies the first terminal icon state or reaches the bounded keepalive timeout, releasing pending preflight bookkeeping on timeout so closed-tray toolbar updates do not depend on opening the tray (FR-013c, contracts C5)
+- [X] T010f Decouple tray data rendering from the worker keepalive: fire adapter-pushed `TWEET_DATA_EXTRACTED` asynchronously so `getLatestData()`/`EXTRACT_TWEET_DATA` return extracted tweet data immediately while background preflight continues (FR-013c/FR-046, contracts C5)
+- [X] T010g Add delayed automatic missing-originator probe for slow combined preflight: run one bounded handle-only lookup only while the same automatic operation remains current, apply not-found directly to `@` before timeout, cache found originators without clearing Loading, and ignore stale probe responses after navigation (FR-013a/FR-043, contracts C5)
 - [X] T011 Delete the three legacy presentation sources and fix all references (FR-070, SC-005): `getBadgeConfig`/`updateBadgeState`/`updateBadgeFromAuthStatus` in `src/background/auth-monitor.ts`; `getStateBadgeText`/`getStateBadgeColor` in `src/auth/auth-state-machine.ts` (keep the FSM + `getStateMessage`); `updateExtensionIconForTweetPage`/`updateCollectionBadgeForTweet`/`getCollectionBadgeConfig`/`updateCollectionBadge` in `src/background/service-worker.ts`. Run `bun run type-check` to prove no dangling imports
 
 **Checkpoint**: One deterministic resolver+applicator is wired; legacy sources gone. Resolver returns Ready for all inputs until stories add branches.
@@ -56,19 +63,19 @@ are therefore **sequential**, not `[P]`.
 
 ## Phase 3: User Story 1 - Signed-in at a glance (Priority: P1) 🎯 MVP
 
-**Goal**: Greyed owl when `UNAUTHENTICATED`, full-color owl when `AUTHENTICATED` — distinguishable by **artwork alone**.
+**Goal**: Greyed owl when `UNAUTHENTICATED` or authenticated on an unsupported site; full-color owl on supported X/Twitter surfaces — distinguishable by **artwork alone**.
 
-**Independent Test**: Log out → toolbar owl is grey (no tooltip needed); log in → owl is full color (SC-001).
+**Independent Test**: Log out → toolbar owl is grey; log in on an unsupported site → grey/no badge with unsupported tooltip; log in on X/Twitter → full color (SC-001/SC-008).
 
 ### Tests (write FIRST, ensure they FAIL)
 
 - [X] T012 [P] [US1] Asset-pipeline test `tests/assets/icon-pipeline.test.ts`: all 8 PNGs exist under `public/icons/`, each is `n×n`, and each `icon{n}-grey.png` is measurably less saturated than `icon{n}.png` (FR-062, data-model §8)
-- [X] T013 [P] [US1] Resolver tests in `tests/background/icon-state-resolver.test.ts`: `UNAUTHENTICATED` ⇒ `iconVariant:'grey'`, `badgeText:''`, `scope:'global'`, title "log in to capture"; `AUTHENTICATED` non-tweet ⇒ `'color'` Ready, no badge; `UNKNOWN`/`CHECKING`/`AUTHENTICATING` ⇒ color, no badge, neutral title "Quotewise" and no quote-status badge
+- [X] T013 [P] [US1] Resolver tests in `tests/background/icon-state-resolver.test.ts`: `UNAUTHENTICATED` ⇒ `iconVariant:'grey'`, `badgeText:''`, `scope:'global'`, title "log in to capture"; initial `AUTHENTICATED` non-tweet ⇒ color/no badge; `UNKNOWN`/`CHECKING`/`AUTHENTICATING` ⇒ color, no badge, neutral title "Quotewise" and no quote-status badge. T048 adds supported/unsupported platform availability regressions.
 
 ### Implementation
 
 - [X] T014 [US1] Generate the assets: run `bun run icons` to emit the color + `-grey` PNG sets into `public/icons/`; commit the binaries (makes T012 pass; regenerates color set from the vector per FR-060)
-- [X] T015 [US1] Implement the **LoggedOut**, **AuthPending**, and **Ready** ambient branches in `resolveIconPresentation()` (`src/background/icon-state-resolver.ts`): `UNAUTHENTICATED`→grey global; transitional auth→neutral color/no badge; `AUTHENTICATED`→color Ready (makes T013 pass)
+- [X] T015 [US1] Implement the initial **LoggedOut**, **AuthPending**, and **Ready** ambient branches in `resolveIconPresentation()` (`src/background/icon-state-resolver.ts`): `UNAUTHENTICATED`→grey global; transitional auth→neutral color/no badge; `AUTHENTICATED`→color Ready (makes T013 pass). T049 adds UnsupportedPage and SupportedIdle.
 - [X] T016 [US1] Change `action.default_title` "Capture Quote" → "Quotewise" in `manifest.prod.json`, `manifest.dev.json`, and root `manifest.json` (prod/dev are build-effective; root is kept in sync for local/manual consistency — FR-071, Constitution IX)
 
 **Checkpoint**: Logged-out is visible at a glance. MVP shippable.
@@ -117,14 +124,14 @@ are therefore **sequential**, not `[P]`.
 
 ## Phase 6: User Story 4 - Exact `=` vs Similar `~` (Priority: P2)
 
-**Goal**: `=` orange `#E69F00` for an exact dup; `~` purple `#CC79A7` for a near/similar version — distinct in **both** shape and color.
+**Goal**: `=` green `#009E73` for an exact dup; `~` orange `#E69F00` for a near/similar version — distinct by **shape** and semantic color family.
 
-**Independent Test**: A known exact-text tweet → `=` orange; a paraphrase → `~` purple; the two are not confusable at 16px (SC-006).
+**Independent Test**: A known exact-text tweet → `=` green; a paraphrase → `~` orange; the two are not confusable at 16px (SC-006).
 
 ### Tests (write FIRST, FAIL)
 
 - [X] T025 [P] [US4] Mapping tests in `tests/utils/duplicate-status.test.ts`: `duplicate`/`duplicate_known_author` ⇒ `Exact`; `new_version`/`new_version_known_author` ⇒ `Similar`
-- [X] T026 [P] [US4] Resolver test in `tests/background/icon-state-resolver.test.ts`: Exact ⇒ `= #E69F00`; Similar ⇒ `~ #CC79A7` (distinct glyph+color)
+- [X] T026 [P] [US4] Resolver test in `tests/background/icon-state-resolver.test.ts`: Exact ⇒ `= #009E73`; Similar ⇒ `~ #E69F00` (distinct glyph+semantic color)
 
 ### Implementation
 
@@ -175,13 +182,37 @@ are therefore **sequential**, not `[P]`.
 
 ---
 
-## Phase 9: Polish & Cross-Cutting Concerns
+## Phase 9: User Story 7 & Polish/Cross-Cutting Concerns
 
-- [X] T037 [P] Totality sweep in `tests/background/icon-state-resolver.test.ts`: assert the resolver returns a valid `IconPresentation` (no throw/undefined) across `AuthState × recommendation × {collected?} × {tweet?,inFlight?}`, including transitional auth states with duplicate data (SC-005, data-model §8)
-- [ ] T038 Manual acceptance: load unpacked from `dist/`, walk quickstart §4 (steps 1–10) and §5 a11y (DevTools "Emulate vision deficiencies": deuteranopia/protanopia/achromatopsia) at 1× and 2×; explicitly confirm `⚠` renders as a text glyph, not a color emoji, and glyphs target ≥3:1 non-text contrast at 16px (SC-002, SC-004)
+### Cross-cutting tasks
+
+- [X] T037 [P] Totality sweep in `tests/background/icon-state-resolver.test.ts`: assert the resolver returns a valid `IconPresentation` (no throw/undefined) across `AuthState × recommendation × {collected?} × {tweet?,inFlight?,originatorMissing?}`, including transitional auth states with duplicate data (SC-005, data-model §8). T048 expands totality for supported-platform context.
+- [ ] T038 Manual acceptance: load unpacked from `dist/`, walk quickstart §4 (steps 1–17) and §5 a11y (DevTools "Emulate vision deficiencies": deuteranopia/protanopia/achromatopsia) at 1× and 2×; explicitly confirm `⚠` renders as a text glyph, not a color emoji, and glyphs target ≥3:1 non-text contrast at 16px (SC-002, SC-004)
 - [X] T039 [P] Add a CI guard that runs `bun run icons` then `git diff --exit-code public/icons/` to fail on un-regenerated/drifted assets (research D3)
 - [X] T040 [P] Green gate: `bun run type-check && bun run lint && bun run test`; grep the bundle/src to confirm `setBadgeTextColor` is never called (FR-003)
 - [X] T041 Confirm `manifest.prod.json`, `manifest.dev.json`, and root `manifest.json` agree on `default_title` and version (prod/dev are build-effective; root is consistency-only); update CLAUDE.md "Key Files" if the new module names warrant a pointer
+
+### User Story 7 regressions - Missing-originator and tray sync (Priority: P2)
+
+**Goal**: Missing-originator renders as `@`, reaches the toolbar without opening the tray when preload is enabled, and stays synchronized with tray-originator state for the current tweet.
+
+**Independent Test**: Open a missing-originator tweet and a parent-to-reply thread transition; the toolbar never shows a stale parent/new badge and converges with the tray state for the current tweet.
+
+- [X] T042 [P] [US7] Add a regression test and service-worker retry path so navigation-triggered tweet extraction can reach Missing-originator without opening the overlay/tray when X renders data late (FR-043)
+- [X] T043 [P] [US7] Add a regression test and service-worker lookup wrapper so overlay/tray `LOOKUP_ORIGINATOR_BY_HANDLE found:false` immediately replaces the tab Loading badge with Missing-originator for the same tweet (FR-044)
+- [X] T044 [P] [US7] Add adapter and service-worker regressions so parent/head tweet data is rejected after navigating into a reply with a different status ID, preventing stale quote-status badges during X thread SPA transitions (FR-045)
+- [X] T045 [P] [US7] Add regressions and message wiring so overlay/tray originator lookup sets toolbar Loading while in flight and fresh cached/preloaded tray results notify the worker immediately (FR-046)
+- [ ] T046 [P] [US7] Add a regression in `tests/background/check-duplicate-badge.test.ts` proving a disabled pre-action preload setting suppresses automatic duplicate/originator network preflight until explicit user engagement (FR-043, Constitution II.1)
+- [ ] T047 [US7] Add and honor the pre-action preload preference across `src/types/chrome.ts`, `src/content/ui/overlay-bar.ts`, and `src/background/service-worker.ts` so automatic preflight is gated while explicit tray/icon-triggered lookup still works (FR-043, Constitution II.1)
+
+### User Story 1 follow-up - Unsupported site availability (Priority: P1)
+
+**Goal**: Authenticated users see grey unavailable artwork outside X/Twitter, and full-color idle artwork on supported X/Twitter pages without a tweet in focus.
+
+**Independent Test**: While authenticated, visit `example.com` and X/Twitter home; unsupported site is grey/no badge, X/Twitter home is full-color/no badge.
+
+- [X] T048 [P] [US1] Add resolver and service-worker regressions in `tests/background/icon-state-resolver.test.ts` and `tests/background/check-duplicate-badge.test.ts` for authenticated unsupported-site grey/no badge, supported X/Twitter non-tweet color/no badge, and unsupported navigation clearing prior tab-scoped quote badges (FR-010/FR-015, SC-008)
+- [X] T049 [US1] Add supported-platform context and ambient rendering across `src/background/icon-state-resolver.ts`, `src/config/icon-states.ts`, and `src/background/service-worker.ts` so unsupported sites resolve to UnsupportedPage and supported X/Twitter non-tweet pages resolve to SupportedIdle (FR-010/FR-015)
 
 ---
 
@@ -191,8 +222,8 @@ are therefore **sequential**, not `[P]`.
 
 - **Setup (P1)**: no deps — start immediately.
 - **Foundational (P2)**: depends on Setup. **BLOCKS all user stories.** (T007→T008→T010→T011 are sequential on shared files; T005/T006 are `[P]`.)
-- **User Stories (P3–P8)**: each depends only on Foundational. They are *logically* independent increments but **physically share** `icon-state-resolver.ts` and `duplicate-status.ts`, so run them in **priority order** (US1→US6) to avoid same-file churn.
-- **Polish (P9)**: after the stories you intend to ship.
+- **User Stories (P3–P9)**: each depends only on Foundational. They are *logically* independent increments but **physically share** `icon-state-resolver.ts`, `duplicate-status.ts`, and `service-worker.ts`, so run them in **priority order** (US1→US7) to avoid same-file churn.
+- **Cross-cutting polish tasks (P9)**: after the stories you intend to ship, except diagnostics/guards that can run earlier.
 
 ### Within each story
 
@@ -202,8 +233,10 @@ are therefore **sequential**, not `[P]`.
 ### Story-specific notes
 
 - **US1** additionally needs the **art pipeline output** (T014) — it is the only story that introduces `setIcon`/the grey asset; later stories reuse the color set.
+- **US1 follow-up** (T048–T049) depends on the existing resolver/applicator and should be implemented before treating manual acceptance as complete.
 - **US3** depends conceptually on the quote-status path landed in **US2** (T020); keep US2 before US3.
 - **US6**'s `isCheckInFlight` wiring (T036) touches `service-worker.ts` — sequence after Foundational's T010.
+- **US7** touches `service-worker.ts`, `originator-lookup.ts`, and the Twitter adapter — sequence after Loading exists (US6) so in-flight tray/preflight states have a consistent visual presentation.
 
 ### Parallel opportunities
 
@@ -234,7 +267,7 @@ Task: "T018 resolver test for ★ in tests/background/icon-state-resolver.test.t
 
 ### Incremental delivery
 
-US1 (signed-in visibility, MVP) → US2 (`★`) → US3 (`✓` + precedence) → US4 (`=`/`~`) → US5 (`⚠`) → US6 (`●`/`!`). Each story is a green-test increment that never regresses the prior ones, because all flow through the one resolver.
+US1 (signed-in/platform availability, MVP) → US2 (`★`) → US3 (`✓` + precedence) → US4 (`=`/`~`) → US5 (`⚠`) → US6 (`●`/`!`) → US7 (`@` + tray sync). Each story is a green-test increment that never regresses the prior ones, because all flow through the one resolver.
 
 ### Constitution gates carried through
 
@@ -242,6 +275,7 @@ US1 (signed-in visibility, MVP) → US2 (`★`) → US3 (`✓` + precedence) →
 - Pure, total, no-throw resolver; no new persisted/in-memory authoritative state (V.1).
 - Drift tolerance: unknown `recommendation` ⇒ New, errored check ⇒ no badge (V.2, FR-041).
 - Every visual change pairs a self-contained `setTitle` (VII.2, FR-050); glyph+color redundancy (FR-051).
+- Automatic duplicate/originator preflight is controlled by the pre-action preload setting; the delayed handle-only probe sends only public `{handle, platform, source_url}` before explicit engagement (II.1, FR-043).
 - No new permission; `@resvg/resvg-js` dev-only + lockfile-pinned (III).
 
 ---
@@ -251,4 +285,4 @@ US1 (signed-in visibility, MVP) → US2 (`★`) → US3 (`✓` + precedence) →
 - `[P]` = different files, no incomplete-task dependency.
 - The single-resolver design is deliberate (FR-070/SC-005): accept the same-file sequencing across stories as the price of eliminating the last-writer-wins race that motivated this spec.
 - Commit after each task or logical group; stop at any checkpoint to validate a story independently.
-- Total: **41 tasks** (T001–T041).
+- Total: **49 tasks** (T001–T049).
