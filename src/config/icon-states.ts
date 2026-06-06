@@ -17,6 +17,20 @@ export const ICON_STATES = {
     title: 'Quotewise — ready to capture',
     scope: 'global',
   },
+  SupportedIdle: {
+    iconVariant: 'color',
+    badgeText: '',
+    badgeColor: '#0072B2',
+    title: 'Quotewise — open a tweet to capture',
+    scope: 'global',
+  },
+  UnsupportedPage: {
+    iconVariant: 'grey',
+    badgeText: '',
+    badgeColor: '#0072B2',
+    title: 'Quotewise — capture works on X/Twitter tweets',
+    scope: 'global',
+  },
   AuthPending: {
     iconVariant: 'color',
     badgeText: '',
@@ -69,15 +83,22 @@ export const ICON_STATES = {
   Exact: {
     iconVariant: 'color',
     badgeText: '=',
-    badgeColor: '#E69F00',
+    badgeColor: '#009E73',
     title: 'Exact match already in Quotewise',
     scope: 'tab',
   },
   Similar: {
     iconVariant: 'color',
     badgeText: '~',
-    badgeColor: '#CC79A7',
+    badgeColor: '#E69F00',
     title: 'Similar version already in Quotewise',
+    scope: 'tab',
+  },
+  MissingOriginator: {
+    iconVariant: 'color',
+    badgeText: '@',
+    badgeColor: '#E69F00',
+    title: 'Originator not in Quotewise — add them first',
     scope: 'tab',
   },
   New: {

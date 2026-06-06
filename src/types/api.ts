@@ -192,7 +192,8 @@ export interface PreflightOriginatorResult {
   originator?: {
     id: number;
     full_name: string;
-    slug: string;
+    slug?: string;
+    unique_id?: string;
     social_handles?: Record<string, string>;
   };
   handle?: string;

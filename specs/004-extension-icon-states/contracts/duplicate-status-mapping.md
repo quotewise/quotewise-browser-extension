@@ -31,8 +31,8 @@ Fields **ignored** for icon selection (retained, passed to the future tray):
 | 0 | `result == null` OR `search_metadata.error === true` | `None` | (no badge) | — | FR-041 |
 | 1 | `matches.some(m => m.in_user_collections === true)` | `InCollection` | `✓` | `#009E73` | FR-021 |
 | 2 | `recommendation ∈ {attribution_conflict, attribution_conflict_resolved}` | `Conflict` | `⚠` | `#D55E00` | FR-024 |
-| 3 | `recommendation ∈ {duplicate, duplicate_known_author}` | `Exact` | `=` | `#E69F00` | FR-022 |
-| 4 | `recommendation ∈ {new_version, new_version_known_author}` | `Similar` | `~` | `#CC79A7` | FR-023 |
+| 3 | `recommendation ∈ {duplicate, duplicate_known_author}` | `Exact` | `=` | `#009E73` | FR-022 |
+| 4 | `recommendation ∈ {new_version, new_version_known_author}` | `Similar` | `~` | `#E69F00` | FR-023 |
 | 5 | `recommendation ∈ {new_quote, new_quote_known_author}` | `New` | `★` | `#0072B2` | FR-020 |
 | 6 | any other/unknown `recommendation` | `New` (safe default) | `★` | `#0072B2` | V.2 |
 
@@ -44,6 +44,8 @@ Fields **ignored** for icon selection (retained, passed to the future tray):
   not enforce the threshold; the backend already did.
 - Rows 2–5 are mutually exclusive because `recommendation` is a single top-level backend verdict;
   they are still listed in FR-030 precedence order for consistency.
+- Missing-originator (`@ #E69F00`) is resolved from preflight `originator.found === false`, not from this
+  duplicate-status mapping.
 - The mapping is **total and pure**; unknown enum values fall to row 6 rather than throwing (drift
   tolerance, Constitution V.2).
 

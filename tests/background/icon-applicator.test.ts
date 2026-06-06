@@ -86,7 +86,7 @@ describe('applyIconPresentation', () => {
     await applyIconPresentation(
       presentation({
         badgeText: '=',
-        badgeColor: '#E69F00',
+        badgeColor: '#009E73',
         title: 'Exact match already in Quotewise',
         scope: 'tab',
       }),
@@ -96,7 +96,7 @@ describe('applyIconPresentation', () => {
     expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 11, text: '=' });
     expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
       tabId: 11,
-      color: '#E69F00',
+      color: '#009E73',
     });
     expect(chrome.action.setTitle).toHaveBeenCalledWith({
       tabId: 11,
@@ -108,7 +108,7 @@ describe('applyIconPresentation', () => {
         tabId: 11,
         iconVariant: 'color',
         badgeText: '=',
-        badgeColor: '#E69F00',
+        badgeColor: '#009E73',
         title: 'Exact match already in Quotewise',
         path: colorPaths,
       }),

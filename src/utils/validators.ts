@@ -3,7 +3,7 @@
  * Security hardening for MV3 service worker
  */
 
-import type { TwitterData, ExtensionMessage } from '../types/chrome';
+import { MessageType, type TwitterData, type ExtensionMessage } from '../types/chrome';
 
 /**
  * Custom validation error for rejected input
@@ -249,22 +249,7 @@ export function validateExtensionMessage(message: unknown): message is Extension
   }
 
   // Validate that the type is a known MessageType value
-  const validMessageTypes = [
-    'TWEET_DATA_EXTRACTED',
-    'EXTRACT_TWEET_DATA',
-    'GET_TWEET_DATA',
-    'CHECK_AUTH_STATUS',
-    'SUBMIT_QUOTE',
-    'SEARCH_ORIGINATORS',
-    'CHECK_DUPLICATE',
-    'UPDATE_COLLECTION_BADGE',
-    'CLEANUP_STORAGE',
-    'GET_STORAGE_STATS',
-    'OPEN_POPUP',
-    'SHOW_OVERLAY',
-    'SUCCESS',
-    'ERROR'
-  ];
+  const validMessageTypes: string[] = Object.values(MessageType);
 
   if (!validMessageTypes.includes(m.type as string)) {
     throw new ValidationError(`Unknown message type: ${m.type}`, 'type');

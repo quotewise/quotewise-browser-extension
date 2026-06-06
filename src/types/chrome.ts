@@ -41,6 +41,7 @@ export enum MessageType {
   
   // Badge updates
   UPDATE_COLLECTION_BADGE = 'UPDATE_COLLECTION_BADGE',
+  ORIGINATOR_LOOKUP_STATUS = 'ORIGINATOR_LOOKUP_STATUS',
   
   // Storage management
   CLEANUP_STORAGE = 'CLEANUP_STORAGE',

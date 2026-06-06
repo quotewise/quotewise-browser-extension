@@ -5,8 +5,10 @@ import { mapRecommendationToQuoteStatus } from '../utils/duplicate-status';
 
 export interface TabContext {
   tabId: number;
+  isSupportedPlatform: boolean;
   isTweetPage: boolean;
   isCheckInFlight: boolean;
+  isOriginatorMissing?: boolean;
 }
 
 export interface IconPresentation {
@@ -30,6 +32,8 @@ export function resolveIconPresentation(
   dup: DuplicateCheckResult | null,
   tab: TabContext,
 ): IconPresentation {
+  const quoteStatus = mapRecommendationToQuoteStatus(dup);
+
   if (auth === AuthState.SESSION_EXPIRED) {
     return ICON_STATES.ErrorSessionExpired;
   }
@@ -42,7 +46,13 @@ export function resolveIconPresentation(
     return ICON_STATES.LoggedOut;
   }
 
-  if (tab.isCheckInFlight) {
+  if (
+    tab.isSupportedPlatform &&
+    tab.isTweetPage &&
+    tab.isCheckInFlight &&
+    quoteStatus === 'None' &&
+    !tab.isOriginatorMissing
+  ) {
     return ICON_STATES.Loading;
   }
 
@@ -54,10 +64,25 @@ export function resolveIconPresentation(
     return ICON_STATES.AuthPending;
   }
 
+  if (auth === AuthState.AUTHENTICATED && !tab.isSupportedPlatform) {
+    return ICON_STATES.UnsupportedPage;
+  }
+
+  if (auth === AuthState.AUTHENTICATED && !tab.isTweetPage) {
+    return ICON_STATES.SupportedIdle;
+  }
+
   if (auth === AuthState.AUTHENTICATED && tab.isTweetPage) {
-    const quoteStatus = mapRecommendationToQuoteStatus(dup);
-    if (quoteStatus !== 'None') {
+    if (quoteStatus !== 'None' && quoteStatus !== 'New') {
       return QUOTE_STATUS_TO_STATE[quoteStatus];
+    }
+
+    if (tab.isOriginatorMissing) {
+      return ICON_STATES.MissingOriginator;
+    }
+
+    if (quoteStatus === 'New') {
+      return ICON_STATES.New;
     }
   }
 

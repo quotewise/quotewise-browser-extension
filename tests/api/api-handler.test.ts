@@ -241,9 +241,31 @@ describe('ApiHandler', () => {
 
       expect(mockSendResponse).toHaveBeenCalledWith({
         success: false,
+        authRequired: true,
+        authFailureType: 'session_expired',
         error: 'Authentication required',
         results: []
       });
+    });
+
+    test('marks insufficient privilege errors for service worker auth handling', async () => {
+      const authError = new Error('Insufficient permissions');
+      authError.name = 'AuthenticationError';
+      mockApiClient.checkQuoteDuplicate.mockRejectedValue(authError);
+
+      const message: ExtensionMessage = {
+        type: 'CHECK_DUPLICATE' as MessageType,
+        data: { text: 'test' }
+      };
+
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
+
+      expect(mockSendResponse).toHaveBeenCalledWith(expect.objectContaining({
+        success: false,
+        authRequired: true,
+        authFailureType: 'insufficient_privileges',
+        error: 'Insufficient permissions',
+      }));
     });
 
     test('provides fallback responses for duplicate check errors', async () => {

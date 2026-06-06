@@ -2,8 +2,24 @@ import { AuthState } from '../../src/auth/auth-state-machine';
 import { resolveIconPresentation, type IconPresentation, type TabContext } from '../../src/background/icon-state-resolver';
 import type { DuplicateCheckResult } from '../../src/types/api';
 
-const tweetTab: TabContext = { tabId: 1, isTweetPage: true, isCheckInFlight: false };
-const nonTweetTab: TabContext = { tabId: 1, isTweetPage: false, isCheckInFlight: false };
+const tweetTab: TabContext = {
+  tabId: 1,
+  isSupportedPlatform: true,
+  isTweetPage: true,
+  isCheckInFlight: false,
+};
+const supportedNonTweetTab: TabContext = {
+  tabId: 1,
+  isSupportedPlatform: true,
+  isTweetPage: false,
+  isCheckInFlight: false,
+};
+const unsupportedTab: TabContext = {
+  tabId: 1,
+  isSupportedPlatform: false,
+  isTweetPage: false,
+  isCheckInFlight: false,
+};
 
 function duplicate(
   recommendation: string,
@@ -29,19 +45,26 @@ function expectPresentation(value: IconPresentation): void {
 }
 
 describe('resolveIconPresentation', () => {
-  it('renders logged-out, ready, and auth-pending ambient states', () => {
-    expect(resolveIconPresentation(AuthState.UNAUTHENTICATED, null, nonTweetTab)).toMatchObject({
+  it('renders logged-out, supported idle, unsupported, and auth-pending ambient states', () => {
+    expect(resolveIconPresentation(AuthState.UNAUTHENTICATED, null, unsupportedTab)).toMatchObject({
       iconVariant: 'grey',
       badgeText: '',
       scope: 'global',
       title: 'Quotewise — log in to capture quotes',
     });
 
-    expect(resolveIconPresentation(AuthState.AUTHENTICATED, null, nonTweetTab)).toMatchObject({
+    expect(resolveIconPresentation(AuthState.AUTHENTICATED, null, unsupportedTab)).toMatchObject({
+      iconVariant: 'grey',
+      badgeText: '',
+      scope: 'global',
+      title: 'Quotewise — capture works on X/Twitter tweets',
+    });
+
+    expect(resolveIconPresentation(AuthState.AUTHENTICATED, null, supportedNonTweetTab)).toMatchObject({
       iconVariant: 'color',
       badgeText: '',
       scope: 'global',
-      title: 'Quotewise — ready to capture',
+      title: 'Quotewise — open a tweet to capture',
     });
 
     for (const state of [AuthState.UNKNOWN, AuthState.CHECKING, AuthState.AUTHENTICATING]) {
@@ -98,11 +121,33 @@ describe('resolveIconPresentation', () => {
   it('renders exact and similar with distinct glyphs and colors', () => {
     expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('duplicate'), tweetTab)).toMatchObject({
       badgeText: '=',
-      badgeColor: '#E69F00',
+      badgeColor: '#009E73',
     });
     expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_version'), tweetTab)).toMatchObject({
       badgeText: '~',
-      badgeColor: '#CC79A7',
+      badgeColor: '#E69F00',
+    });
+  });
+
+  it('renders missing originator after similar/exact but before new', () => {
+    expect(resolveIconPresentation(
+      AuthState.AUTHENTICATED,
+      duplicate('new_quote'),
+      { ...tweetTab, isOriginatorMissing: true },
+    )).toMatchObject({
+      badgeText: '@',
+      badgeColor: '#E69F00',
+      scope: 'tab',
+      title: 'Originator not in Quotewise — add them first',
+    });
+
+    expect(resolveIconPresentation(
+      AuthState.AUTHENTICATED,
+      duplicate('duplicate'),
+      { ...tweetTab, isOriginatorMissing: true },
+    )).toMatchObject({
+      badgeText: '=',
+      badgeColor: '#009E73',
     });
   });
 
@@ -122,13 +167,37 @@ describe('resolveIconPresentation', () => {
   it('renders static loading while a duplicate check is in flight', () => {
     expect(resolveIconPresentation(
       AuthState.AUTHENTICATED,
-      duplicate('duplicate'),
+      null,
       { ...tweetTab, isCheckInFlight: true },
     )).toMatchObject({
       badgeText: '●',
       badgeColor: '#56B4E9',
       scope: 'tab',
       title: 'Quotewise — checking this quote…',
+    });
+  });
+
+  it('keeps a known quote status visible while revalidating in the background', () => {
+    expect(resolveIconPresentation(
+      AuthState.AUTHENTICATED,
+      duplicate('new_quote'),
+      { ...tweetTab, isCheckInFlight: true },
+    )).toMatchObject({
+      badgeText: '★',
+      badgeColor: '#0072B2',
+      scope: 'tab',
+      title: 'New quote — not in Quotewise yet',
+    });
+
+    expect(resolveIconPresentation(
+      AuthState.AUTHENTICATED,
+      duplicate('duplicate'),
+      { ...tweetTab, isCheckInFlight: true },
+    )).toMatchObject({
+      badgeText: '=',
+      badgeColor: '#009E73',
+      scope: 'tab',
+      title: 'Exact match already in Quotewise',
     });
   });
 
@@ -147,7 +216,7 @@ describe('resolveIconPresentation', () => {
     });
   });
 
-  it('falls back to ready on errored duplicate checks and non-tweet pages', () => {
+  it('falls back to ready on errored duplicate checks and supported idle on non-tweet pages', () => {
     expect(resolveIconPresentation(
       AuthState.AUTHENTICATED,
       duplicate('duplicate', { search_metadata: { error: true } }),
@@ -157,9 +226,22 @@ describe('resolveIconPresentation', () => {
       title: 'Quotewise — ready to capture',
     });
 
-    expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote'), nonTweetTab)).toMatchObject({
+    expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote'), supportedNonTweetTab)).toMatchObject({
       badgeText: '',
-      title: 'Quotewise — ready to capture',
+      title: 'Quotewise — open a tweet to capture',
+    });
+  });
+
+  it('does not show loading or quote-status badges on unsupported sites', () => {
+    expect(resolveIconPresentation(
+      AuthState.AUTHENTICATED,
+      duplicate('new_quote'),
+      { ...unsupportedTab, isCheckInFlight: true },
+    )).toMatchObject({
+      iconVariant: 'grey',
+      badgeText: '',
+      scope: 'global',
+      title: 'Quotewise — capture works on X/Twitter tweets',
     });
   });
 
@@ -179,41 +261,44 @@ describe('resolveIconPresentation', () => {
 
     for (const auth of Object.values(AuthState)) {
       for (const recommendation of recommendations) {
-        for (const isTweetPage of [true, false]) {
-          for (const isCheckInFlight of [true, false]) {
-            for (const collected of [true, false]) {
-              const result = recommendation === null
-                ? null
-                : duplicate(recommendation, {
-                  matches: collected ? [{
-                    quote_id: 'q1',
-                    version_id: 1,
-                    text: 'Quote',
-                    similarity: 100,
-                    match_type: 'exact_same_originator',
-                    in_user_collections: true,
-                    originator: {
-                      id: 'o1',
-                      full_name: 'Author',
-                      sort_name: null,
-                      birth_year: null,
-                      death_year: null,
-                    },
-                    workflow_status: 'published',
-                    likes_count: 0,
-                  }] : [],
-                });
+        for (const isSupportedPlatform of [true, false]) {
+          for (const isTweetPage of [true, false]) {
+            for (const isCheckInFlight of [true, false]) {
+              for (const isOriginatorMissing of [true, false]) {
+                for (const collected of [true, false]) {
+                  const result = recommendation === null
+                    ? null
+                    : duplicate(recommendation, {
+                      matches: collected ? [{
+                        quote_id: 'q1',
+                        version_id: 1,
+                        text: 'Quote',
+                        similarity: 100,
+                        match_type: 'exact_same_originator',
+                        in_user_collections: true,
+                        originator: {
+                          id: 'o1',
+                          full_name: 'Author',
+                          sort_name: null,
+                          birth_year: null,
+                          death_year: null,
+                        },
+                        workflow_status: 'published',
+                        likes_count: 0,
+                      }] : [],
+                    });
 
-              expect(() => resolveIconPresentation(auth, result, {
-                tabId: 1,
-                isTweetPage,
-                isCheckInFlight,
-              })).not.toThrow();
-              expectPresentation(resolveIconPresentation(auth, result, {
-                tabId: 1,
-                isTweetPage,
-                isCheckInFlight,
-              }));
+                  const tab = {
+                    tabId: 1,
+                    isSupportedPlatform,
+                    isTweetPage,
+                    isCheckInFlight,
+                    isOriginatorMissing,
+                  };
+                  expect(() => resolveIconPresentation(auth, result, tab)).not.toThrow();
+                  expectPresentation(resolveIconPresentation(auth, result, tab));
+                }
+              }
             }
           }
         }
