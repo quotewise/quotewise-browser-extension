@@ -14,9 +14,6 @@ import {
   AUTH_STATE_STORAGE_KEY,
   createInitialAuthState,
   isValidTransition,
-  getStateBadgeText,
-  getStateBadgeColor,
-  getStateMessage,
 } from './auth-state-machine';
 import { AuthChecker } from './auth-checker';
 import { apiClient } from '../api/quotewise-api';
@@ -33,6 +30,14 @@ import {
  * Call initializeAuthStateManager() once at service worker startup
  */
 let instance: AuthStateManager | null = null;
+
+export type AuthPresentationUpdater = (state: AuthState) => Promise<void>;
+
+let authPresentationUpdater: AuthPresentationUpdater | null = null;
+
+export function setAuthPresentationUpdater(updater: AuthPresentationUpdater | null): void {
+  authPresentationUpdater = updater;
+}
 
 export class AuthStateManager {
   private stateData: AuthStateData;
@@ -131,7 +136,10 @@ export class AuthStateManager {
           // Transitional states mean the SW was killed mid-operation — re-validate
           await this.checkAuthState();
         }
-        // UNAUTHENTICATED, SESSION_EXPIRED, INSUFFICIENT_PRIVILEGES: keep as-is
+        // UNAUTHENTICATED, SESSION_EXPIRED, INSUFFICIENT_PRIVILEGES: keep as-is, refresh visuals.
+        else {
+          await this.updateBadge();
+        }
       } else {
         // No stored state, do initial check
         await this.checkAuthState();
@@ -326,9 +334,18 @@ export class AuthStateManager {
   /**
    * Called when token refresh fails
    */
-  async onTokenRefreshFailed(): Promise<void> {
+  async onTokenRefreshFailed(error = 'Session expired, please log in again'): Promise<void> {
     await this.transitionTo(AuthState.SESSION_EXPIRED, {
-      error: 'Session expired, please log in again',
+      error,
+    });
+  }
+
+  /**
+   * Called when the API reports the token lacks the required scopes
+   */
+  async onInsufficientPrivileges(error = 'Additional permissions required'): Promise<void> {
+    await this.transitionTo(AuthState.INSUFFICIENT_PRIVILEGES, {
+      error,
     });
   }
 
@@ -359,28 +376,8 @@ export class AuthStateManager {
    * so the red "!" shows through everywhere, overriding any tweet-page badges.
    */
   private async updateBadge(): Promise<void> {
-    const text = getStateBadgeText(this.stateData.state);
-    const color = getStateBadgeColor(this.stateData.state);
-    const title = `Quotewise - ${getStateMessage(this.stateData.state)}`;
-
     try {
-      // Set global badge
-      await chrome.action.setBadgeText({ text });
-      await chrome.action.setBadgeBackgroundColor({ color });
-      await chrome.action.setTitle({ title });
-
-      // For SESSION_EXPIRED (actual error), also clear tab-specific badges
-      // so the red "!" shows through everywhere (overrides any tweet-page badges)
-      if (this.stateData.state === AuthState.SESSION_EXPIRED) {
-        const tabs = await chrome.tabs.query({});
-        for (const tab of tabs) {
-          if (tab.id) {
-            await chrome.action.setBadgeText({ tabId: tab.id, text });
-            await chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color });
-            await chrome.action.setTitle({ tabId: tab.id, title });
-          }
-        }
-      }
+      await authPresentationUpdater?.(this.stateData.state);
     } catch (error) {
       // Badge update may fail if no active tabs
       debugLog('Badge update error:', error);

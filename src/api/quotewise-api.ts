@@ -391,7 +391,8 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         originator?: {
           id: number;
           full_name: string;
-          slug: string;
+          slug?: string;
+          unique_id?: string;
           social_handles?: Record<string, string>;
         };
         match_platform?: string;
@@ -408,12 +409,22 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       );
 
       if (result.found && result.originator) {
+        const uniqueId = result.originator.unique_id ?? result.originator.slug;
+        if (!uniqueId) {
+          return {
+            found: false,
+            handle: cleanHandle,
+            platform,
+            create_url: result.create_url
+          };
+        }
+
         // Transform API response to match OriginatorSearchResult format
         return {
           found: true,
           originator: {
             id: result.originator.id,
-            unique_id: result.originator.slug,
+            unique_id: uniqueId,
             full_name: result.originator.full_name,
             sort_name_display: result.originator.full_name,  // API may not return sort_name
             confidence: result.confidence ?? 1.0

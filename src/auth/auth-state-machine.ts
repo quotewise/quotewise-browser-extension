@@ -61,6 +61,7 @@ export const VALID_TRANSITIONS: Record<AuthState, AuthState[]> = {
   [AuthState.AUTHENTICATED]: [
     AuthState.UNAUTHENTICATED,    // Logout
     AuthState.SESSION_EXPIRED,    // Token expired
+    AuthState.INSUFFICIENT_PRIVILEGES, // Authenticated but missing required scopes
     AuthState.CHECKING,           // Manual re-check
   ],
   [AuthState.UNAUTHENTICATED]: [
@@ -148,46 +149,6 @@ export function getStateMessage(state: AuthState): string {
       return 'Logging in...';
     case AuthState.INSUFFICIENT_PRIVILEGES:
       return 'Additional permissions required';
-  }
-}
-
-/**
- * Get badge text for a state
- */
-export function getStateBadgeText(state: AuthState): string {
-  switch (state) {
-    case AuthState.AUTHENTICATED:
-      return '';  // No badge when authenticated
-    case AuthState.UNAUTHENTICATED:
-      return '';  // Not an error, just inactive - grey badge with no text
-    case AuthState.SESSION_EXPIRED:
-      return '!';  // Actual error requiring action
-    case AuthState.INSUFFICIENT_PRIVILEGES:
-      return '?';
-    case AuthState.CHECKING:
-    case AuthState.AUTHENTICATING:
-    case AuthState.UNKNOWN:
-      return '...';
-  }
-}
-
-/**
- * Get badge color for a state
- */
-export function getStateBadgeColor(state: AuthState): string {
-  switch (state) {
-    case AuthState.AUTHENTICATED:
-      return '#4CAF50';  // Green
-    case AuthState.UNAUTHENTICATED:
-      return '#9AA0A6';  // Grey - not an error, just inactive
-    case AuthState.SESSION_EXPIRED:
-      return '#F44336';  // Red - actual error requiring action
-    case AuthState.INSUFFICIENT_PRIVILEGES:
-      return '#FF9800';  // Orange
-    case AuthState.CHECKING:
-    case AuthState.AUTHENTICATING:
-    case AuthState.UNKNOWN:
-      return '#9E9E9E';  // Gray
   }
 }
 

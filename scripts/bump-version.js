@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Keep package, manifest, and lockfile versions in sync.
+ * Keep package and manifest versions in sync.
  * Usage: node scripts/bump-version.js <version|major|minor|patch|check>
  *
  * Examples:
@@ -16,12 +16,16 @@ const path = require('path');
 
 const root = process.cwd();
 const pkgPath = path.join(root, 'package.json');
-const projectVersionFiles = [
+const requiredProjectVersionFiles = [
   'package.json',
   'manifest.json',
   'manifest.dev.json',
   'manifest.prod.json',
-  'package-lock.json'
+];
+const optionalProjectVersionFiles = ['package-lock.json'];
+const projectVersionFiles = [
+  ...requiredProjectVersionFiles,
+  ...optionalProjectVersionFiles.filter((relativePath) => fs.existsSync(path.join(root, relativePath))),
 ];
 
 const versionArg = process.argv[2];
@@ -121,6 +125,10 @@ function updatePackageJson(newVersion) {
 }
 
 function updatePackageLock(newVersion) {
+  if (!fs.existsSync(path.join(root, 'package-lock.json'))) {
+    return;
+  }
+
   updateJsonFile('package-lock.json', (lockfile) => {
     const updated = {
       ...lockfile,
