@@ -63,14 +63,41 @@ describe('OriginatorLookup', () => {
       create_url: 'https://quotewise.io/create?handle=nobody',
     });
 
-    const outcome = await lookup.lookup('nobody');
+    const outcome = await lookup.lookup('nobody', 'https://x.com/nobody/status/123');
 
     expect(outcome.status).toBe('not_found');
     expect(outcome.createUrl).toBe('https://quotewise.io/create?handle=nobody');
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'LOOKUP_ORIGINATOR_BY_HANDLE',
+      data: {
+        handle: 'nobody',
+        platform: 'twitter',
+        source_url: 'https://x.com/nobody/status/123',
+      },
+    });
     expect(container.innerHTML).toContain('badge warning');
+    expect(container.innerHTML).toContain('>@</span>');
     expect(container.innerHTML).toContain('No originator found for @nobody');
     expect(container.innerHTML).toContain('Create on Quotewise');
     expect(container.innerHTML).toContain('href="https://quotewise.io/create?handle=nobody"');
+  });
+
+  it('renders a fallback create link when API not-found omits create_url', async () => {
+    sendMessage.mockResolvedValue({
+      success: true,
+      found: false,
+    });
+
+    const outcome = await lookup.lookup('EricJorgenson', 'https://x.com/EricJorgenson/status/123');
+
+    expect(outcome.status).toBe('not_found');
+    expect(outcome.createUrl).toBe(
+      'http://quotewise.test:8000/originators/add/?suggested_handle=EricJorgenson&platform=twitter'
+    );
+    expect(container.innerHTML).toContain('Create on Quotewise');
+    expect(container.innerHTML).toContain(
+      'href="http://quotewise.test:8000/originators/add/?suggested_handle=EricJorgenson&amp;platform=twitter"'
+    );
   });
 
   it('renders error state on API failure', async () => {
@@ -113,6 +140,61 @@ describe('OriginatorLookup', () => {
     expect(container.innerHTML).toContain('Albert Einstein');
   });
 
+  it('normalizes a preloaded originator slug for submit', async () => {
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue({
+      preloadedOriginator: {
+        handle: 'einstein',
+        originator: {
+          id: 42,
+          slug: 'albert-einstein',
+          full_name: 'Albert Einstein',
+          confidence: 1,
+        },
+        timestamp: Date.now() - 5000,
+      },
+    });
+
+    const outcome = await lookup.lookup('Einstein');
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(outcome.status).toBe('found');
+    expect(outcome.originator?.unique_id).toBe('albert-einstein');
+    expect(container.innerHTML).toContain('Albert Einstein');
+  });
+
+  it('falls back to API when a preloaded originator has no slug', async () => {
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue({
+      preloadedOriginator: {
+        handle: 'einstein',
+        originator: {
+          id: 42,
+          full_name: 'Albert Einstein',
+          sort_name_display: 'Einstein, Albert',
+          confidence: 1,
+        },
+        timestamp: Date.now() - 5000,
+      },
+    });
+    sendMessage.mockResolvedValue({
+      success: true,
+      found: true,
+      originator: mockOriginator,
+    });
+
+    const outcome = await lookup.lookup('Einstein');
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'LOOKUP_ORIGINATOR_BY_HANDLE',
+      data: {
+        handle: 'Einstein',
+        platform: 'twitter',
+        source_url: undefined,
+      },
+    });
+    expect(outcome.status).toBe('found');
+    expect(outcome.originator?.unique_id).toBe('albert-einstein');
+  });
+
   it('falls back to API when preloaded data is stale', async () => {
     (chrome.storage.local.get as jest.Mock).mockResolvedValue({
       preloadedOriginator: {
@@ -132,6 +214,25 @@ describe('OriginatorLookup', () => {
 
     expect(sendMessage).toHaveBeenCalled();
     expect(outcome.status).toBe('found');
+  });
+
+  it('normalizes an API originator slug for submit', async () => {
+    sendMessage.mockResolvedValue({
+      success: true,
+      found: true,
+      originator: {
+        id: 42,
+        slug: 'albert-einstein',
+        full_name: 'Albert Einstein',
+        confidence: 1,
+      },
+    });
+
+    const outcome = await lookup.lookup('einstein');
+
+    expect(outcome.status).toBe('found');
+    expect(outcome.originator?.unique_id).toBe('albert-einstein');
+    expect(container.innerHTML).toContain('Albert Einstein');
   });
 
   it('does not cache not-found results (re-checks on next lookup)', async () => {
@@ -233,6 +334,61 @@ describe('OriginatorLookup', () => {
     expect(sendMessage).not.toHaveBeenCalled();
     expect(outcome.status).toBe('not_found');
     expect(outcome.createUrl).toBe('https://quotewise.io/create?handle=nobody');
+  });
+
+  it('renders a fallback create link when preloaded not-found omits create_url', async () => {
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue({
+      preloadedOriginator: {
+        handle: 'ericjorgenson',
+        originator: null,
+        timestamp: Date.now() - 5000,
+      },
+    });
+    sendMessage.mockResolvedValue({ success: true });
+
+    const outcome = await lookup.lookup('EricJorgenson', 'https://x.com/EricJorgenson/status/123');
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'ORIGINATOR_LOOKUP_STATUS',
+      data: {
+        handle: 'EricJorgenson',
+        platform: 'twitter',
+        source_url: 'https://x.com/EricJorgenson/status/123',
+        found: false,
+        create_url: 'http://quotewise.test:8000/originators/add/?suggested_handle=EricJorgenson&platform=twitter',
+      },
+    });
+    expect(outcome.status).toBe('not_found');
+    expect(outcome.createUrl).toBe(
+      'http://quotewise.test:8000/originators/add/?suggested_handle=EricJorgenson&platform=twitter'
+    );
+    expect(container.innerHTML).toContain('Create on Quotewise');
+  });
+
+  it('notifies the toolbar when a preloaded not-found result is used for the current tweet', async () => {
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue({
+      preloadedOriginator: {
+        handle: 'nobody',
+        originator: null,
+        create_url: 'https://quotewise.io/create?handle=nobody',
+        timestamp: Date.now() - 5000,
+      },
+    });
+    sendMessage.mockResolvedValue({ success: true });
+
+    const outcome = await lookup.lookup('Nobody', 'https://x.com/nobody/status/123');
+
+    expect(outcome.status).toBe('not_found');
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'ORIGINATOR_LOOKUP_STATUS',
+      data: {
+        handle: 'Nobody',
+        platform: 'twitter',
+        source_url: 'https://x.com/nobody/status/123',
+        found: false,
+        create_url: 'https://quotewise.io/create?handle=nobody',
+      },
+    });
   });
 
   it('setHtml updates container directly', () => {

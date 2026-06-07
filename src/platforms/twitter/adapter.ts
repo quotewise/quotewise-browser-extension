@@ -3,7 +3,7 @@ import type { ExtensionMessage, TwitterData } from '../../types';
 import { MessageType } from '../../types';
 import type { PlatformAdapter } from '../types';
 
-const TWEET_PATH_REGEX = /^\/[^/]+\/status\/\d+/;
+const TWEET_PATH_REGEX = /\/status\/\d+/;
 
 export class TwitterAdapter implements PlatformAdapter<TwitterData> {
   public readonly id = 'twitter' as const;
@@ -100,12 +100,29 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
   }
 
   private async ensureData(): Promise<TwitterData | null> {
-    if (this.cachedData) return this.cachedData;
+    if (this.cachedData && this.isCachedDataCurrent()) return this.cachedData;
+    if (this.cachedData) {
+      this.cachedData = null;
+      this.lastExtractedHash = null;
+    }
+
     return await this.extractAndCache();
   }
 
+  private isCachedDataCurrent(): boolean {
+    if (!this.cachedData) return false;
+
+    const currentTweetId = this.extractTweetId();
+    if (!currentTweetId) return true;
+
+    const cachedTweetId = this.cachedData.platform_data?.tweet_id ||
+      this.extractTweetIdFromUrl(this.cachedData.url);
+
+    return cachedTweetId === currentTweetId;
+  }
+
   private async extractAndCache(): Promise<TwitterData | null> {
-    if (this.extractionInFlight) return this.cachedData;
+    if (this.extractionInFlight) return this.isCachedDataCurrent() ? this.cachedData : null;
     this.extractionInFlight = true;
 
     try {
@@ -125,15 +142,16 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
         this.lastExtractedHash = dataHash;
         this.cachedData = data;
 
-        try {
-          await sendMessageToBackground({
-            type: MessageType.TWEET_DATA_EXTRACTED,
-            data
+        void sendMessageToBackground({
+          type: MessageType.TWEET_DATA_EXTRACTED,
+          data
+        })
+          .then(() => {
+            debugLog('TwitterAdapter: sent new data to background');
+          })
+          .catch((error) => {
+            console.warn('Unable to send extracted tweet to background', error);
           });
-          debugLog('TwitterAdapter: sent new data to background');
-        } catch (error) {
-          console.warn('Unable to send extracted tweet to background', error);
-        }
       } else {
         debugLog('TwitterAdapter: data unchanged, skipping send');
       }
@@ -153,10 +171,16 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       return null;
     }
 
+    const tweetId = this.extractTweetIdFromArticle(article);
+    const urlTweetId = this.extractTweetIdFromUrl(window.location.href);
+    if (urlTweetId && tweetId && tweetId !== urlTweetId) {
+      debugLog(`TwitterAdapter: rejecting stale article ${tweetId} for URL tweet ${urlTweetId}`);
+      return null;
+    }
+
     const text = this.extractTweetText(article);
     const author = this.extractAuthor(article);
     const metrics = this.extractMetrics(article);
-    const tweetId = this.extractTweetIdFromArticle(article);
     // Construct URL from extracted tweet ID and author to ensure we have the correct direct link
     const url = tweetId && author.username
       ? `https://x.com/${author.username}/status/${tweetId}`
@@ -240,6 +264,11 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       tweetId: this.extractTweetIdFromArticleElement(article),
       priority: this.calculateArticlePriority(article, index, urlTweetId)
     }));
+
+    if (urlTweetId && scored.some(article => article.tweetId) && !scored.some(article => article.tweetId === urlTweetId)) {
+      debugLog(`TwitterAdapter: no article matches URL tweet ID ${urlTweetId}`);
+      return null;
+    }
 
     // Sort by priority (highest first)
     scored.sort((a, b) => b.priority - a.priority);

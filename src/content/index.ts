@@ -47,7 +47,13 @@ class ContentOrchestrator {
       }
 
       if (message.type === MessageType.EXTRACT_TWEET_DATA) {
-        this.showOverlay(true).then(() => sendResponse({ success: true })).catch(error => {
+        this.extractLatestData(true).then((data) => {
+          if (data) {
+            sendResponse({ success: true, data });
+          } else {
+            sendResponse({ success: false, error: 'No tweet data available on this page.' });
+          }
+        }).catch(error => {
           console.error('Error extracting data', error);
           sendResponse({ success: false, error: error?.message || 'Failed to extract data' });
         });
@@ -129,6 +135,18 @@ class ContentOrchestrator {
     const data = await this.getDataWithRetry(forceRefresh ? 3 : 1);
     this.overlay.show(this.activeAdapter.id);
     this.overlay.render(data);
+  }
+
+  private async extractLatestData(forceRefresh = false): Promise<TwitterData | null> {
+    if (!this.activeAdapter || typeof this.activeAdapter.getLatestData !== 'function') {
+      await this.selectAdapter(true);
+    }
+
+    if (!this.activeAdapter || typeof this.activeAdapter.getLatestData !== 'function') {
+      return null;
+    }
+
+    return this.getDataWithRetry(forceRefresh ? 3 : 1);
   }
 
   private async getDataWithRetry(retries: number): Promise<TwitterData | null> {

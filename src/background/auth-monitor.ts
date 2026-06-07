@@ -11,7 +11,7 @@
 
 import { AuthChecker } from '../auth/auth-checker';
 import { apiClient } from '../api/quotewise-api';
-import type { AuthStatus, AuthError, AuthChangeEvent, AuthBadgeState, AuthMonitoringConfig } from '../types/auth';
+import type { AuthStatus, AuthError, AuthChangeEvent, AuthMonitoringConfig } from '../types/auth';
 import { debugLog } from '../config/environment';
 import { AuthStateManager } from '../auth/auth-state-manager';
 import { AuthState } from '../auth/auth-state-machine';
@@ -93,7 +93,6 @@ export class AuthenticationMonitor {
       } else {
         // Max retries exceeded
         console.warn('Max auth check retries exceeded');
-        this.updateBadgeState('unauthenticated');
         this.retryCount = 0; // Reset for next interval
       }
     }
@@ -120,9 +119,6 @@ export class AuthenticationMonitor {
       
       this.lastAuthStatus = authStatus;
     }
-
-    // Update badge based on current status
-    this.updateBadgeFromAuthStatus(authStatus);
   }
 
   /**
@@ -131,9 +127,6 @@ export class AuthenticationMonitor {
   private handleAuthError(authError: AuthError): void {
     debugLog('Authentication error (background):', authError);
     
-    // Update badge to show unauthenticated state
-    this.updateBadgeState('unauthenticated');
-
     // If we had a previous authenticated status, notify about the change
     if (this.lastAuthStatus && this.lastAuthStatus.isAuthenticated) {
       const changeEvent: AuthChangeEvent = {
@@ -162,98 +155,6 @@ export class AuthenticationMonitor {
       this.lastAuthStatus.isStaff !== newStatus.isStaff ||
       this.lastAuthStatus.username !== newStatus.username
     );
-  }
-
-  /**
-   * Update extension badge based on authentication status
-   */
-  private updateBadgeFromAuthStatus(authStatus: AuthStatus): void {
-    if (!authStatus.isAuthenticated) {
-      this.updateBadgeState('unauthenticated');
-    } else if (!authStatus.isStaff) {
-      this.updateBadgeState('insufficient_privileges');
-    } else {
-      this.updateBadgeState('authenticated');
-    }
-  }
-
-  /**
-   * Update extension badge and title (global state, doesn't override tab-specific badges)
-   */
-  private async updateBadgeState(state: AuthBadgeState): Promise<void> {
-    const badgeConfig = this.getBadgeConfig(state);
-    
-    try {
-      // Get the active tab to check if it has a tab-specific badge
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tabs.length > 0) {
-        const tabId = tabs[0].id;
-        if (tabId) {
-          // Check if this tab already has a tab-specific badge (from tweet processing)
-          const tabBadge = await chrome.action.getBadgeText({ tabId });
-          if (tabBadge && (tabBadge === '✓' || tabBadge === '○')) {
-            // Don't override tweet processing badges, just update the default state
-            chrome.action.setBadgeText({ text: badgeConfig.text });
-            chrome.action.setBadgeBackgroundColor({ color: badgeConfig.color });
-            chrome.action.setTitle({ title: badgeConfig.title });
-            return;
-          }
-        }
-      }
-      
-      // Set global badge state (will be used when no tab-specific badge exists)
-      chrome.action.setBadgeText({ text: badgeConfig.text });
-      chrome.action.setBadgeBackgroundColor({ color: badgeConfig.color });
-      chrome.action.setTitle({ title: badgeConfig.title });
-    } catch (error) {
-      // Fallback to simple badge update if tab querying fails
-      console.error('Error checking tab badge state:', error);
-      chrome.action.setBadgeText({ text: badgeConfig.text });
-      chrome.action.setBadgeBackgroundColor({ color: badgeConfig.color });
-      chrome.action.setTitle({ title: badgeConfig.title });
-    }
-  }
-
-  /**
-   * Get badge configuration for auth state
-   */
-  private getBadgeConfig(state: AuthBadgeState): { text: string; color: string; title: string } {
-    switch (state) {
-      case 'authenticated':
-        return {
-          text: '', // No badge text - just regular colored icon
-          color: '#1a73e8', // Regular blue color when authenticated
-          title: 'Quotewise Extension - Authenticated and ready'
-        };
-      
-      case 'unauthenticated':
-        return {
-          text: '', // No badge text - greyed out icon
-          color: '#9AA0A6', // Grey color for unauthenticated
-          title: 'Quotewise Extension - Login required'
-        };
-      
-      case 'insufficient_privileges':
-        return {
-          text: '?',
-          color: '#FF9800',
-          title: 'Quotewise Extension - Admin privileges required'
-        };
-      
-      case 'checking':
-        return {
-          text: '…',
-          color: '#2196F3',
-          title: 'Quotewise Extension - Checking authentication'
-        };
-      
-      default:
-        return {
-          text: '',
-          color: '#607D8B',
-          title: 'Quotewise Extension'
-        };
-    }
   }
 
   /**

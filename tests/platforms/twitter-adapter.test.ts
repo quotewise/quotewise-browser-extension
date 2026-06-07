@@ -1,4 +1,5 @@
 import { TwitterAdapter } from '../../src/platforms/twitter/adapter';
+import { sendMessageToBackground } from '../../src/content/common';
 import { MessageType } from '../../src/types';
 
 // Mock background messaging to avoid real runtime calls
@@ -42,6 +43,7 @@ describe('TwitterAdapter extraction', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    window.history.pushState({}, '', '/');
     buildTweetDom();
   });
 
@@ -49,6 +51,8 @@ describe('TwitterAdapter extraction', () => {
     const adapter = new TwitterAdapter();
     expect(adapter.matches(new URL('https://twitter.com/alice/status/1234567890') as any)).toBe(true);
     expect(adapter.matches(new URL('https://x.com/alice/status/1234567890') as any)).toBe(true);
+    expect(adapter.matches(new URL('https://x.com/i/web/status/1234567890') as any)).toBe(true);
+    expect(adapter.matches(new URL('https://x.com/home') as any)).toBe(false);
     expect(adapter.matches(new URL('https://example.com/') as any)).toBe(false);
   });
 
@@ -146,6 +150,54 @@ describe('TwitterAdapter extraction', () => {
     expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 
+  test('returns extracted data without waiting for background notification', async () => {
+    const mockedSendMessageToBackground = sendMessageToBackground as jest.MockedFunction<typeof sendMessageToBackground>;
+    mockedSendMessageToBackground.mockReturnValue(new Promise(() => undefined));
+
+    const adapter = new TwitterAdapter();
+    const dataPromise = adapter.getLatestData();
+    const outcome = await Promise.race([
+      dataPromise.then(data => ({ status: 'resolved' as const, data })),
+      new Promise<{ status: 'pending' }>(resolve => setTimeout(() => resolve({ status: 'pending' }), 0)),
+    ]);
+
+    expect(outcome.status).toBe('resolved');
+    if (outcome.status === 'resolved') {
+      expect(outcome.data?.platform_data.tweet_id).toBe('1234567890');
+    }
+    expect(mockedSendMessageToBackground).toHaveBeenCalledWith({
+      type: MessageType.TWEET_DATA_EXTRACTED,
+      data: expect.objectContaining({
+        platform_data: expect.objectContaining({
+          tweet_id: '1234567890',
+        }),
+      }),
+    });
+  });
+
+  test('responds to extract requests without waiting for background notification', async () => {
+    const mockedSendMessageToBackground = sendMessageToBackground as jest.MockedFunction<typeof sendMessageToBackground>;
+    mockedSendMessageToBackground.mockReturnValue(new Promise(() => undefined));
+
+    const adapter = new TwitterAdapter();
+    const sendResponse = jest.fn();
+
+    const handled = await adapter.handleMessage(
+      { type: MessageType.EXTRACT_TWEET_DATA },
+      sendResponse
+    );
+
+    expect(handled).toBe(true);
+    expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({
+        platform_data: expect.objectContaining({
+          tweet_id: '1234567890',
+        }),
+      }),
+    }));
+  });
+
   test('extracts correct tweet when viewing a reply directly', () => {
     // Build DOM with parent tweet first (common Twitter layout for reply pages)
     document.body.innerHTML = `
@@ -194,7 +246,7 @@ describe('TwitterAdapter extraction', () => {
     expect(primaryTweetId).toBe('9999999999');
   });
 
-  test('falls back to first article when no tweet ID matches URL', () => {
+  test('returns null when visible articles do not match the current tweet URL', () => {
     document.body.innerHTML = `
       <article data-testid="tweet">
         <div data-testid="User-Name">
@@ -212,10 +264,34 @@ describe('TwitterAdapter extraction', () => {
     // URL has a tweet ID that doesn't exist in DOM (edge case)
     const nonMatchingUrl = 'https://twitter.com/someone/status/9999999999';
 
-    // Should fall back to first article when URL tweet ID doesn't match
+    // Should not fall back to a stale article when URL tweet ID doesn't match.
     const primaryArticle = (adapter as any).findPrimaryArticle(nonMatchingUrl);
-    const primaryTweetId = (adapter as any).extractTweetIdFromArticleElement(primaryArticle);
-    expect(primaryTweetId).toBe('1234567890');
+    expect(primaryArticle).toBeNull();
+  });
+
+  test('does not return cached parent tweet data after navigating to a reply URL', async () => {
+    window.history.pushState({}, '', '/alice/status/1234567890');
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name">
+          <div><span><span>Alice</span></span></div>
+          <a href="https://twitter.com/alice">Alice</a>
+        </div>
+        <div data-testid="tweetText">
+          <span lang="en">Parent tweet</span>
+        </div>
+        <a href="https://twitter.com/alice/status/1234567890"><time datetime="2023-01-01T00:00:00Z"></time></a>
+      </article>
+    `;
+
+    const adapter = new TwitterAdapter();
+    const parentData = await adapter.getLatestData();
+    expect(parentData?.platform_data.tweet_id).toBe('1234567890');
+
+    window.history.pushState({}, '', '/reply/status/9999999999');
+
+    const replyData = await adapter.getLatestData();
+    expect(replyData).toBeNull();
   });
 
   test('deprioritizes quoted tweets embedded in articles', () => {

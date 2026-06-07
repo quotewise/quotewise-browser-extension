@@ -40,20 +40,35 @@ const mockChrome = {
     get: jest.fn(),
     query: jest.fn().mockResolvedValue([]),
     sendMessage: jest.fn(),
+    onActivated: {
+      addListener: jest.fn()
+    },
+    onRemoved: {
+      addListener: jest.fn()
+    },
     onUpdated: {
       addListener: jest.fn()
     }
   },
   action: {
-    setIcon: jest.fn(),
+    setIcon: jest.fn().mockResolvedValue(undefined),
     setTitle: jest.fn().mockResolvedValue(undefined),
     setBadgeText: jest.fn().mockResolvedValue(undefined),
     setBadgeBackgroundColor: jest.fn().mockResolvedValue(undefined),
+    setBadgeTextColor: jest.fn().mockResolvedValue(undefined),
     getBadgeText: jest.fn().mockResolvedValue(''),
     openPopup: jest.fn().mockResolvedValue(undefined),
     onClicked: {
       addListener: jest.fn()
     }
+  },
+  webNavigation: {
+    onHistoryStateUpdated: {
+      addListener: jest.fn()
+    }
+  },
+  scripting: {
+    executeScript: jest.fn().mockResolvedValue(undefined)
   },
   alarms: {
     create: jest.fn(),
