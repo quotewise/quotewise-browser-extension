@@ -25,6 +25,8 @@ service-worker switch pattern (`service-worker.ts` `onMessage`). `sendResponse` 
   duplicate/originator path on explicit user action under Private mode.
 - `GET_DIAGNOSTICS` — reused to carry developer-only metrics (FR-002), `DEBUG_MODE`-gated.
 - `SHOW_OVERLAY` — icon click still opens the overlay (FR-052); unchanged.
+- `OPEN_POPUP` — legacy message path, if retained, is not used by toolbar icon-click and does not justify adding a
+  `default_popup`.
 
 ## Routing rules
 

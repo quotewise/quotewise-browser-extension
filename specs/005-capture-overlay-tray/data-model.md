@@ -45,6 +45,11 @@ default safely (Article V.2).
 **Validation**: booleans coerced via `Boolean(...)`; `defaultCollectionId` validated against the fetched collection
 list on the options page (stale id → treated as unset, picker shows no selection — never errors).
 
+**First-run notice trigger** (FR-043): no separate `automaticChecksHaveRun` / `checksHaveRun` field is stored. On an
+explicit overlay open, the content surface derives eligibility from runtime state:
+`authenticated && !settings.privateMode && !settings.firstRunNoticeShown`. Showing or dismissing the notice writes
+`firstRunNoticeShown: true`.
+
 **Quota** (Context7): 1 item, well under 8 192 B; one write per change, far under 120/min·1 800/hr.
 
 ---
@@ -193,12 +198,13 @@ No new type; the picker holds the fetched list transiently and persists only the
 
 ## 8. `QuoteSubmissionRequest` — thread collection id (US7)
 
-`src/types/api.ts` extends the existing request with an **optional** collection identifier (consumed by the backend
-create-with-collection behavior noted in spec Dependencies "already available"):
+`src/types/api.ts` extends the existing request with an **optional** collection identifier. The field name/shape is
+verified against django-api: `QuoteCreateSerializer.collection_id` is an optional UUID field and
+`QuoteViewSet.create()` consumes it for `POST /v1/quotes/`.
 
 ```typescript
 // src/types/api.ts (extend QuoteSubmissionRequest)
-collection_id?: string;   // present only when autoAddToCollection && defaultCollectionId set (US7/FR-061)
+collection_id?: string;   // UUID string; present only when autoAddToCollection && defaultCollectionId set (US7/FR-061)
 ```
 
 - Omitted when auto-add is OFF (FR-062).
