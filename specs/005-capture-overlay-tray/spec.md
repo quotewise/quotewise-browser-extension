@@ -16,16 +16,18 @@ state synchronized with the spec-004 toolbar icon, adding a new 'Paused' ambient
 ## Overview
 
 The in-page **capture-overlay-tray** is the Shadow-DOM bar injected on X/Twitter tweet pages when the user opens the
-extension. It is where a user reviews the captured quote and submits it. This spec (005) governs the **tray itself**,
-a **new settings/options page**, and the **privacy controls** layered over the capture flow.
+extension. It is where a user reviews the captured quote and submits it. In this spec, **tray** means that injected
+Shadow-DOM bar; **overlay** / **open overlay** refers to the tray when it is visible to the user. This spec (005)
+governs the **tray itself**, a **new settings/options page**, and the **privacy controls** layered over the capture
+flow.
 
 It delivers five themes:
 
 1. **Declutter** — remove the developer-oriented tweet-metric chips from the tray; preserve the raw metrics for
    developers only, via the existing debug diagnostics channel.
 2. **Privacy & account control** — surface the existing logout flow, and add a **Private mode** that pauses *all*
-   background network activity (the user-controlled-preload control mandated by the constitution), with an honest
-   one-time first-run notice the first time automatic checks run.
+   capture/pre-action background network activity (the user-controlled-preload control mandated by the constitution),
+   with an honest one-time first-run notice on the first eligible overlay open.
 3. **Progress** — show staged status feedback for captures that take longer than a moment.
 4. **Predictable controls** — pin the refresh/close controls to the top-right of the whole tray.
 5. **Provenance-aware "similar" flow** — replace the read-only "similar version" badge with a **word-level diff**
@@ -46,12 +48,12 @@ It delivers five themes:
 ### Constitution alignment
 
 - **Article II.1 (User-Controlled Preload)**: "Private mode" is the required global setting that disables all
-  pre-action network calls; it defaults to preload **ON** and MUST be honored globally when off.
+  pre-action network calls; Private mode defaults **OFF** (preload enabled) and MUST be honored globally when ON.
 - **Article II.2 (Minimal Local Storage / logout wipe)**: logout MUST clear tokens **and** all user-identifying
   cache (`currentTweet`, `preloadedOriginator`, `preloadedDuplicateCheck`, and any per-user caches); a manual
   "clear my data" affordance MUST exist and clear the same set.
 - **Article VII.1 (Quiet Presence)**: no UI may be injected on tweet-page load; the first-run notice therefore
-  renders **inside the overlay on the next explicit open**, never as a standalone page-load injection.
+  renders **inside the overlay on the first eligible explicit open**, never as a standalone page-load injection.
 - **Article VII.2 (Accessibility)** & **VII.3 (Honest Copy)**: all new UI is keyboard-operable, conveys status by
   glyph/text (never color alone), honors `prefers-reduced-motion`/`prefers-contrast`, and uses non-manipulative copy.
 
@@ -174,19 +176,21 @@ user-identifying caches are gone. Invoke "clear my data"; confirm the same cache
 ### User Story 5 - Pause background activity without logging out (Private mode) (Priority: P1)
 
 A user wants the at-a-glance convenience of staying logged in but does not want the extension to contact the backend
-as they browse. They turn on **Private mode**: all background network activity (preflight, duplicate, originator
-lookups) is suppressed until they explicitly act to capture. The toolbar reflects this with a distinct **Paused**
-state. The first time automatic checks ever run, a one-time, dismissible notice explains the behavior and points to
-the setting.
+as they browse. They turn on **Private mode**: all capture/pre-action background network activity (preflight,
+duplicate, originator lookups) is suppressed until they explicitly act to capture. The toolbar reflects this with a
+distinct **Paused** state. The first eligible time the overlay opens for an authenticated user with automatic checks
+enabled, a one-time, dismissible notice explains the behavior and points to the setting.
 
 **Why this priority**: This is the constitution's mandated user-controlled-preload switch (Article II.1) and the
 primary "great UX + privacy" lever. Client-only. Ships first.
 
 **Independent Test**: With Private mode OFF (default), confirm automatic checks run and the spec-004 quote-status
-icon appears. Turn Private mode ON; load tweets and confirm **zero** background requests occur — including when the
-overlay is opened, until the user activates **"Check now"** — the toolbar shows the Paused state, and explicit
-Check-now/capture still works (and only then makes network calls). Confirm the first-run notice appears exactly once
-(per the user's synced Chrome profile).
+icon appears. Turn Private mode ON; load tweets and confirm **zero** capture/preflight background requests occur —
+including when the overlay is opened, until the user activates **"Check now"** — the toolbar shows the Paused state,
+and explicit Check-now/capture still works (and only then makes capture/preflight network calls). Auth-maintenance
+traffic such as token refresh/session checks is outside this switch and may continue so the user stays logged in.
+Confirm the first-run notice appears exactly once (per the user's synced Chrome profile) on the first eligible
+authenticated, Private-mode-OFF overlay open.
 
 **Acceptance Scenarios**:
 
@@ -200,9 +204,10 @@ Check-now/capture still works (and only then makes network calls). Confirm the f
 4. **Given** Private mode is ON, **When** the toolbar icon is resolved, **Then** it shows the **Paused** ambient
    state — grey owl + pause glyph `‖`, tooltip "Quotewise — paused (private mode)" — distinguishable by artwork +
    glyph, not color alone.
-5. **Given** automatic checks run for the first time ever for an authenticated user, **When** the user next opens the
-   overlay, **Then** a one-time, non-blocking, dismissible notice appears *inside the overlay* explaining automatic
-   status checks and how to turn them off, and it never appears again after being shown/dismissed.
+5. **Given** an authenticated user with Private mode OFF and `firstRunNoticeShown === false`, **When** the user opens
+   the overlay, **Then** a one-time, non-blocking, dismissible notice appears *inside the overlay* explaining
+   automatic status checks and how to turn them off, marks `firstRunNoticeShown` when shown/dismissed, and never
+   appears again after being shown/dismissed. No separate "automatic checks have run" storage flag is required.
 6. **Given** the first-run notice has been shown once, **When** the user reloads/reopens later, **Then** it is not
    shown again (the shown-state persists across service-worker restarts).
 
@@ -280,8 +285,9 @@ diff renders between captured and on-record text with differences marked and no 
 
 **Acceptance Scenarios**:
 
-1. **Given** a near match (recommendation "new_version"), **When** the tray shows the match, **Then** it renders a
-   word-level diff of captured vs. on-record text with added/removed words clearly marked.
+1. **Given** a near match (recommendation in the `new_version` family, including `new_version_known_author`),
+   **When** the tray shows the match, **Then** it renders a word-level diff of captured vs. on-record text with
+   added/removed words clearly marked.
 2. **Given** the diff is shown, **When** the user views it, **Then** no similarity percentage is displayed, and a
    link to the existing quote on Quotewise is available.
 3. **Given** color-vision deficiency or `prefers-contrast`, **When** the diff is shown, **Then** differences are
@@ -335,7 +341,8 @@ hidden/disabled.
 - **Logout while a capture/preflight is in flight**: in-flight responses MUST NOT repopulate caches after logout;
   the logged-out state wins.
 - **First-run notice vs. Quiet Presence**: the notice MUST NOT inject any UI on page load; it appears only within the
-  overlay on the next explicit open.
+  overlay on an explicit open when the trigger conditions are met (`authenticated && !privateMode &&
+  !firstRunNoticeShown`).
 - **Near match with missing on-record text**: if the on-record text is absent for some reason, the tray MUST degrade
   to the existing read-only "similar version" presentation rather than rendering a broken diff.
 - **Collections unavailable / empty**: if the user has no collections or the list fails to load, the default-collection
@@ -394,18 +401,21 @@ hidden/disabled.
 
 **Privacy / Private mode**
 
-- **FR-040**: A **Private mode** setting MUST exist that, when ON, suppresses **all** pre-action background network
-  calls (preflight, duplicate, originator lookups) for passive tweet browsing. It MUST default to **OFF** (preload
-  enabled) and MUST be honored globally when ON (Article II.1).
+- **FR-040**: A **Private mode** setting MUST exist that, when ON, suppresses **all** capture/pre-action background
+  network calls (preflight, duplicate, originator lookups) for passive tweet browsing. It MUST default to **OFF**
+  (preload enabled) and MUST be honored globally when ON (Article II.1).
 - **FR-041**: With Private mode ON, network calls MUST occur only on an explicit user action; quote text and any
   write (submission) MUST occur only on explicit submit, never during passive browsing (Article II.1).
 - **FR-042**: With Private mode ON, the toolbar MUST resolve to a new **Paused** ambient state (see Toolbar
-  Coordination); toggling Private mode MUST re-resolve the toolbar promptly.
-- **FR-043**: The first time automatic checks run for an authenticated user, the system MUST show a one-time,
-  non-blocking, dismissible notice **inside the overlay on the next explicit open** (never injected at page load),
-  explaining automatic status checks and how to disable them. The shown-state (`firstRunNoticeShown`) MUST persist
-  in `chrome.storage.sync` across service-worker restarts and across the user's signed-in Chrome devices, and the
-  notice MUST NOT reappear once shown/dismissed (it also survives logout — see FR-031).
+  Coordination); toggling Private mode MUST re-resolve the toolbar on the next `chrome.storage.onChanged` event,
+  without requiring a manual reload.
+- **FR-043**: On the first explicit overlay open where the user is authenticated, Private mode is OFF, and
+  `firstRunNoticeShown` is false, the system MUST show a one-time, non-blocking, dismissible notice **inside the
+  overlay** (never injected at page load), explaining automatic status checks and how to disable them. Showing or
+  dismissing the notice MUST set `firstRunNoticeShown` in `chrome.storage.sync`. The shown-state MUST persist across
+  service-worker restarts and across the user's signed-in Chrome devices, and the notice MUST NOT reappear once
+  shown/dismissed (it also survives logout — see FR-031). The system MUST NOT add a separate
+  "automatic checks have run" storage flag.
 - **FR-044**: With Private mode ON, opening the overlay MUST NOT automatically run any duplicate/originator/preflight
   lookup. The overlay MUST instead present an explicit **"Check now"** control; the lookups for the current tweet run
   only when the user activates it. After a Check-now, Private mode remains ON and the toolbar stays in the **Paused**
@@ -436,8 +446,9 @@ hidden/disabled.
 
 **Similar-match diff**
 
-- **FR-070**: For a near match ("similar but not exact"), the tray MUST render a **word-level diff** between the
-  captured text and the on-record quote text, marking added/removed words.
+- **FR-070**: For a near match ("similar but not exact"; recommendation in the `new_version` family, including
+  `new_version_known_author`), the tray MUST render a **word-level diff** between the captured text and the
+  on-record quote text, marking added/removed words.
 - **FR-071**: The diff MUST NOT display a similarity percentage, and MUST provide a link to view the existing quote
   on Quotewise.
 - **FR-072**: Diff differences MUST be distinguishable without relying on color alone (markers/typography + text),
@@ -466,7 +477,8 @@ hidden/disabled.
   `Error → Logged-out → Paused → Loading → Auth-pending → Unsupported → Supported-idle → quote-status badges`. This
   amendment MUST be reflected in the spec-004 state table/resolver (single authoritative resolver preserved).
 - **FR-092**: Toolbar and tray MUST stay synchronized with auth and Private-mode state: a change in either MUST
-  promptly re-resolve the toolbar and update the tray's account menu/settings reflection.
+  re-resolve the toolbar and update the tray's account menu/settings reflection on the next
+  `chrome.storage.onChanged` event, without requiring a manual reload.
 
 **Cross-cutting (constitution)**
 
@@ -505,10 +517,13 @@ hidden/disabled.
 - **SC-004**: After logout, a user can verify (e.g. via the browser's network panel) that loading tweets makes no
   Quotewise background calls, and the user-identifying caches are empty.
 - **SC-005**: With Private mode ON, browsing any number of tweets — including opening the overlay — produces **zero**
-  background Quotewise requests until the user activates **"Check now"** or captures; the explicit Check-now/capture
-  still works; the toolbar shows the Paused state and is decodable without color.
+  capture/preflight Quotewise requests (preflight, duplicate, originator) until the user activates **"Check now"** or
+  captures; the explicit Check-now/capture still works; the toolbar shows the Paused state and is decodable without
+  color. Auth-maintenance traffic that keeps the user logged in (token refresh/session checks) is excluded from this
+  criterion.
 - **SC-006**: The first-run notice appears exactly once per the user's synced Chrome profile (its `firstRunNoticeShown`
-  flag lives in `chrome.storage.sync` and survives logout) and never injects UI before an explicit overlay open.
+  flag lives in `chrome.storage.sync` and survives logout), only on an explicit overlay open while authenticated and
+  Private mode is OFF, and never injects UI before an explicit overlay open.
 - **SC-007**: A user can set a default collection and have captures auto-added to it; toggling auto-add off stops
   auto-adding; a collection failure never loses the quote.
 - **SC-008**: For a near match, users see a word-level diff (no percentage) that is decodable under simulated
@@ -522,7 +537,9 @@ hidden/disabled.
 
 - **Quotewise API (already available)**: `check_duplicate` / `preflight` return the matched record's **text**,
   **originator**, and **similarity** (enables the word-level diff with no backend change). `GET /v1/collections/`
-  returns the user's collections with a default; quote-create accepts a collection identifier to auto-add on submit.
+  returns the user's collections with a default; `POST /v1/quotes/` accepts optional `collection_id` (UUID string) to
+  auto-add on submit. This field is verified against the django-api `QuoteCreateSerializer` and `QuoteViewSet.create`
+  contract.
 - **Quotewise API (django-api — required for P3 / future)**:
   - **(a) [hard blocker for FR-080..082]** Expose the matched record's **published date** (`quote_date`) on the
     `check_duplicate` / `preflight` `matches[]` payload. Today only the record-creation timestamp is returned, which
@@ -549,8 +566,8 @@ hidden/disabled.
 - Authentication remains OAuth2 Bearer-token based; logout = clearing stored tokens (no cookie permission involved).
 - The user's posted date for the current tweet is already available from extraction (used as the comparison input
   for date-gating once the matched record's published date is exposed).
-- The collections endpoints and the create-with-collection parameter behave as observed in the current backend; if a
-  collection step fails, quote creation is independent and still succeeds.
+- The collections endpoints behave as observed in the current backend; if a collection step fails, quote creation is
+  independent and still succeeds.
 - "Developers" means builds where the existing debug-mode condition is true (e.g. `[DEV]`/`[STAGING]` builds); the
   diagnostics channel is the existing one, not a new user-facing surface.
 - The debounce threshold (~400 ms) is a tunable starting point, to be validated for flicker-free fast captures.

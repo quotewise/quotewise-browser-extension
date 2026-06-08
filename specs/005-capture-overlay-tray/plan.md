@@ -14,9 +14,9 @@ all **client-only** (no backend change required for P1/P2):
    `overlay-bar.ts:410-433`); the raw metrics keep flowing to developers only through the existing
    `GET_DIAGNOSTICS` / `debugLog` channel, gated by `DEBUG_MODE` (`config/environment.ts:34`).
 2. **Privacy & account control** — surface the existing `OAUTH_LOGOUT` flow in a new options page and a tray
-   account menu; add a global **Private mode** that suppresses *all* pre-action background network calls
+   account menu; add a global **Private mode** that suppresses *all* capture/pre-action background network calls
    (the Article II.1 user-controlled-preload switch), with a one-time first-run notice rendered inside the
-   overlay on the next explicit open (never on page load — Article VII.1).
+   overlay on the first eligible explicit open (never on page load — Article VII.1).
 3. **Progress** — staged status text ("Checking…" → "Submitting…" → "Confirming…") on the submit flow, gated by a
    ~400 ms debounce so fast captures show nothing; spinner suppressed under `prefers-reduced-motion`.
 4. **Predictable controls** — re-anchor refresh/close to the top-right, **top-aligned**, of the whole tray across
@@ -66,14 +66,17 @@ background service worker + content script; the toolbar icon click still opens t
 to a single file (`splitChunks: false`).
 
 **Performance Goals**: Settings reads are O(1) `chrome.storage.sync.get`; cross-surface propagation is event-driven
-(`onChanged`), not polled. The Private-mode gate is a boolean check before any network scheduling — when ON it
-**eliminates** background egress entirely (SC-005). Staged progress only renders after a ~400 ms debounce so the
-fast path has zero added work/flicker.
+(`onChanged`), not polled. The Private-mode gate is a boolean check before any capture/preflight scheduling — when
+ON it **eliminates** preflight/duplicate/originator egress (SC-005), while auth-maintenance traffic such as token
+refresh/session checks may continue. Staged progress only renders after a ~400 ms debounce so the fast path has zero
+added work/flicker.
 
 **Constraints**:
-- **Article II.1**: Private mode ON ⇒ zero pre-action egress for passive browsing *and* on overlay open (overlay
-  shows an explicit **"Check now"**; Clarification 2026-06-07). Quote text / writes only on explicit submit.
-- **Article VII.1**: no UI injected on page load — the first-run notice renders inside the overlay on next open.
+- **Article II.1**: Private mode ON ⇒ zero capture/pre-action egress for passive browsing *and* on overlay open
+  (overlay shows an explicit **"Check now"**; Clarification 2026-06-07). Auth-maintenance traffic is excluded from
+  the preload switch; quote text / writes only on explicit submit.
+- **Article VII.1**: no UI injected on page load — the first-run notice renders inside the overlay on the first
+  eligible explicit open.
 - **Article VII.2/VII.3**: all new UI keyboard-operable, status by glyph/text (not color alone), visible focus,
   ARIA labels, honors `prefers-reduced-motion`/`prefers-contrast`, honest non-manipulative copy.
 - **Article III.3**: no token/cookie/secret in any log, error, or diagnostic produced by logout/clear-data.
@@ -100,11 +103,13 @@ This feature is the constitution's own privacy lever made real, so most articles
   collection to the *create* call but does not touch the quote text and still requires explicit submit (I.3). The
   add-sighting action (US9) is honestly labelled and gated; it never silently submits (I.3).
 - **Article II — Privacy & Data Minimization**: **CORE OF THIS FEATURE.** Private mode IS the Article II.1
-  user-controlled preload switch: when ON it suppresses **all** pre-action calls (preflight/duplicate/originator),
-  for passive browsing *and* overlay open, until explicit "Check now"/capture (FR-040/041/044, SC-005). Default OFF
-  (= preload ON), honored globally. Logout + "Clear my data" wipe tokens **and** all user-identifying cache and the
-  account-bound `defaultCollectionId`, preserving only device prefs (FR-031/033, II.2). Pre-action egress stays
-  limited to `{tweet_id, handle, source_url}`; quote text only on submit (II.1). ✅ Gated & satisfied.
+  user-controlled preload switch: when ON it suppresses **all** capture/pre-action calls
+  (preflight/duplicate/originator), for passive browsing *and* overlay open, until explicit "Check now"/capture
+  (FR-040/041/044, SC-005). Auth-maintenance traffic such as token refresh/session checks is excluded so the user can
+  remain logged in. Default OFF (= preload ON), honored globally. Logout + "Clear my data" wipe tokens **and** all
+  user-identifying cache and the account-bound `defaultCollectionId`, preserving only device prefs (FR-031/033,
+  II.2). Pre-action egress stays limited to `{tweet_id, handle, source_url}`; quote text only on submit (II.1). ✅
+  Gated & satisfied.
 - **Article III — Security & Permissions**: **PASS.** **No new manifest permission** — `options_ui`, settings, and
   collections reuse existing `storage` + host access (FR-101, SC-010). **No new runtime dependency** — the diff is
   hand-rolled (III.2). No token/secret reaches logs/errors/telemetry in any new flow (FR-034, III.3). Lockfile stays
@@ -114,8 +119,10 @@ This feature is the constitution's own privacy lever made real, so most articles
   `DEBUG_MODE`-gated and out of production-visible UI and out of content-bearing telemetry (FR-002, SC-001). New
   diagnostics must strip tokens/handles/full tweet text (IV).
 - **Article V — Resilience**: **PASS.** Settings live in `chrome.storage.sync` (authoritative, survives SW restart);
-  the `firstRunNoticeShown` flag persists so the notice never re-fires after a worker restart (FR-043, V.1). The
-  Private-mode gate and progress machine read/derive state, holding nothing correctness-bearing only in memory.
+  the `firstRunNoticeShown` flag persists so the notice never re-fires after a worker restart, and the trigger is
+  derived at overlay open from `authenticated && !privateMode && !firstRunNoticeShown` rather than a second
+  "checks have run" flag (FR-043, V.1). The Private-mode gate and progress machine read/derive state, holding
+  nothing correctness-bearing only in memory.
   Logout-in-flight race: a logged-out state MUST win over a late preflight response repopulating caches (edge case),
   preserving idempotent/re-entrant handlers (V.1). API drift: missing `matches[].text` → degrade to read-only badge;
   missing published date → hide add-sighting (V.2). No `splitChunks` change (V.3).

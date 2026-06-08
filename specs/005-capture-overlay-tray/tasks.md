@@ -118,22 +118,23 @@ login unchanged. No secret in any log.
 
 ## Phase 7: User Story 5 — Private mode, first-run notice & Paused toolbar (Priority: P1)
 
-**Goal**: Global Private mode suppresses ALL pre-action background calls (passive browsing + overlay open) until
-explicit "Check now"/capture; toolbar shows **Paused**; one-time in-overlay first-run notice.
+**Goal**: Global Private mode suppresses ALL capture/pre-action background calls (passive browsing + overlay open)
+until explicit "Check now"/capture; toolbar shows **Paused**; one-time in-overlay first-run notice.
 
-**Independent Test**: Private mode OFF → auto checks + quote-status icon. ON → zero background requests across tweets
-incl. overlay open; toolbar Paused (grey owl + `‖`); "Check now" runs lookups only on activation, stays Paused;
-first-run notice appears once per synced profile, never on page load. (Tests set `settings.privateMode` directly;
-the user toggle ships in US6.)
+**Independent Test**: Private mode OFF → auto checks + quote-status icon. ON → zero preflight/duplicate/originator
+requests across tweets incl. overlay open; toolbar Paused (grey owl + `‖`); "Check now" runs lookups
+only on activation, stays Paused; auth-maintenance traffic is excluded; first-run notice appears once per synced
+profile on the first authenticated, Private-mode-OFF overlay open, never on page load. (Tests set
+`settings.privateMode` directly; the user toggle ships in US6.)
 
 - [ ] T020 [P] [US5] Test-first: extend `tests/background/icon-state-resolver.test.ts` with Paused precedence rows (Paused wins over Loading/AuthPending/Unsupported/SupportedIdle/quote-status when `privateMode`; Error/LoggedOut still win over Paused) per contracts/private-mode-and-toolbar.md §C
-- [ ] T021 [P] [US5] Test-first: Private-mode network gate — each automatic entry point makes no network call when `privateMode===true`; `CHECK_NOW` does and leaves Private mode ON; toggle ON stops scheduling, OFF resumes next tweet, in `tests/background/private-mode.test.ts` per contracts/private-mode-and-toolbar.md §A
+- [ ] T021 [P] [US5] Test-first: Private-mode network gate — each automatic preflight/duplicate/originator entry point makes no network call when `privateMode===true`; `CHECK_NOW` does and leaves Private mode ON; toggle ON stops scheduling, OFF resumes next tweet; auth-maintenance traffic is excluded from this assertion, in `tests/background/private-mode.test.ts` per contracts/private-mode-and-toolbar.md §A
 - [ ] T022 [US5] Add `ICON_STATES.Paused` (grey owl, badge `‖`, title "Quotewise — paused (private mode)", scope global) to `src/config/icon-states.ts` (FR-090, spec-004 amendment)
 - [ ] T023 [US5] Add a `privateMode` input + the Paused branch (after `UNAUTHENTICATED→LoggedOut`, before `Loading`) to `src/background/icon-state-resolver.ts`, and thread `privateMode` (read via settings-store, refreshed via `onSettingsChanged`) at every `applyResolvedIconForTab` call site in `src/background/service-worker.ts` (FR-091)
 - [ ] T024 [US5] Gate the automatic preflight/duplicate/originator entry points (`requestTweetDataExtraction`, `runAutomaticPreflightForExtractedTweet`/`checkQuoteCollectionStatus`, `scheduleAutomaticOriginatorProbe`) on `settings.privateMode` in `src/background/service-worker.ts` (FR-040/041/044) — **after T023 (same file)**
 - [ ] T025 [US5] Implement the `CHECK_NOW` handler (explicit duplicate+originator lookup for the current tweet only; stale-tab no-op; keeps Paused) in `src/background/service-worker.ts` (FR-044) — **after T024 (same file)**
-- [ ] T026 [P] [US5] Implement `src/content/ui/components/first-run-notice.ts` (in-overlay, non-blocking, dismissible, one-time; keyboard/ARIA) per FR-043
-- [ ] T027 [US5] Wire the first-run notice into the overlay open path (gated by `firstRunNoticeShown` in `chrome.storage.sync`, never injected on page load) and add the "Check now" control shown under Private mode, in `src/content/ui/overlay-bar.ts` (FR-043/044) — **overlay-bar.ts edit after T015**
+- [ ] T026 [P] [US5] Test-first + implement `src/content/ui/components/first-run-notice.ts` (in-overlay, non-blocking, dismissible, one-time; keyboard/ARIA) with trigger cases in `tests/content/first-run-notice.test.ts` per FR-043
+- [ ] T027 [US5] Wire the first-run notice into the overlay open path (show only when `authenticated && !privateMode && !firstRunNoticeShown`; set `firstRunNoticeShown` on show/dismiss; no separate checks-ran storage flag; never injected on page load) and add the "Check now" control shown under Private mode, in `src/content/ui/overlay-bar.ts` (FR-043/044) — **overlay-bar.ts edit after T015**
 - [ ] T028 [US5] Fold the Paused state into spec-004 docs: add the state + precedence slot to `specs/004-extension-icon-states/contracts/icon-state-resolver.md` and its data-model/state table (single authoritative resolver preserved)
 
 **Checkpoint**: Constitution Article II.1 switch live; SC-005/SC-006 satisfied.
@@ -146,17 +147,17 @@ the user toggle ships in US6.)
 (logout, Private toggle, Open settings). Icon click still opens the overlay (no popup). Live cross-surface sync.
 
 **Independent Test**: Open options page → account identity + working logout + Private toggle + clear-data. Tray
-account menu → quick logout, Private toggle, Open settings. Icon click → overlay (no popup). Toggle Private on
-options page → tray + toolbar reflect it without reload.
+account menu → quick logout, Private toggle, Open settings. Icon click → overlay via `SHOW_OVERLAY` (no popup and no
+`default_popup`). Toggle Private on options page → tray + toolbar reflect it without reload.
 
-- [ ] T029 [US6] Add `"options_ui": { "page": "options.html", "open_in_tab": true }` to `manifest.json`, `manifest.prod.json`, and `manifest.dev.json` (single-source rule; no new permission) per contracts/options-page.md
+- [ ] T029 [US6] Add `"options_ui": { "page": "options.html", "open_in_tab": true }` to `manifest.json`, `manifest.prod.json`, and `manifest.dev.json` (single-source rule; no new permission; do not add `default_popup`) per contracts/options-page.md
 - [ ] T030 [US6] Add the `'options/index': './src/options/index.ts'` webpack entry and a `copy-webpack-plugin` pattern copying `public/options.html` → `dist/` in `webpack.config.js` (keep `splitChunks: false`)
 - [ ] T031 [P] [US6] Create `public/options.html` shell loading `options/index.js` via `<script defer type="module">`
 - [ ] T032 [US6] Implement `src/options/index.ts`: account identity, Log out (`OAUTH_LOGOUT`), Private-mode toggle (`updateSettings`), Clear my data (`CLEAR_USER_DATA`); subscribe via `onSettingsChanged`; keyboard/ARIA/honest copy (FR-050)
 - [ ] T033 [P] [US6] Implement `src/content/ui/components/account-menu.ts`: Log out, Private-mode toggle, "Open settings" (sends `OPEN_OPTIONS_PAGE`); menu focus management, Escape-to-close, ARIA (FR-051)
 - [ ] T034 [US6] Add the `OPEN_OPTIONS_PAGE` handler calling `chrome.runtime.openOptionsPage()` in `src/background/service-worker.ts` (content scripts can't call it directly) (FR-051) — **after T025 (same file)**
 - [ ] T035 [US6] Mount the account menu into the tray (open/close, keyboard/ARIA) in `src/content/ui/overlay-bar.ts` (FR-051) — **overlay-bar.ts edit after T027**
-- [ ] T036 [P] [US6] Characterization test: options controls present + labelled; logout/clear-data send correct messages; changing Private mode in one surface updates the other via `onChanged` (no reload); "Open settings" sends `OPEN_OPTIONS_PAGE` (never calls `openOptionsPage` from content), in `tests/options/options-page.test.ts`
+- [ ] T036 [P] [US6] Characterization test: manifests have `options_ui` and no `default_popup`; toolbar icon-click sends `SHOW_OVERLAY` (the legacy `OPEN_POPUP` path is not used by `chrome.action.onClicked`); options controls present + labelled; logout/clear-data send correct messages; tray account-menu logout sends `OAUTH_LOGOUT`; changing Private mode in one surface updates the other via `onChanged` (no reload); "Open settings" sends `OPEN_OPTIONS_PAGE` (never calls `openOptionsPage` from content), in `tests/options/options-page.test.ts` and `tests/content/account-menu.test.ts`
 
 **Checkpoint**: Settings home + account menu live; FR-052/053 satisfied. **P1 MVP set (US1–US6) complete.**
 
@@ -171,8 +172,8 @@ failure never loses the quote.
 collection; disable → not added; simulate collection failure → quote still succeeds with honest notice; no
 collections/list fails → honest empty/error, auto-add inert.
 
-- [ ] T037 [P] [US7] Test-first: submit includes `collection_id` when `autoAddToCollection` ON + `defaultCollectionId` set; omitted when OFF; collection-add failure → quote create still succeeds + honest "collection step didn't complete" path, in `tests/api/collection-autoadd.test.ts` per contracts (US7)
-- [ ] T038 [US7] Add optional `collection_id` to `QuoteSubmissionRequest` in `src/types/api.ts` and thread it into `submitQuote` in `src/api/quotewise-api.ts` (FR-061/062)
+- [ ] T037 [P] [US7] Test-first: submit includes verified `collection_id` (UUID string) when `autoAddToCollection` ON + `defaultCollectionId` set; omitted when OFF; collection-add failure → quote create still succeeds + honest "collection step didn't complete" path, in `tests/api/collection-autoadd.test.ts`; picker empty/error state + auto-add inert behavior in `tests/options/options-page.test.ts` per contracts (US7)
+- [ ] T038 [US7] Add optional `collection_id` (verified django-api `QuoteCreateSerializer` / `QuoteViewSet.create` field) to `QuoteSubmissionRequest` in `src/types/api.ts` and thread it into `submitQuote` in `src/api/quotewise-api.ts` (FR-061/062)
 - [ ] T039 [US7] Add the `LIST_COLLECTIONS` handler (reuse `listCollections()`) in `src/background/service-worker.ts` / `src/background/api-handler.ts` (FR-060)
 - [ ] T040 [US7] Add the default-collection picker + auto-add toggle to `src/options/index.ts` (populate from `LIST_COLLECTIONS`, preselect `default_collection_id`, honest empty/error state, persist choice to `settings`) (FR-060) — **after T032 (same file)**
 - [ ] T041 [US7] Apply auto-add on submit (read `settings.autoAddToCollection`/`defaultCollectionId`; on collection failure keep the successful quote and surface honest notice via the progress/error path) in `src/content/ui/overlay-bar.ts` / `action-button.ts` (FR-061/063) — **overlay-bar.ts edit after T035**

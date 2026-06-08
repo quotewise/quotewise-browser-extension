@@ -59,7 +59,11 @@ re-resolves the toolbar (→ Paused) without reload, and vice-versa.
 
 ## Test contract (test-first / characterization)
 
+- Manifests contain `options_ui` and no `default_popup`; toolbar `chrome.action.onClicked` still sends
+  `SHOW_OVERLAY` to the active tab, and the legacy `OPEN_POPUP` message path is not used by icon-click.
 - Options controls present and labelled; logout sends `OAUTH_LOGOUT`; clear-data sends `CLEAR_USER_DATA`.
-- Picker preselects `default_collection_id`; empty/error list yields the honest empty state, auto-add inert.
-- Account menu "Open settings" sends `OPEN_OPTIONS_PAGE` (never calls `openOptionsPage` from the content script).
+- Picker preselects `default_collection_id`; empty/error list yields the honest empty/error state, and auto-add is
+  inert on submit.
+- Account menu logout sends `OAUTH_LOGOUT`; "Open settings" sends `OPEN_OPTIONS_PAGE` (never calls
+  `openOptionsPage` from the content script).
 - Changing Private mode in one surface updates the other via `onChanged` (no reload).

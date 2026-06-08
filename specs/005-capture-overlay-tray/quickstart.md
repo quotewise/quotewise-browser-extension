@@ -49,12 +49,13 @@ Load: `chrome://extensions` → Developer mode → **Load unpacked** → select 
 ### US5 — Private mode + first-run notice (FR-040..044, SC-005/006)
 1. Private mode OFF (default), authenticated, open a tweet → automatic checks run; spec-004 quote-status icon shows.
 2. Turn **Private mode ON** (tray menu or options).
-3. **Expect**: browse any number of tweets incl. opening the overlay → **zero** background Quotewise requests;
-   toolbar shows **Paused** (grey owl + `‖`, title "Quotewise — paused (private mode)"); the overlay shows a
-   **"Check now"** control; activating it runs the lookups (only then), Private mode stays ON, toolbar stays Paused.
-4. First-run notice: as a fresh synced profile, when automatic checks first run, the **next** overlay open shows a
-   one-time dismissible notice **inside** the overlay (never on page load). Reopen → not shown again. Confirm the
-   `firstRunNoticeShown` flag lives in `chrome.storage.sync` (survives SW restart + logout).
+3. **Expect**: browse any number of tweets incl. opening the overlay → **zero** preflight/duplicate/originator
+   Quotewise requests; toolbar shows **Paused** (grey owl + `‖`, title "Quotewise — paused (private mode)"); the
+   overlay shows a **"Check now"** control; activating it runs the lookups (only then), Private mode stays ON, toolbar
+   stays Paused. Auth-maintenance traffic such as token refresh/session checks is outside this check.
+4. First-run notice: as a fresh synced profile, the first explicit overlay open while authenticated and Private mode
+   is OFF shows a one-time dismissible notice **inside** the overlay (never on page load). Reopen → not shown again.
+   Confirm the `firstRunNoticeShown` flag lives in `chrome.storage.sync` (survives SW restart + logout).
 
 ### US6 — Settings page & account menu (FR-050..053)
 1. Open the options page (chrome://extensions → Details → Extension options).
@@ -88,7 +89,7 @@ Load: `chrome://extensions` → Developer mode → **Load unpacked** → select 
 
 ```bash
 bun run test -- settings-store          # sync get/set/merge + onChanged (settings-storage contract)
-bun run test -- private-mode            # SW gate on preflight entry points (private-mode-and-toolbar contract)
+bun run test -- private-mode            # SW gate on preflight entry points + first-run notice trigger
 bun run test -- icon-state-resolver     # Paused precedence rows (spec-004 amendment)
 bun run test -- logout                  # cache wipe vs. preference preservation + in-flight guard
 bun run test -- progress                # debounced phase machine (progress-and-submit contract)

@@ -47,7 +47,8 @@ A change MUST take effect everywhere **without a manual reload**.
 - **INV-2**: `privateMode` default is `false` (preload enabled) — honored globally by the SW gate when `true`.
 - **INV-3**: Logout/clear-data set `defaultCollectionId → null` but leave the other three fields intact.
 - **INV-4**: `firstRunNoticeShown` persists across SW restarts and across devices; once `true`, the notice never
-  re-appears (FR-043/SC-006).
+  re-appears (FR-043/SC-006). No separate "automatic checks have run" setting exists; notice eligibility is derived
+  on explicit overlay open from `authenticated && !privateMode && !firstRunNoticeShown`.
 
 ## Test contract (test-first)
 

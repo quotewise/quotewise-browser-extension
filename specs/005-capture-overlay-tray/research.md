@@ -80,10 +80,11 @@ sends a new `OPEN_OPTIONS_PAGE` message; the **service worker** calls `chrome.ru
 
 ## R4. Private mode gating — one global boolean checked at the preflight entry points
 
-**Decision**: Gate the **automatic** network paths in `service-worker.ts` on `settings.privateMode`. When ON, the
-SW makes **no** preflight/duplicate/originator call for passive browsing *or* on overlay open. The overlay instead
-exposes an explicit **"Check now"** control (new `CHECK_NOW` message) that runs the lookups for the current tweet
-only on activation. Default OFF (preload enabled).
+**Decision**: Gate the **automatic capture/pre-action** network paths in `service-worker.ts` on
+`settings.privateMode`. When ON, the SW makes **no** preflight/duplicate/originator call for passive browsing *or*
+on overlay open. The overlay instead exposes an explicit **"Check now"** control (new `CHECK_NOW` message) that runs
+the lookups for the current tweet only on activation. Default OFF (preload enabled). Auth-maintenance traffic such
+as token refresh/session checks is outside this gate.
 
 **Gate points** (from the code map):
 - `requestTweetDataExtraction()` / the `chrome.tabs.onUpdated` + `webNavigation.onHistoryStateUpdated` listeners —
@@ -103,7 +104,7 @@ only on activation. Default OFF (preload enabled).
 
 **Alternatives considered**:
 - *Gate only in the content tray* — rejected: the SW is where automatic preflight is scheduled; gating only the UI
-  would still emit background requests (fails SC-005's "zero background requests").
+  would still emit capture/preflight requests (fails SC-005's "zero capture/preflight requests").
 - *Reuse the existing `settings.duplicateCheck` flag* — rejected: that in-memory SW setting is not user-controlled,
   not persisted to sync, and not the constitution's global preload switch. Private mode supersedes it.
 
