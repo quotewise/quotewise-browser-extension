@@ -39,6 +39,7 @@ export function resolveIconPresentation(
   auth: AuthState,
   dup: DuplicateCheckResult | null,
   tab: TabContext,
+  privateMode?: boolean,
 ): IconPresentation;
 ```
 
@@ -55,6 +56,8 @@ export function resolveIconPresentation(
   `tab.currentTweetStatusId`/`tab.currentTweetUrl`; stale parent/head tweet context is invalid for a reply URL.
 - **Platform availability**: `tab.isSupportedPlatform === false` returns UnsupportedPage (grey/no badge) for
   authenticated users and prevents Ready, Loading, or quote-status badges on unsupported sites.
+- **Paused private mode**: `privateMode === true` returns Paused after auth errors/logged-out, before Loading,
+  AuthPending, unsupported/idle, and quote-status badges. Paused is global because Private mode is global.
 - **Auth-pending**: `UNKNOWN`/`CHECKING`/`AUTHENTICATING` never produce quote-status badges or
   "ready to capture" copy.
 - **No badge text color**: the type has no field for it; the applicator must not call
@@ -76,6 +79,7 @@ stateDiagram-v2
   state "Error: session expired\nfull-color owl + !" as ErrorSessionExpired
   state "Error: insufficient privileges\nfull-color owl + !" as ErrorInsufficientPrivileges
   state "Logged out\ngrey owl, no badge" as LoggedOut
+  state "Paused private mode\ngrey owl + pause" as Paused
   state "Loading\nfull-color owl + dot" as Loading
   state "Auth pending\nfull-color owl, no badge" as AuthPending
   state "Unsupported page\ngrey owl, no badge" as UnsupportedPage
@@ -91,6 +95,7 @@ stateDiagram-v2
   ResolveCurrentTab --> ErrorSessionExpired: auth = SESSION_EXPIRED
   ResolveCurrentTab --> ErrorInsufficientPrivileges: auth = INSUFFICIENT_PRIVILEGES
   ResolveCurrentTab --> LoggedOut: auth = UNAUTHENTICATED
+  ResolveCurrentTab --> Paused: privateMode = true
   ResolveCurrentTab --> Loading: supported tweet + check in flight\nand no known quote/originator status
   ResolveCurrentTab --> AuthPending: auth = UNKNOWN/CHECKING/AUTHENTICATING
   ResolveCurrentTab --> UnsupportedPage: authenticated + unsupported platform

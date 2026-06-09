@@ -35,7 +35,8 @@
   (`specs/004-extension-icon-states/spec.md`, an explicitly implementation-driving contract), this spec names a few
   concrete artifacts — API endpoints (`check_duplicate`/`preflight`, `GET /v1/collections/`, the `quote_date` field),
   constitution-mandated cache keys (`currentTweet`, `preloadedOriginator`, `preloadedDuplicateCheck`), the pause glyph
-  `‖`, and a ~400 ms debounce. These are confined to **Dependencies**, **Assumptions**, **Key Entities**, and a small
+  `⏸︎`, and progress timing guardrails (debounce/minimum visible phase duration). These are confined to
+  **Dependencies**, **Assumptions**, **Key Entities**, and a small
   number of FRs where the constitution itself names the artifacts (Article II.2 cache wipe). The user-facing
   acceptance scenarios and success criteria remain behavior-focused and technology-agnostic. This matches the
   project's established spec convention and was reviewed as acceptable; it is not an inadvertent leak.

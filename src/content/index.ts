@@ -39,9 +39,9 @@ class ContentOrchestrator {
       debugLog(`ContentOrchestrator received message: ${message.type}`);
 
       if (message.type === MessageType.SHOW_OVERLAY) {
-        this.showOverlay().then(() => sendResponse({ success: true })).catch(error => {
-          console.error('Error showing overlay', error);
-          sendResponse({ success: false, error: error?.message || 'Failed to show overlay' });
+        this.toggleOverlay().then(visible => sendResponse({ success: true, visible })).catch(error => {
+          console.error('Error toggling overlay', error);
+          sendResponse({ success: false, error: error?.message || 'Failed to toggle overlay' });
         });
         return true;
       }
@@ -135,6 +135,16 @@ class ContentOrchestrator {
     const data = await this.getDataWithRetry(forceRefresh ? 3 : 1);
     this.overlay.show(this.activeAdapter.id);
     this.overlay.render(data);
+  }
+
+  private async toggleOverlay(): Promise<boolean> {
+    if (this.overlay?.isVisible()) {
+      this.overlay.hide();
+      return false;
+    }
+
+    await this.showOverlay();
+    return true;
   }
 
   private async extractLatestData(forceRefresh = false): Promise<TwitterData | null> {

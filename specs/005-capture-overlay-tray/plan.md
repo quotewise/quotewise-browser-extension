@@ -17,8 +17,10 @@ all **client-only** (no backend change required for P1/P2):
    account menu; add a global **Private mode** that suppresses *all* capture/pre-action background network calls
    (the Article II.1 user-controlled-preload switch), with a one-time first-run notice rendered inside the
    overlay on the first eligible explicit open (never on page load — Article VII.1).
-3. **Progress** — staged status text ("Checking…" → "Submitting…" → "Confirming…") on the submit flow, gated by a
-   ~400 ms debounce so fast captures show nothing; spinner suppressed under `prefers-reduced-motion`.
+3. **Progress** — a single submit progress surface: the button stays in the action state (`Submitting...`) while a
+   dedicated progress area shows `Checking quote` → `Saving to Quotewise` → `Confirming` with a linear indeterminate
+   bar above the button. Long waits may show a rotating, tentative `Quotewise may be ...` secondary line. Submit
+   progress renders perceptibly; reduced motion makes the bar static while preserving text.
 4. **Predictable controls** — re-anchor refresh/close to the top-right, **top-aligned**, of the whole tray across
    collapsed and expanded states.
 5. **Provenance-aware "similar" flow** — replace the read-only near-match badge with a **word-level diff** of
@@ -55,12 +57,13 @@ page is a new webpack entry (`options/index.ts`) bundled to a single file (Const
 redefine — `tests/setup.ts` already stubs `chrome.runtime.getManifest` → `Quotewise [DEV]`). New suites:
 - **Deterministic (test-first, Article VI.1)**: settings store get/set/merge + `onChanged` propagation; Private-mode
   gate on the preflight entry points; logout/clear-data cache-wipe vs. preference-preservation; Paused resolver
-  truth-table rows; staged-progress phase machine + debounce; word-level diff algorithm; add-sighting date-gate.
+  truth-table rows; submit progress surface + phase machine + long-wait copy; word-level diff algorithm;
+  add-sighting date-gate.
 - **Characterization (Article VI.2)**: tray markup snapshots proving the metric row is gone, controls are top-right
   in both collapsed/expanded states, and the diff renders against captured HTML/text fixtures.
 
 **Target Platform**: Chrome (Manifest V3). Adds an `options_ui` surface (full page) alongside the existing
-background service worker + content script; the toolbar icon click still opens the in-page overlay (no popup).
+background service worker + content script; the toolbar icon click toggles the in-page overlay (no popup).
 
 **Project Type**: Single-project browser extension (MV3). Background + content + (new) options entry, each bundled
 to a single file (`splitChunks: false`).
@@ -68,8 +71,9 @@ to a single file (`splitChunks: false`).
 **Performance Goals**: Settings reads are O(1) `chrome.storage.sync.get`; cross-surface propagation is event-driven
 (`onChanged`), not polled. The Private-mode gate is a boolean check before any capture/preflight scheduling — when
 ON it **eliminates** preflight/duplicate/originator egress (SC-005), while auth-maintenance traffic such as token
-refresh/session checks may continue. Staged progress only renders after a ~400 ms debounce so the fast path has zero
-added work/flicker.
+refresh/session checks may continue. Submit progress is transient UI only: it can render immediately for explicit
+submits, holds phases briefly so they are perceptible, can rotate tentative long-wait copy, and still supports
+debounced rendering for non-submit progress.
 
 **Constraints**:
 - **Article II.1**: Private mode ON ⇒ zero capture/pre-action egress for passive browsing *and* on overlay open
@@ -127,14 +131,17 @@ This feature is the constitution's own privacy lever made real, so most articles
   preserving idempotent/re-entrant handlers (V.1). API drift: missing `matches[].text` → degrade to read-only badge;
   missing published date → hide add-sighting (V.2). No `splitChunks` change (V.3).
 - **Article VI — Quality & Testing**: **PASS (TDD).** All deterministic logic (settings store, Private-mode gate,
-  logout wipe, Paused resolver, progress/debounce machine, word-diff, date-gate) is **test-first** (VI.1). Tray/diff
+  logout wipe, Paused resolver, submit progress machine, long-wait copy, word-diff, date-gate) is **test-first**
+  (VI.1). Tray/diff
   UI is covered by fixture-based characterization snapshots (VI.2). Any bug found mid-implementation begins with a
   failing repro (VI.2).
 - **Article VII — User Experience**: **CORE.** No on-load injection — first-run notice appears only inside the
   overlay on explicit open (FR-043, VII.1). Top-anchored controls and the overlay cause no host-page layout shift
   and stay dismissable (FR-010/011, VII.1). Every new affordance is keyboard-operable, glyph/text-redundant (diff
   markers + Paused glyph, not color), visible-focus, ARIA-labelled, honoring reduced-motion/contrast (FR-011/022/
-  072/100, VII.2). Copy is honest: progress never shows success before confirmation; the add-sighting label reflects
+  072/100, VII.2). Copy is honest: progress never shows success before confirmation, and detailed submit phase copy
+  appears in one progress area above the button rather than competing with it; long-wait copy uses tentative
+  `may be` language; the add-sighting label reflects
   what the backend actually does (a *sighting*, not a fabricated "variant") (FR-022/023/083, VII.3).
 - **Article VIII — Platform Scope**: **PASS.** Twitter/X only; all changes live in shared tray/settings code or
   behind the existing `TwitterAdapter`. No speculative multi-platform abstraction (VIII).
@@ -162,7 +169,7 @@ specs/005-capture-overlay-tray/
 │   ├── messages.md                  # new MessageType additions
 │   ├── options-page.md              # options_ui surface + tray account menu
 │   ├── private-mode-and-toolbar.md  # Private-mode gating + Paused state (spec-004 amendment)
-│   ├── progress-and-submit.md       # staged progress phase machine + debounce
+│   ├── progress-and-submit.md       # submit progress surface + phase machine
 │   └── similar-diff.md              # word-level diff + add-sighting date-gate
 └── tasks.md             # Phase 2 — created by /speckit-tasks (NOT here)
 ```
@@ -179,21 +186,21 @@ src/
 │   │   └── components/
 │   │       ├── quote-preview.ts            # EDIT: keyboard/focus/reduced-motion hardening (FR-011/100)
 │   │       ├── duplicate-badge.ts          # EDIT: near-match → render word-diff + view link, no % (FR-070..073)
-│   │       ├── action-button.ts            # EDIT: staged progress states + retry (FR-020..023)
+│   │       ├── action-button.ts            # EDIT: stable submit/login states + retry (FR-020..023)
 │   │       ├── originator-lookup.ts        # (unchanged behavior; gated by Private mode upstream)
-│   │       ├── account-menu.ts             # NEW: tray account menu (logout, private toggle, open settings) (FR-051)
+│   │       ├── account-menu.ts             # NEW: tray account menu (auth action, private toggle, open settings) (FR-051)
 │   │       ├── first-run-notice.ts         # NEW: one-time in-overlay notice (FR-043)
-│   │       ├── progress-indicator.ts       # NEW: debounced staged-progress view (FR-020..022)
+│   │       ├── progress-indicator.ts       # NEW: linear-bar staged progress view (FR-020..022)
 │   │       └── similar-diff.ts             # NEW: word-diff renderer + add-sighting affordance (FR-070..083)
 │   └── common.ts
 ├── options/                                # NEW surface (webpack entry)
-│   ├── index.ts                            # options page controller (account, logout, private, clear-data, collections)
+│   ├── index.ts                            # options page controller (account, auth action, private, clear-data, collections)
 │   └── views/                              # (optional) small view helpers
 ├── settings/
 │   └── settings-store.ts                   # NEW: typed chrome.storage.sync wrapper + onChanged subscription (FR-053)
 ├── utils/
 │   ├── word-diff.ts                        # NEW: hand-rolled LCS word-level diff (no dep) (FR-070)
-│   ├── debounce.ts                         # REUSE for staged progress (FR-021)
+│   ├── debounce.ts                         # REUSE for optional debounced progress (FR-021)
 │   └── duplicate-status.ts                 # (reuse mapping for near-match detection)
 ├── background/
 │   ├── service-worker.ts                   # EDIT: Private-mode gate on preflight entry points (FR-040/044);
@@ -203,7 +210,7 @@ src/
 │   ├── storage-cleanup.ts                  # EDIT: centralize the user-identifying cache key set (logout/clear reuse)
 │   └── api-handler.ts                      # EDIT: collections list + create-with-collection delegation (US7)
 ├── config/
-│   ├── icon-states.ts                      # EDIT (spec-004): add ICON_STATES.Paused (grey owl + ‖) (FR-090)
+│   ├── icon-states.ts                      # EDIT (spec-004): add ICON_STATES.Paused (grey owl + ⏸︎) (FR-090)
 │   └── environment.ts                      # (reuse DEBUG_MODE for metric diagnostics gating, FR-002)
 ├── api/
 │   └── quotewise-api.ts                    # EDIT: thread collection id into submit; reuse listCollections() (US7)

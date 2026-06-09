@@ -4,6 +4,7 @@ import {
   classifyDuplicateSighting,
   getMatchForDuplicateSightingState
 } from '../../../utils/duplicate-status';
+import { buildSimilarMatchView, renderSimilarDiff } from './similar-diff';
 
 interface SubmitDirective {
   type: 'submit';
@@ -30,7 +31,11 @@ export class DuplicateBadge {
     private callbacks: DuplicateBadgeCallbacks
   ) {}
 
-  update(state: { checking: true } | { result: DuplicateCheckResult } | null): void {
+  update(
+    state: { checking: true } | { result: DuplicateCheckResult } | null,
+    capturedText?: string,
+    tweetDate?: string | null,
+  ): void {
     this.container.innerHTML = '';
     this.container.className = 'duplicate-badge';
     this.container.style.marginLeft = '';
@@ -45,6 +50,21 @@ export class DuplicateBadge {
     }
 
     const { result } = state;
+    const similarView = capturedText
+      ? buildSimilarMatchView(result, capturedText, tweetDate)
+      : null;
+    if (similarView?.diff) {
+      renderSimilarDiff(this.container, similarView);
+      if (similarView.existingQuoteUrl) {
+        this.callbacks.onSubmitStateChange({
+          type: 'view_quote',
+          url: similarView.existingQuoteUrl,
+          text: 'View Quote',
+        });
+      }
+      return;
+    }
+
     const sightingState = classifyDuplicateSighting(result);
     const match = getMatchForDuplicateSightingState(result, sightingState);
     const quotePageUrl = this.getQuotePageUrl(match);

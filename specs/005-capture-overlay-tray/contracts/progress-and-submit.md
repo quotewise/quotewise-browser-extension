@@ -1,6 +1,6 @@
-# Contract: Staged Submit Progress + Logout/Clear-Data Wipe
+# Contract: Submit Progress + Logout/Clear-Data Wipe
 
-## A. Staged progress phase machine — FR-020..023, SC-003
+## A. Submit progress surface — FR-020..023, SC-003
 
 `src/content/ui/components/progress-indicator.ts` (rendered inside the tray, driven by `action-button.ts`/
 `overlay-bar.ts` submit flow).
@@ -13,26 +13,44 @@ idle ──submit──> checking ──> submitting ──> confirming ──> 
 
 | Phase        | Visible text   | Trigger |
 |--------------|----------------|---------|
-| `checking`   | "Checking…"    | duplicate/preflight for the explicit submit in flight |
-| `submitting` | "Submitting…"  | create-quote request in flight |
-| `confirming` | "Confirming…"  | awaiting create confirmation (+ optional collection add) |
+| `checking`   | "Checking quote" | duplicate/preflight for the explicit submit in flight |
+| `submitting` | "Saving to Quotewise" | create-quote request in flight |
+| `confirming` | "Confirming" | awaiting create confirmation (+ optional collection add) |
 | `success`    | success result | only after create confirmed |
 | `error`      | honest error + Retry | any phase failure |
 
 ### Rules
-- **Debounce (FR-021)**: staged text renders only after **~400 ms** in a non-terminal phase. A submit that resolves
-  within the window shows **no** staged text — just the final success/error (SC-003 fast path).
-- **Reduced motion (FR-022)**: any spinner is suppressed under `prefers-reduced-motion`; phase text alone conveys
-  progress.
+- **Single progress locus (FR-020)**: the button carries only the action state (`Submit Quote` → `Submitting...` →
+  `Done!`/`Retry`). Detailed phase copy lives in the progress indicator so the user does not have to track two
+  changing text surfaces at once.
+- **Indicator shape (FR-020/022)**: pending phases render the phase text, an optional secondary wait line, and a
+  subtle indeterminate linear bar. The text is not placed inside the bar segment; the bar is decorative and
+  `aria-hidden`.
+- **Placement (FR-020)**: the progress indicator renders in the action column above the submit button so progress and
+  action state form one vertical focus area.
+- **Submit visibility (FR-021)**: explicit submit progress may render immediately, and the tray keeps each visible
+  pending phase on screen briefly (about 350 ms while the tray is visible) so the cycle is perceptible instead of a
+  flicker. The component still supports a debounce for non-submit or background progress where a flash would be
+  distracting.
+- **Secondary wait copy (FR-020/021)**: if a submit waits long enough, a secondary line may rotate through
+  non-assertive hints such as `Quotewise may be comparing against known quotes`. These lines are entertainment/
+  reassurance copy, not an API progress contract, and MUST use tentative language (`may be`) rather than claiming a
+  specific backend step completed.
+- **Reduced motion (FR-022)**: progress still renders text, but the linear bar animation is disabled/static under
+  `prefers-reduced-motion`.
 - **Honesty (FR-022/023, VII.3)**: `success` is reachable **only** from `confirming` after confirmation. An error at
   any phase shows an honest message + a retry affordance and **MUST NOT** show success/"Done".
-- Reuse `src/utils/debounce.ts` for the window; reuse `action-button.ts` for the terminal Submit/Retry/Login states
-  (extend, don't duplicate).
+- Reuse `src/utils/debounce.ts` for debounced non-submit progress; reuse `action-button.ts` for the terminal
+  Submit/Retry/Login states (extend, don't duplicate).
 
 ### Test contract (test-first)
-- Fast path: phases reached before 400 ms produce no progress DOM; only final result renders.
-- Slow path: each phase renders its text in order and clears on completion.
-- Reduced motion: no spinner element/animation; text present.
+- Explicit submit path: the button remains stable as `Submitting...` while the progress area renders
+  `Checking quote` → `Saving to Quotewise` → `Confirming`, then clears on completion; the indicator is above the
+  button in the action column.
+- Long wait path: secondary `Quotewise may be ...` copy appears only after a delay, rotates while pending, and clears
+  on success/error/reset.
+- Debounced path: phases reached before the configured debounce produce no progress DOM; only final result renders.
+- Reduced motion: linear bar animation is disabled/static; text present.
 - Error at `checking`/`submitting`/`confirming` → error+retry, never success.
 
 ## B. Logout — FR-030/031/032/034, Article II.2/III.3

@@ -66,8 +66,8 @@ sends a new `OPEN_OPTIONS_PAGE` message; the **service worker** calls `chrome.ru
   rather than calling the API in the tray.
 - No `html-webpack-plugin` is introduced — `options.html` is a static shell copied via the existing
   `copy-webpack-plugin`, keeping the build uniform and the bundle single-file (Constitution V.3).
-- The toolbar icon click is **unchanged** (still opens the in-page overlay); no `default_popup` is added (FR-052,
-  spec-004 contract preserved).
+- The toolbar icon click stays bound to the in-page overlay and now **toggles** it: open when hidden, close when
+  visible. No `default_popup` is added (FR-052, spec-004 contract preserved).
 
 **Alternatives considered**:
 - *Browser-action popup* — **explicitly out of scope** (spec) and would replace the icon-click overlay behavior.
@@ -137,23 +137,35 @@ before any post-logout cache write.
 
 ---
 
-## R6. Staged submit progress — debounced phase machine, reduced-motion aware
+## R6. Submit progress — single progress surface, reduced-motion aware
 
 **Decision**: Model submit as an explicit phase machine `idle → checking → submitting → confirming →
-success | error`. Render staged text only after a **~400 ms** debounce (reuse `utils/debounce.ts`); operations
-faster than the window show no progress (just the final result). Suppress any spinner under
-`prefers-reduced-motion` and convey progress by text alone. On error at any phase, show an honest error + retry and
-**never** a success/"Done" state.
+success | error`. Keep the button as the action-state surface (`Submit Quote` → `Submitting...` → `Done!`/`Retry`)
+and render detailed phase copy only in the progress area: `Checking quote` → `Saving to Quotewise` → `Confirming`.
+Render that progress area above the button in the action column. Explicit submit progress can render immediately and
+hold each visible phase briefly so users see the cycle. If a wait lasts long enough, rotate a secondary
+`Quotewise may be ...` line to give the user something to watch; this copy is intentionally tentative and not an API
+progress contract. The progress component still supports the **~400 ms** debounce (via `utils/debounce.ts`) for
+non-submit/background progress where a flash would be distracting. Use an indeterminate linear bar as decorative
+motion, disabling or making it static under `prefers-reduced-motion`. On error at any phase, show an honest error +
+retry and **never** a success/"Done" state.
 
 **Rationale**:
-- FR-020..023 + SC-003. Today `action-button.ts` only flips to a single "Submitting…" label (code map) — there is
-  no phasing, no debounce, no reduced-motion guard.
-- The ~400 ms threshold is the spec's tunable starting point (Assumptions); it is the debounce window, validated for
-  flicker-free fast captures.
-- Honesty (VII.3): "Confirming…" precedes any success; success is shown only after the create call resolves.
+- FR-020..023 + SC-003. Showing phase text in both the button and a progress area creates two changing status
+  surfaces; a single detailed progress locus above the button is easier to scan and matches common UI guidance for
+  long-running actions.
+- Secondary long-wait copy gives the user something to watch while the single HTTP request is pending, without
+  pretending the extension can observe live backend internals.
+- The submit flow needs visible confirmation that work is moving, so explicit submit progress is allowed to render
+  immediately with a short minimum visible duration. The older debounce-only behavior made fast phase changes look
+  like a glitch or disappear entirely.
+- Honesty (VII.3): `Confirming` precedes any success; success is shown only after the create call resolves.
 
 **Alternatives considered**:
-- *Always-on spinner* — rejected: flickers on fast captures and ignores reduced-motion.
+- *Always-on spinner* — rejected: reads as generic waiting, flickers on fast captures, and needs a reduced-motion
+  fallback.
+- *Changing the button text for every phase* — rejected: it splits progress across the button and another status
+  surface, increasing confusion.
 - *Indeterminate %s* — rejected: dishonest precision; staged text reflects the actual steps.
 
 ---
@@ -187,7 +199,7 @@ link from `matches[].url`/`short_code`. Show only for near matches (`recommendat
 
 ## R8. Toolbar "Paused" state — minimal amendment to spec-004's single resolver
 
-**Decision**: Add `ICON_STATES.Paused = { iconVariant: 'grey', badgeText: '‖', badgeColor: <neutral>, title:
+**Decision**: Add `ICON_STATES.Paused = { iconVariant: 'grey', badgeText: '⏸︎', badgeColor: <neutral>, title:
 'Quotewise — paused (private mode)', scope: 'global' }` to `config/icon-states.ts`. Add **one** branch to
 `resolveIconPresentation()` immediately after the `UNAUTHENTICATED → LoggedOut` check (resolver line 45-47) and
 before the `Loading` check (line 49): `if (privateMode) return ICON_STATES.Paused;`. Thread a `privateMode: boolean`
@@ -207,7 +219,7 @@ churn; both satisfy FR-090/091 — the parameter form is the recommended, more h
 **Rationale**:
 - Spec scope boundary: 004 owns the resolver/table/precedence; 005 *adds* one state and its slot, folded back into
   004's contract, preserving the **single authoritative resolver** (no parallel logic).
-- Grey owl already exists (`GREY_ICON_PATHS`); badge `‖` + title make it decodable by artwork+glyph, not color
+- Grey owl already exists (`GREY_ICON_PATHS`); badge `⏸︎` + title make it decodable by artwork+glyph, not color
   (FR-090, VII.2). Badge text is an image → the `setTitle` carries the meaning for AT.
 
 **Alternatives considered**:

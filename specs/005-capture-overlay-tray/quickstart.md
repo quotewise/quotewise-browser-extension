@@ -30,12 +30,16 @@ Load: `chrome://extensions` → Developer mode → **Load unpacked** → select 
 2. **Expect**: refresh + close stay **top-right, top-aligned** in both states; no host-page layout shift; Tab reaches
    both with visible focus; close works via keyboard.
 
-### US3 — Staged progress (FR-020..023, SC-003)
+### US3 — Submit progress (FR-020..023, SC-003)
 1. DevTools → Network → throttle (e.g. Slow 3G). Submit a quote.
-2. **Expect**: after ~400 ms, "Checking…" → "Submitting…" → "Confirming…" advance, then success.
-3. Fast connection: submit → **no** progress flash, just the result.
-4. `prefers-reduced-motion` (DevTools rendering emulation): no spinner; text-only progress.
-5. Force an error mid-flow → honest error + Retry; **never** a success state.
+2. **Expect**: the button changes to `Submitting...`; the progress area appears above it, shows a linear bar, and
+   advances `Checking quote` → `Saving to Quotewise` → `Confirming`, then success (`Done!`) or error.
+3. Fast connection: submit → phases remain perceptible rather than flashing as a glitch; no second competing status
+   surface appears.
+4. Long wait: after a short delay, a secondary `Quotewise may be ...` line appears and rotates while pending.
+5. `prefers-reduced-motion` (DevTools rendering emulation): the bar is static/no animation; text still conveys
+   progress.
+6. Force an error mid-flow → honest error + Retry; **never** a success state.
 
 ### US4 — Logout & clear data (FR-030..034, SC-004)
 1. Authenticated → tray account menu → **Log out** (and repeat from options page).
@@ -43,14 +47,15 @@ Load: `chrome://extensions` → Developer mode → **Load unpacked** → select 
    `chrome.storage.local` shows the user-identifying cache keys gone; `oauth_*` cleared; `token-refresh` alarm
    cancelled; device prefs (`privateMode`/`autoAddToCollection`/`firstRunNoticeShown`) intact;
    `settings.defaultCollectionId` null.
-3. **Clear my data** (options): same cache wipe + `defaultCollectionId` null, **login unchanged**.
-4. Confirm no token/secret string appears in any console log/diagnostic.
+3. **Expect**: the auth action briefly shows `Logging out...`, then changes to `Log in` with a signed-out status.
+4. **Clear my data** (options): same cache wipe + `defaultCollectionId` null, **login unchanged**.
+5. Confirm no token/secret string appears in any console log/diagnostic.
 
 ### US5 — Private mode + first-run notice (FR-040..044, SC-005/006)
 1. Private mode OFF (default), authenticated, open a tweet → automatic checks run; spec-004 quote-status icon shows.
 2. Turn **Private mode ON** (tray menu or options).
 3. **Expect**: browse any number of tweets incl. opening the overlay → **zero** preflight/duplicate/originator
-   Quotewise requests; toolbar shows **Paused** (grey owl + `‖`, title "Quotewise — paused (private mode)"); the
+   Quotewise requests; toolbar shows **Paused** (grey owl + `⏸︎`, title "Quotewise — paused (private mode)"); the
    overlay shows a **"Check now"** control; activating it runs the lookups (only then), Private mode stays ON, toolbar
    stays Paused. Auth-maintenance traffic such as token refresh/session checks is outside this check.
 4. First-run notice: as a fresh synced profile, the first explicit overlay open while authenticated and Private mode
@@ -59,9 +64,10 @@ Load: `chrome://extensions` → Developer mode → **Load unpacked** → select 
 
 ### US6 — Settings page & account menu (FR-050..053)
 1. Open the options page (chrome://extensions → Details → Extension options).
-2. **Expect**: account identity, working Log out, Private-mode toggle, Clear my data.
-3. Tray account menu: quick Log out, Private toggle, **Open settings** (opens the options page).
-4. Click the toolbar icon → still opens the **overlay** (no popup).
+2. **Expect**: account identity, state-aware **Log out**/**Log in** action, Private-mode toggle, Clear my data.
+3. Tray account menu: state-aware auth action, Private toggle, **Open settings** (opens the options page).
+4. Click the toolbar icon with the tray closed → opens the **overlay**; click it again while the tray is open →
+   closes the overlay (no popup).
 5. Change Private mode on the options page → tray menu + toolbar reflect it **without reload** (via `onChanged`).
 
 ### US7 — Default collection auto-add (FR-060..063, SC-007) — P2
@@ -92,7 +98,7 @@ bun run test -- settings-store          # sync get/set/merge + onChanged (settin
 bun run test -- private-mode            # SW gate on preflight entry points + first-run notice trigger
 bun run test -- icon-state-resolver     # Paused precedence rows (spec-004 amendment)
 bun run test -- logout                  # cache wipe vs. preference preservation + in-flight guard
-bun run test -- progress                # debounced phase machine (progress-and-submit contract)
+bun run test -- progress                # submit progress surface + phase machine (progress-and-submit contract)
 bun run test -- word-diff               # LCS word diff (similar-diff contract)
 ```
 

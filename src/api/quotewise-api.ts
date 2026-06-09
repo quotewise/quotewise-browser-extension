@@ -308,7 +308,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         };
       }
 
-      const result = await this.makeRequest<{ id: string; message?: string }>(
+      const result = await this.makeRequest<{ id: string; message?: string; collection_warning?: string }>(
         '/v1/quotes/',
         {
           method: 'POST',
@@ -319,7 +319,8 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       return {
         success: true,
         message: result.message || 'Quote submitted successfully',
-        quoteId: result.id
+        quoteId: result.id,
+        collectionWarning: result.collection_warning
       };
     } catch (error) {
       console.error('Error submitting quote:', error);

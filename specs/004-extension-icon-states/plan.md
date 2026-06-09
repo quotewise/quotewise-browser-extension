@@ -198,7 +198,7 @@ assets/
 
 public/icons/                         # GENERATED + committed (copy-webpack-plugin → dist/icons/)
 ├── icon{16,32,48,128}.png            # color owl (regenerated from owl.svg)
-└── icon{16,32,48,128}-grey.png       # NEW — greyed owl (#dcdcdc on #6f6f6f)
+└── icon{16,32,48,128}-grey.png       # NEW — greyed owl (#6b7280 on #e5e7eb)
 
 scripts/
 └── generate-icons.mjs                # NEW — resvg rasterize owl.svg → public/icons/*.png

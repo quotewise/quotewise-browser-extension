@@ -82,26 +82,32 @@ export const USER_IDENTIFYING_CACHE_KEYS = [
 
 ---
 
-## 3. `CaptureProgressPhase` — staged submit state (in-memory, derived)
+## 3. `CaptureProgressPhase` — submit progress state (in-memory, derived)
 
 ```typescript
 // src/content/ui/components/progress-indicator.ts (new)
 export type CaptureProgressPhase =
   | 'idle'
-  | 'checking'     // "Checking…"   (duplicate/preflight resolving for the explicit submit)
-  | 'submitting'   // "Submitting…" (create-quote in flight)
-  | 'confirming'   // "Confirming…" (awaiting create confirmation / collection add)
+  | 'checking'     // "Checking quote" (duplicate/preflight resolving for the explicit submit)
+  | 'submitting'   // "Saving to Quotewise" (create-quote in flight)
+  | 'confirming'   // "Confirming" (awaiting create confirmation / collection add)
   | 'success'      // terminal, only after confirmed
   | 'error';       // terminal, honest error + retry; NEVER shows after success
 ```
 
 - **Not persisted** (transient UI state; SW restart mid-submit is handled by idempotent handlers, V.1).
-- **Debounce**: staged text renders only after ~400 ms in a non-terminal phase (FR-021). Phases reached *before* the
-  window elapses produce no flash.
+- **Rendering**: explicit submit progress can render immediately in the dedicated progress area while the button
+  remains the stable action-state surface (`Submitting...`). The progress area is mounted above the button in the
+  action column. Non-submit/background progress can still use the component debounce (~400 ms) to avoid transient
+  flashes.
+- **Long-wait copy**: after a delay, pending phases may expose a secondary rotating string from a fixed list of
+  tentative `Quotewise may be ...` hints. This is not persisted and is cleared on success/error/reset.
+- **Minimum visibility**: while the tray is visible, submit phases remain visible briefly so the user can perceive the
+  cycle instead of seeing a glitch-like transition.
 - **Transitions**: `idle → checking → submitting → confirming → success`; any phase → `error` on failure. `success`
   is reachable only from `confirming` after the create call resolves (VII.3 honesty).
-- **Reduced motion**: any spinner is suppressed under `prefers-reduced-motion`; the phase text alone conveys
-  progress (FR-022).
+- **Reduced motion**: the linear progress-bar animation is disabled/static under `prefers-reduced-motion`; phase text
+  alone conveys progress (FR-022).
 
 ---
 
@@ -163,7 +169,7 @@ Extends the existing `ICON_STATES` map in `config/icon-states.ts` (shape unchang
 // src/config/icon-states.ts (new entry)
 Paused: {
   iconVariant: 'grey',                 // reuse existing GREY_ICON_PATHS owl
-  badgeText: '‖',                      // pause glyph (decodable by glyph, not color)
+  badgeText: '⏸︎',                     // U+23F8 text presentation; decodable by glyph, not color
   badgeColor: '<neutral grey>',        // align with other grey/neutral badges
   title: 'Quotewise — paused (private mode)',
   scope: 'global',                     // Private mode is global, not per-tab

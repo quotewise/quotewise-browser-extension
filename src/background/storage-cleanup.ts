@@ -5,6 +5,14 @@
 
 import { debugLog } from '../config/environment';
 
+export const USER_IDENTIFYING_CACHE_KEYS = [
+  'currentTweet',
+  'preloadedOriginator',
+  'preloadedDuplicateCheck',
+  'lastAuthCheck',
+  'originator_search_history',
+] as const;
+
 interface StoredTweetData {
   data: Record<string, unknown>;
   timestamp: number;

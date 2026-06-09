@@ -24,7 +24,8 @@ service-worker switch pattern (`service-worker.ts` `onMessage`). `sendResponse` 
 - `CHECK_DUPLICATE` / `LOOKUP_ORIGINATOR_BY_HANDLE` / `SUBMIT_QUOTE` — reused; `CHECK_NOW` triggers the same
   duplicate/originator path on explicit user action under Private mode.
 - `GET_DIAGNOSTICS` — reused to carry developer-only metrics (FR-002), `DEBUG_MODE`-gated.
-- `SHOW_OVERLAY` — icon click still opens the overlay (FR-052); unchanged.
+- `SHOW_OVERLAY` — toolbar icon click toggles the in-page overlay: open when hidden, close when visible (FR-052).
+  The message shape is unchanged; the content handler may respond with the resulting visibility.
 - `OPEN_POPUP` — legacy message path, if retained, is not used by toolbar icon-click and does not justify adding a
   `default_popup`.
 

@@ -179,4 +179,15 @@ describe('ActionButton', () => {
     const btn2 = container.querySelector('button');
     expect(btn1).toBe(btn2);
   });
+
+  it('sets and clears aria-busy on the active button', () => {
+    actionButton.showSubmit(true);
+    const btn = container.querySelector('button') as HTMLButtonElement;
+
+    actionButton.setBusy(true);
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+
+    actionButton.setBusy(false);
+    expect(btn.hasAttribute('aria-busy')).toBe(false);
+  });
 });

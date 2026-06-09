@@ -51,10 +51,16 @@ export enum MessageType {
   // UI control
   OPEN_POPUP = 'OPEN_POPUP',
   SHOW_OVERLAY = 'SHOW_OVERLAY',
+  OPEN_OPTIONS_PAGE = 'OPEN_OPTIONS_PAGE',
+  CHECK_NOW = 'CHECK_NOW',
 
   // OAuth authentication
   OAUTH_LOGIN = 'OAUTH_LOGIN',
   OAUTH_LOGOUT = 'OAUTH_LOGOUT',
+
+  // Privacy and settings
+  CLEAR_USER_DATA = 'CLEAR_USER_DATA',
+  LIST_COLLECTIONS = 'LIST_COLLECTIONS',
 
   // Auth state management (centralized)
   AUTH_STATE_GET = 'AUTH_STATE_GET',           // Request current auth state
@@ -72,6 +78,20 @@ export interface ExtensionMessage {
   data?: any;
   requestId?: string;
 }
+
+export interface Settings {
+  privateMode: boolean;
+  autoAddToCollection: boolean;
+  defaultCollectionId: string | null;
+  firstRunNoticeShown: boolean;
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  privateMode: false,
+  autoAddToCollection: false,
+  defaultCollectionId: null,
+  firstRunNoticeShown: false,
+};
 
 // Twitter/X specific types
 export interface TwitterData {

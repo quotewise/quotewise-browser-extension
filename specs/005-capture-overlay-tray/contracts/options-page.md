@@ -9,7 +9,8 @@
 }
 ```
 
-No `default_popup` is added — the toolbar icon click still opens the in-page overlay (FR-052). No new permission.
+No `default_popup` is added — the toolbar icon click toggles the in-page overlay (open when hidden, close when
+visible) (FR-052). No new permission.
 
 ## Build wiring (`webpack.config.js`)
 
@@ -25,7 +26,7 @@ Renders and wires:
 | Control                     | Behavior | FR |
 |-----------------------------|----------|----|
 | Account identity            | Shows signed-in username (from auth state); shows logged-out state otherwise | FR-050.1 |
-| Log out                     | Sends `OAUTH_LOGOUT`; on success reflects logged-out state | FR-030 |
+| Auth action                 | Shows `Log out` when authenticated and `Log in` when signed out/session-expired/permissions-needed; sends `OAUTH_LOGOUT` or `OAUTH_LOGIN`; reflects the resulting state | FR-030 |
 | Private mode toggle         | `updateSettings({ privateMode })`; reflects current value; live via `onChanged` | FR-040/050 |
 | Clear my data               | Sends `CLEAR_USER_DATA`; confirms honestly; does not change login | FR-033 |
 | Default-collection picker   | `LIST_COLLECTIONS` → populate; preselect server `default_collection_id`; honest empty/error state | FR-060 |
@@ -38,7 +39,8 @@ Renders and wires:
 ## Tray account menu (`src/content/ui/components/account-menu.ts`) — FR-051
 
 Lightweight menu opened from the tray. Exposes:
-- **Log out** (sends `OAUTH_LOGOUT`)
+- **Auth action** — `Log out` when authenticated, `Log in` otherwise; shows a short busy state
+  (`Logging out...`/`Logging in...`) and then reflects the resulting auth state
 - **Private mode** toggle (`updateSettings({ privateMode })`)
 - **Open settings** (sends `OPEN_OPTIONS_PAGE` → SW calls `chrome.runtime.openOptionsPage()`)
 
@@ -59,11 +61,13 @@ re-resolves the toolbar (→ Paused) without reload, and vice-versa.
 
 ## Test contract (test-first / characterization)
 
-- Manifests contain `options_ui` and no `default_popup`; toolbar `chrome.action.onClicked` still sends
-  `SHOW_OVERLAY` to the active tab, and the legacy `OPEN_POPUP` message path is not used by icon-click.
-- Options controls present and labelled; logout sends `OAUTH_LOGOUT`; clear-data sends `CLEAR_USER_DATA`.
+- Manifests contain `options_ui` and no `default_popup`; toolbar `chrome.action.onClicked` sends `SHOW_OVERLAY` to
+  the active tab, the content handler toggles the tray when it is already visible, and the legacy `OPEN_POPUP`
+  message path is not used by icon-click.
+- Options controls present and labelled; auth action sends `OAUTH_LOGOUT`/`OAUTH_LOGIN` according to current auth
+  state; clear-data sends `CLEAR_USER_DATA`.
 - Picker preselects `default_collection_id`; empty/error list yields the honest empty/error state, and auto-add is
   inert on submit.
-- Account menu logout sends `OAUTH_LOGOUT`; "Open settings" sends `OPEN_OPTIONS_PAGE` (never calls
-  `openOptionsPage` from the content script).
+- Account menu auth action sends `OAUTH_LOGOUT`/`OAUTH_LOGIN` according to current auth state; "Open settings" sends
+  `OPEN_OPTIONS_PAGE` (never calls `openOptionsPage` from the content script).
 - Changing Private mode in one surface updates the other via `onChanged` (no reload).

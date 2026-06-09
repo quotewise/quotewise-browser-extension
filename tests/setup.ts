@@ -3,10 +3,18 @@
  */
 
 
+type StorageChangeListener = (
+  changes: Record<string, chrome.storage.StorageChange>,
+  areaName: chrome.storage.AreaName
+) => void;
+
+const storageOnChangedListeners = new Set<StorageChangeListener>();
+
 // Mock Chrome APIs
 const mockChrome = {
   runtime: {
     sendMessage: jest.fn(),
+    openOptionsPage: jest.fn().mockResolvedValue(undefined),
     onMessage: {
       addListener: jest.fn()
     },
@@ -29,10 +37,34 @@ const mockChrome = {
       set: jest.fn().mockResolvedValue(undefined),
       remove: jest.fn().mockResolvedValue(undefined)
     },
+    sync: {
+      get: jest.fn().mockResolvedValue({}),
+      set: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn().mockResolvedValue(undefined)
+    },
     session: {
       get: jest.fn().mockResolvedValue({}),
       set: jest.fn().mockResolvedValue(undefined),
       remove: jest.fn().mockResolvedValue(undefined)
+    },
+    onChanged: {
+      addListener: jest.fn((listener: StorageChangeListener) => {
+        storageOnChangedListeners.add(listener);
+      }),
+      removeListener: jest.fn((listener: StorageChangeListener) => {
+        storageOnChangedListeners.delete(listener);
+      }),
+      emit: jest.fn((
+        changes: Record<string, chrome.storage.StorageChange>,
+        areaName: chrome.storage.AreaName
+      ) => {
+        for (const listener of [...storageOnChangedListeners]) {
+          listener(changes, areaName);
+        }
+      }),
+      reset: jest.fn(() => {
+        storageOnChangedListeners.clear();
+      })
     }
   },
   tabs: {

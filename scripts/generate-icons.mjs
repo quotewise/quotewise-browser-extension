@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const ICON_SIZES = [16, 32, 48, 128];
 const VARIANTS = [
   { suffix: '', background: '#304f50', owl: 'beige' },
-  { suffix: '-grey', background: '#6f6f6f', owl: '#dcdcdc' },
+  { suffix: '-grey', background: '#e5e7eb', owl: '#6b7280' },
 ];
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
