@@ -16,6 +16,7 @@ dist/
 build/
 
 # Environment variables
+.env*
 .env
 .env.local
 .env.development.local
@@ -59,6 +60,7 @@ logs
 *.pem
 
 # Temporary files
+*.tmp
 tmp/
 temp/
 .superpowers/

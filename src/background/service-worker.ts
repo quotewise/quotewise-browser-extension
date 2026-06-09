@@ -7,13 +7,14 @@
  */
 
 import { MessageType, ExtensionMessage, TwitterData } from '../types/index';
+import { DEFAULT_SETTINGS, type Settings } from '../types/chrome';
 import { initializeApiHandler } from './api-handler';
 import { AuthenticationMonitor } from './auth-monitor';
 import { initializeStorageCleanup } from './storage-cleanup';
 import { validateTwitterData, ValidationError } from '../utils/validators';
 import { DEBUG_MODE, debugLog, getWebBaseUrl, isProduction } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
-import { initiateOAuthFlow, logout } from '../auth/auth-flow';
+import { initiateOAuthFlow } from '../auth/auth-flow';
 import {
   initializeAuthStateManager,
   AuthStateManager,
@@ -25,6 +26,8 @@ import { applyIconPresentation, getIconApplicatorDiagnostics } from './icon-appl
 import { resolveIconPresentation, type IconPresentation } from './icon-state-resolver';
 import type { DuplicateCheckResult, PreflightOriginatorResult } from '../types/api';
 import type { CollectionBadgeInfo } from '../types/chrome';
+import { clearUserDataCaches, logoutAndClearUserData } from './privacy-cleanup';
+import { getSettings, onSettingsChanged } from '../settings/settings-store';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -43,6 +46,10 @@ const tabMissingOriginators = new Map<number, MissingOriginatorInfo>();
 const tabInFlightOperations = new Map<number, InFlightIconOperation>();
 const tabScopedPresentationTabIds = new Set<number>();
 let lastActiveTabId: number | null = null;
+let userDataWriteEpoch = 0;
+let logoutInProgress = false;
+let currentSettings: Settings = { ...DEFAULT_SETTINGS };
+let unsubscribeSettingsChanged: (() => void) | null = null;
 
 // Service worker startup is logged once after initialization completes
 
@@ -114,6 +121,7 @@ interface InFlightIconOperation {
   startedAt: number;
   timeoutAt?: number;
   handle?: string;
+  cacheWriteEpoch?: number;
 }
 
 interface PreflightDiagnostic {
@@ -215,6 +223,13 @@ interface RuntimeDiagnostics {
       timestamp?: number;
       authorUsername?: string;
       tweetId?: string | null;
+      metrics?: {
+        replies?: number;
+        retweets?: number;
+        likes?: number;
+        views?: number;
+        bookmarks?: number;
+      };
     } | null;
     preloadedDuplicateCheck: {
       url?: string;
@@ -260,6 +275,26 @@ function isTweetPageUrl(url?: string): boolean {
 
 function isSupportedPlatformUrl(url?: string): boolean {
   return !!url && SUPPORTED_PLATFORM_REGEX.test(url);
+}
+
+function markUserDataWipe(): void {
+  userDataWriteEpoch += 1;
+}
+
+function canWriteUserIdentifyingCache(epoch: number | undefined): boolean {
+  if (logoutInProgress) {
+    return false;
+  }
+
+  if (epoch !== undefined && epoch !== userDataWriteEpoch) {
+    return false;
+  }
+
+  return !authStateManager || authStateManager.isAuthenticated();
+}
+
+function isPrivateModeEnabled(): boolean {
+  return currentSettings.privateMode;
 }
 
 function tweetStatusId(url?: string): string | null {
@@ -478,6 +513,7 @@ async function startInFlightOperation(
     operationId: createOperationId(),
     trigger,
     startedAt: now,
+    cacheWriteEpoch: userDataWriteEpoch,
     ...(trigger === 'automatic-preflight' ? { timeoutAt: now + AUTOMATIC_PREFLIGHT_TIMEOUT_MS } : {}),
     ...(handle ? { handle } : {}),
   };
@@ -857,6 +893,13 @@ async function getStorageDiagnostics(): Promise<RuntimeDiagnostics['storage']> {
           timestamp: typeof currentTweet.timestamp === 'number' ? currentTweet.timestamp : undefined,
           authorUsername: currentTweet.data?.author?.username,
           tweetId: currentTweet.data?.platform_data?.tweet_id,
+          metrics: {
+            replies: currentTweet.data?.replies,
+            retweets: currentTweet.data?.retweets,
+            likes: currentTweet.data?.likes,
+            views: currentTweet.data?.views,
+            bookmarks: currentTweet.data?.bookmarks,
+          },
         }
         : null,
       preloadedDuplicateCheck: preloadedDuplicateCheck
@@ -977,7 +1020,7 @@ async function applyResolvedIconForTab(
     isTweetPage: isTweetPageUrl(url),
     isCheckInFlight: isCheckInFlightForTab(tabId, url),
     isOriginatorMissing: getMissingOriginatorForTab(tabId, url) !== null,
-  });
+  }, isPrivateModeEnabled());
 
   if (presentation.scope === 'tab') {
     tabScopedPresentationTabIds.add(tabId);
@@ -1027,13 +1070,49 @@ async function getAffectedTabs(): Promise<AffectedTab[]> {
   return [...tabsById.values()];
 }
 
+async function clearAutomaticWorkForPrivateMode(): Promise<void> {
+  for (const tabId of [...tweetExtractionRetryTimers.keys()]) {
+    clearTweetDataExtractionRetry(tabId);
+  }
+
+  automaticTweetExtractionRequests.clear();
+
+  for (const operation of [...tabInFlightOperations.values()]) {
+    if (
+      operation.trigger === 'automatic-preflight' ||
+      operation.trigger === 'automatic-originator-probe' ||
+      operation.trigger === 'automatic-originator-fallback'
+    ) {
+      await clearInFlightOperation(operation.tabId, {
+        operationId: operation.operationId,
+      });
+    }
+  }
+}
+
+async function applySettingsPresentation(next: Settings, prev: Settings): Promise<void> {
+  currentSettings = next;
+
+  if (next.privateMode && !prev.privateMode) {
+    await clearAutomaticWorkForPrivateMode();
+  }
+
+  for (const tab of await getAffectedTabs()) {
+    try {
+      await applyResolvedIconForTab(tab.id, tab.url);
+    } catch (error) {
+      debugLog('Error applying icon after settings change:', error);
+    }
+  }
+}
+
 async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
   const presentation = resolveIconPresentation(authState, null, {
     tabId: 0,
     isSupportedPlatform: false,
     isTweetPage: false,
     isCheckInFlight: false,
-  });
+  }, isPrivateModeEnabled());
 
   await applyIconPresentation(presentation, 0);
 
@@ -1089,6 +1168,16 @@ async function shouldApplyAutomaticOriginatorProbeResult(
 
 function scheduleAutomaticOriginatorProbe(operation: InFlightIconOperation): void {
   if (operation.trigger !== 'automatic-preflight') {
+    return;
+  }
+
+  if (isPrivateModeEnabled()) {
+    recordDiagnosticTimingEvent({
+      event: 'originator_probe_skipped',
+      ...operationTimingFields(operation),
+      reason: 'private_mode',
+      durationMs: durationSince(operation.startedAt),
+    });
     return;
   }
 
@@ -1458,6 +1547,14 @@ async function ensureServicesInitialized(): Promise<void> {
   apiHandler = initializeApiHandler();
   authMonitor = new AuthenticationMonitor();
   storageCleanup = initializeStorageCleanup();
+  currentSettings = await getSettings();
+  if (!unsubscribeSettingsChanged) {
+    unsubscribeSettingsChanged = onSettingsChanged((next, prev) => {
+      void applySettingsPresentation(next, prev).catch(error => {
+        debugLog('Error applying settings change:', error);
+      });
+    });
+  }
 
   // Initialize OAuth token refresh (restores state from storage)
   try {
@@ -1584,6 +1681,7 @@ chrome.runtime.onMessage.addListener((
       // Delegate API messages to API handler
       case MessageType.SEARCH_ORIGINATORS:
       case MessageType.SUBMIT_QUOTE:
+      case MessageType.LIST_COLLECTIONS:
         // Delegate to API handler (guaranteed initialized by ensureServicesInitialized)
         apiHandler!.handleMessage(message, sender, (response) => {
           applyAuthRequiredApiResponse(response, {
@@ -1635,6 +1733,16 @@ chrome.runtime.onMessage.addListener((
         });
         break;
 
+      case MessageType.CHECK_NOW:
+        handleCheckNow(message, sender, sendResponse).catch(error => {
+          console.error('Check now handler error:', error);
+          sendResponse({
+            success: false,
+            error: error.message || 'Check now failed'
+          });
+        });
+        break;
+
       case MessageType.CLEANUP_STORAGE:
         // Manual storage cleanup for debugging (guaranteed initialized)
         storageCleanup!.runCleanup().then(() => {
@@ -1663,6 +1771,15 @@ chrome.runtime.onMessage.addListener((
         }).catch(error => {
           console.error('Error opening popup:', error);
           sendResponse({ success: false, error: error?.message || 'Failed to open popup' });
+        });
+        break;
+
+      case MessageType.OPEN_OPTIONS_PAGE:
+        Promise.resolve(chrome.runtime.openOptionsPage()).then(() => {
+          sendResponse({ success: true, ok: true });
+        }).catch((error: Error) => {
+          console.error('Error opening options page:', error);
+          sendResponse({ success: false, error: error?.message || 'Failed to open options page' });
         });
         break;
 
@@ -1698,14 +1815,30 @@ chrome.runtime.onMessage.addListener((
         break;
 
       case MessageType.OAUTH_LOGOUT:
-        // Logout and clear tokens
-        logout().then(async () => {
+        // Logout, clear tokens, and wipe user-identifying caches.
+        logoutInProgress = true;
+        markUserDataWipe();
+        logoutAndClearUserData().then(() => {
           debugLog('OAuth logout successful');
-          // Notify AuthStateManager of logout (handles badge)
-          await authStateManager?.onLogout();
+          logoutInProgress = false;
           sendResponse({ success: true });
+          // Notify AuthStateManager of logout after the UI response so menu state is not blocked by broadcasts.
+          authStateManager?.onLogout().catch(error => {
+            console.error('Auth state logout notification failed:', error);
+          });
         }).catch(error => {
+          logoutInProgress = false;
           console.error('OAuth logout failed:', error);
+          sendResponse({ success: false, error: error.message });
+        });
+        break;
+
+      case MessageType.CLEAR_USER_DATA:
+        markUserDataWipe();
+        clearUserDataCaches().then(() => {
+          sendResponse({ success: true, ok: true });
+        }).catch(error => {
+          console.error('Clear user data failed:', error);
           sendResponse({ success: false, error: error.message });
         });
         break;
@@ -1817,6 +1950,27 @@ function scheduleTweetDataExtractionRetry(tabId: number, url: string | undefined
 }
 
 async function requestTweetDataExtraction(tabId: number, url?: string, attempt = 0): Promise<void> {
+  if (isPrivateModeEnabled()) {
+    clearTweetDataExtractionRetry(tabId);
+    recordExtractionDiagnostic({
+      status: 'skipped',
+      tabId,
+      url,
+      reason: 'private_mode',
+      attempt: attempt + 1,
+    });
+    recordDiagnosticTimingEvent({
+      event: 'extraction_skipped',
+      tabId,
+      sourceUrl: url,
+      trigger: 'automatic-preflight',
+      reason: 'private_mode',
+      attempt: attempt + 1,
+    });
+    await applyResolvedIconForTab(tabId, url);
+    return;
+  }
+
   const extractionKey = attempt === 0 ? automaticTweetOperationKey(tabId, url) : null;
   if (extractionKey) {
     const pendingExtraction = automaticTweetExtractionRequests.get(extractionKey);
@@ -2110,6 +2264,34 @@ async function runAutomaticPreflightForExtractedTweet(
   validatedData: TwitterData,
   tabId: number | undefined,
 ): Promise<void> {
+  if (isPrivateModeEnabled()) {
+    recordPreflightDiagnostic({
+      status: 'skipped',
+      trigger: 'automatic-preflight',
+      tabId,
+      url: validatedData.url,
+      handle: validatedData.author?.username,
+      reason: 'private_mode',
+    });
+    if (tabId) {
+      await applyResolvedIconForTab(tabId, validatedData.url);
+    }
+    return;
+  }
+
+  const cacheWriteEpoch = userDataWriteEpoch;
+  if (!canWriteUserIdentifyingCache(cacheWriteEpoch)) {
+    recordPreflightDiagnostic({
+      status: 'skipped',
+      trigger: 'automatic-preflight',
+      tabId,
+      url: validatedData.url,
+      handle: validatedData.author?.username,
+      reason: 'user_data_writes_blocked',
+    });
+    return;
+  }
+
   // Store the extracted data for popup access
   await chrome.storage.local.set({
     currentTweet: {
@@ -2138,7 +2320,7 @@ async function runAutomaticPreflightForExtractedTweet(
     await applyResolvedIconForTab(tabId, validatedData.url);
   }
 
-  await checkQuoteCollectionStatus(validatedData, tabId, preflightOperation);
+  await checkQuoteCollectionStatus(validatedData, tabId, preflightOperation, cacheWriteEpoch);
 }
 
 async function handleTweetDataExtracted(
@@ -2448,6 +2630,18 @@ async function applyOriginatorLookupResponse(
     const normalizedHandle = handle.toLowerCase();
     const existingDuplicate = getCachedDuplicateResultForTab(tabId, sourceUrl);
 
+    if (!canWriteUserIdentifyingCache(context.operation?.cacheWriteEpoch)) {
+      recordPreflightDiagnostic({
+        status: 'skipped',
+        trigger,
+        tabId,
+        url: sourceUrl,
+        handle: normalizedHandle,
+        reason: 'user_data_writes_blocked',
+      });
+      return;
+    }
+
     tabMissingOriginators.set(tabId, {
       handle: normalizedHandle,
       url: sourceUrl,
@@ -2545,7 +2739,12 @@ function summarizeHandleLookupResult(
 async function cacheFoundOriginatorFromLookup(
   handle: string,
   lookup: { originator?: unknown; confidence?: unknown },
+  cacheWriteEpoch?: number,
 ): Promise<void> {
+  if (!canWriteUserIdentifyingCache(cacheWriteEpoch)) {
+    return;
+  }
+
   const originator = lookup.originator;
   if (!originator || typeof originator !== 'object') {
     return;
@@ -2788,6 +2987,20 @@ async function applyAutomaticOriginatorProbeResponse(
   const normalizedHandle = handle.toLowerCase();
 
   if (lookup.found === false) {
+    if (!canWriteUserIdentifyingCache(operation.cacheWriteEpoch)) {
+      recordPreflightDiagnostic({
+        status: 'skipped',
+        trigger: 'automatic-originator-probe',
+        tabId: operation.tabId,
+        url: operation.url,
+        handle: normalizedHandle,
+        operationId: operation.operationId,
+        durationMs: durationSince(operation.startedAt),
+        reason: 'user_data_writes_blocked',
+      });
+      return;
+    }
+
     const createUrl = resolveOriginatorCreateUrl(handle, lookup.create_url);
 
     tabMissingOriginators.set(operation.tabId, {
@@ -2836,7 +3049,7 @@ async function applyAutomaticOriginatorProbeResponse(
   }
 
   tabMissingOriginators.delete(operation.tabId);
-  await cacheFoundOriginatorFromLookup(normalizedHandle, lookup);
+  await cacheFoundOriginatorFromLookup(normalizedHandle, lookup, operation.cacheWriteEpoch);
   recordPreflightDiagnostic({
     status: 'succeeded',
     trigger: 'automatic-originator-probe',
@@ -3053,6 +3266,99 @@ async function handleCheckDuplicate(
   }
 }
 
+async function handleCheckNow(
+  message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sendResponse: (response: any) => void,
+): Promise<void> {
+  const tabId = sender.tab?.id;
+  const data = message.data as Record<string, unknown> | undefined;
+  const sourceUrl = typeof data?.sourceUrl === 'string'
+    ? data.sourceUrl
+    : typeof data?.source_url === 'string'
+      ? data.source_url
+      : sender.tab?.url;
+  const handle = typeof data?.handle === 'string' ? data.handle : undefined;
+  const text = typeof data?.text === 'string' ? data.text : undefined;
+
+  if (!sourceUrl || !isTweetPageUrl(sourceUrl)) {
+    sendResponse({ success: false, skipped: true, error: 'No current tweet' });
+    return;
+  }
+
+  if (tabId && !await isSenderTabStillOnSourceUrl(tabId, sourceUrl)) {
+    sendResponse({ success: false, skipped: true, error: 'Tweet changed before check completed' });
+    return;
+  }
+
+  if (!handle || !text) {
+    sendResponse({ success: false, error: 'Handle and quote text are required' });
+    return;
+  }
+
+  recordPreflightDiagnostic({
+    status: 'loading',
+    trigger: 'explicit-duplicate-check',
+    tabId,
+    url: sourceUrl,
+    handle,
+  });
+
+  await apiHandler!.handleMessage(
+    {
+      type: MessageType.PREFLIGHT_CHECK,
+      data: {
+        handle,
+        platform: 'twitter',
+        text,
+        source_url: sourceUrl,
+      },
+    },
+    sender,
+    (response) => {
+      void (async () => {
+        if (await applyAuthRequiredApiResponse(response, {
+          tabId,
+          url: sourceUrl,
+          trigger: 'explicit-duplicate-check',
+          handle,
+        })) {
+          sendResponse(response);
+          return;
+        }
+
+        const duplicateResult = duplicateResultFromResponse({
+          success: response?.success,
+          result: response?.duplicate_check,
+        });
+
+        if (tabId && duplicateResult) {
+          setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
+          tabScopedPresentationTabIds.add(tabId);
+          await applyResolvedIconForTab(tabId, sourceUrl, duplicateResult);
+        }
+
+        recordPreflightDiagnostic({
+          status: response?.success ? 'succeeded' : 'failed',
+          trigger: 'explicit-duplicate-check',
+          tabId,
+          url: sourceUrl,
+          handle,
+          reason: 'check_now_response',
+          duplicate: summarizeDuplicateResult(duplicateResult),
+          originator: summarizeOriginatorResult(response?.originator),
+          error: typeof response?.error === 'string' ? response.error : undefined,
+        });
+
+        sendResponse(response);
+      })().catch(error => {
+        sendResponse({ success: false, error: errorMessage(error) });
+      });
+    },
+  );
+}
+
 /**
  * Check if a quote exists in Quotewise and update badge accordingly
  * Uses single preflight API call for both originator lookup and duplicate check
@@ -3062,11 +3368,32 @@ async function checkQuoteCollectionStatus(
   tweetData: TwitterData,
   tabId?: number,
   operation: InFlightIconOperation | null = null,
+  cacheWriteEpoch: number | undefined = operation?.cacheWriteEpoch,
 ): Promise<void> {
   const targetTabId = await resolveTargetTabId(tabId);
   const handle = tweetData.author?.username;
   let preflightOperation = operation;
   let shouldApplyFinalIcon = true;
+
+  if (isPrivateModeEnabled()) {
+    recordPreflightDiagnostic({
+      status: 'skipped',
+      trigger: 'automatic-preflight',
+      tabId: targetTabId,
+      url: tweetData.url,
+      handle,
+      operationId: preflightOperation?.operationId,
+      reason: 'private_mode',
+    });
+    if (targetTabId) {
+      await clearInFlightOperation(targetTabId, {
+        url: tweetData.url,
+        triggers: ['automatic-preflight'],
+      });
+      await applyResolvedIconForTab(targetTabId, tweetData.url);
+    }
+    return;
+  }
 
   if (targetTabId && !preflightOperation) {
     preflightOperation = await startInFlightOperation(
@@ -3257,6 +3584,21 @@ async function checkQuoteCollectionStatus(
     }
 
     debugLog('Preflight response:', preflightResponse);
+
+    if (!canWriteUserIdentifyingCache(cacheWriteEpoch)) {
+      shouldApplyFinalIcon = false;
+      recordPreflightDiagnostic({
+        status: 'skipped',
+        trigger: 'automatic-preflight',
+        tabId: targetTabId,
+        url: tweetData.url,
+        handle,
+        operationId: preflightOperation?.operationId,
+        durationMs: durationSince(preflightOperation?.startedAt),
+        reason: 'user_data_writes_blocked',
+      });
+      return;
+    }
 
     // Cache originator result for overlay to use
     const originatorResult = preflightResponse.originator;

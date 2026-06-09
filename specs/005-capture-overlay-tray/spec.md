@@ -4,14 +4,15 @@
 
 **Created**: 2026-06-07
 
-**Status**: Draft
+**Status**: Implemented
 
 **Input**: User description: "Iterate the in-page capture-overlay-tray (X/Twitter): remove developer-only tweet
 metrics from the UI; add privacy controls (logout + a 'Private mode' that pauses all background network calls) with
 a one-time first-run notice; add a canonical settings/options page plus a lightweight tray account menu; give slow
-requests staged progress feedback; pin the refresh/close controls to the top-right of the whole tray; and turn the
-'similar but not exact' match into an actionable, provenance-aware flow built on a word-level diff. Keep auth/Private
-state synchronized with the spec-004 toolbar icon, adding a new 'Paused' ambient state."
+requests staged progress feedback in a single progress area; pin the refresh/close controls to the top-right of the
+whole tray; and turn the 'similar but not exact' match into an actionable, provenance-aware flow built on a
+word-level diff. Keep auth/Private state synchronized with the spec-004 toolbar icon, adding a new 'Paused' ambient
+state."
 
 ## Overview
 
@@ -28,7 +29,7 @@ It delivers five themes:
 2. **Privacy & account control** — surface the existing logout flow, and add a **Private mode** that pauses *all*
    capture/pre-action background network activity (the user-controlled-preload control mandated by the constitution),
    with an honest one-time first-run notice on the first eligible overlay open.
-3. **Progress** — show staged status feedback for captures that take longer than a moment.
+3. **Progress** — show staged status feedback in a dedicated progress area while keeping the submit button stable.
 4. **Predictable controls** — pin the refresh/close controls to the top-right of the whole tray.
 5. **Provenance-aware "similar" flow** — replace the read-only "similar version" badge with a **word-level diff**
    and a date-gated "add earlier sighting" action.
@@ -36,7 +37,7 @@ It delivers five themes:
 ### Scope boundary
 
 - **Spec 004 — Toolbar Icon** owns the `chrome.action` icon/badge. 005 only *drives one addition* to it: a new
-  **Paused** ambient state (grey owl + pause glyph) shown while Private mode suppresses background checks. The
+  **Paused** ambient state (grey owl + pause mark `⏸︎`) shown while Private mode suppresses background checks. The
   authoritative icon resolution, state table, and precedence remain spec-004's contract; 005 specifies the new state
   and its precedence slot, to be folded into spec 004.
 - **Spec 002 — Sighting Status UI** owns the overlay's coarse sighting-status badges. 005 extends the
@@ -121,26 +122,34 @@ top-right and top-aligned in both states, with no layout shift of the host page.
 
 ---
 
-### User Story 3 - See that a slow capture is progressing (Priority: P1)
+### User Story 3 - See that a capture is progressing (Priority: P1)
 
 A user on a slow connection submits a quote and, instead of a frozen button, sees honest staged feedback reflecting
-the actual steps ("Checking…" → "Submitting…" → "Confirming…"). Fast captures show nothing distracting.
+the actual steps (`Checking quote` → `Saving to Quotewise` → `Confirming`). The button stays visually stable as the
+action state (`Submitting...`) while the detailed status lives in one progress area directly above the button. On
+long waits, the tray may add a secondary, non-assertive line about what Quotewise may be doing.
 
 **Why this priority**: Closes the "is it broken or just slow?" gap on the most important action (submission) without
 backend changes. Ships first.
 
-**Independent Test**: Throttle the network; submit a quote; confirm staged status text appears (after a short delay)
-and advances through the phases, then resolves to success/error. On a fast connection, confirm no flicker.
+**Independent Test**: Submit a quote; confirm the button changes to `Submitting...`, the progress area shows a
+linear indeterminate bar and advances through `Checking quote` → `Saving to Quotewise` → `Confirming`, then resolves
+to success/error without a second competing status surface. Hold the submit request long enough to confirm a
+secondary `Quotewise may be ...` line appears, rotates, and clears when the operation resolves.
 
 **Acceptance Scenarios**:
 
-1. **Given** a submission that completes within the debounce window (~400 ms), **When** the user submits, **Then**
-   no staged progress text flashes — only the normal success/error result.
-2. **Given** a submission slower than the debounce window, **When** each phase is reached, **Then** the tray shows a
-   status string for that phase, advancing as the operation proceeds, and clears on completion.
-3. **Given** `prefers-reduced-motion`, **When** progress is shown, **Then** any spinner animation is suppressed and
-   the textual status alone conveys progress.
-4. **Given** a submission error at any phase, **When** it fails, **Then** the tray shows an honest error and a way to
+1. **Given** a user submits a quote, **When** the operation begins, **Then** the submit button shows `Submitting...`
+   and remains the action-state surface rather than cycling through detailed phase text.
+2. **Given** each submit phase is reached, **When** the operation proceeds, **Then** the tray's progress area shows a
+   status string for that phase plus an indeterminate linear bar above the submit button, advancing as the operation
+   proceeds and clearing on completion.
+3. **Given** `prefers-reduced-motion`, **When** progress is shown, **Then** the linear bar animation is
+   disabled/static while the textual status still conveys progress.
+4. **Given** a submit phase remains pending past the wait-copy delay, **When** the operation is still unresolved,
+   **Then** the progress area may show rotating secondary copy phrased as `Quotewise may be ...`; it MUST NOT claim a
+   backend step is known to be active or complete.
+5. **Given** a submission error at any phase, **When** it fails, **Then** the tray shows an honest error and a way to
    retry; it MUST NOT show a success or "Done" state.
 
 ---
@@ -202,7 +211,7 @@ authenticated, Private-mode-OFF overlay open.
 3. **Given** Private mode is ON, **When** the user explicitly captures, **Then** the necessary network calls run for
    that explicit action only, and quote text is sent only on the explicit submit (never during passive browsing).
 4. **Given** Private mode is ON, **When** the toolbar icon is resolved, **Then** it shows the **Paused** ambient
-   state — grey owl + pause glyph `‖`, tooltip "Quotewise — paused (private mode)" — distinguishable by artwork +
+   state — grey owl + pause mark `⏸︎`, tooltip "Quotewise — paused (private mode)" — distinguishable by artwork +
    glyph, not color alone.
 5. **Given** an authenticated user with Private mode OFF and `firstRunNoticeShown === false`, **When** the user opens
    the overlay, **Then** a one-time, non-blocking, dismissible notice appears *inside the overlay* explaining
@@ -218,24 +227,27 @@ authenticated, Private-mode-OFF overlay open.
 A user wants a proper place to manage the extension: see which account they're signed in as, log out, toggle Private
 mode, clear their data, and (later) pick a default collection and auto-add behavior. A canonical options page serves
 this; a lightweight account menu in the tray offers the same quick actions plus "Open settings". The toolbar icon
-click keeps opening the in-page overlay (no browser-action popup is introduced).
+click toggles the in-page overlay (no browser-action popup is introduced).
 
 **Why this priority**: A settings home is the canonical Chrome pattern and the natural host for logout, Private mode,
 clear-data, and the collection options. The **shell** (account, logout, Private mode, clear data) is client-only and
 ships first; collection wiring is P2 (User Story 7).
 
 **Independent Test**: Open the options page via the standard Chrome entry points; confirm it shows account identity,
-a working logout, a Private-mode toggle, and clear-data. Open the tray account menu; confirm quick logout, Private
-mode toggle, and "Open settings" work. Confirm clicking the toolbar icon still opens the overlay.
+a working state-aware Log out/Log in action, a Private-mode toggle, and clear-data. Open the tray account menu;
+confirm quick auth action, Private mode toggle, and "Open settings" work. Confirm clicking the toolbar icon opens the
+overlay when closed and closes it when already open.
 
 **Acceptance Scenarios**:
 
 1. **Given** an authenticated user, **When** they open the options page, **Then** it shows their account identity
-   (e.g. username) and controls for logout, Private mode, and clear-my-data.
-2. **Given** the tray is open, **When** the user opens the tray account menu, **Then** they can log out, toggle
-   Private mode, and choose "Open settings", with all controls keyboard-operable and ARIA-labelled.
-3. **Given** any state, **When** the user clicks the toolbar icon, **Then** the in-page overlay opens (the icon-click
-   behavior from spec 004 is unchanged — no popup replaces it).
+   (e.g. username) and controls for Log out, Private mode, and clear-my-data.
+2. **Given** the tray is open, **When** the user opens the tray account menu, **Then** they can use the state-aware
+   auth action, toggle Private mode, and choose "Open settings", with all controls keyboard-operable and
+   ARIA-labelled.
+3. **Given** the overlay is hidden, **When** the user clicks the toolbar icon, **Then** the in-page overlay opens.
+   **Given** the overlay is already visible, **When** the user clicks the toolbar icon again, **Then** the overlay
+   closes. No browser-action popup replaces this behavior.
 4. **Given** a setting is changed on the options page, **When** the change is made, **Then** it takes effect across
    the extension (tray menu and toolbar reflect the same state) without requiring a manual reload.
 
@@ -347,7 +359,8 @@ hidden/disabled.
   to the existing read-only "similar version" presentation rather than rendering a broken diff.
 - **Collections unavailable / empty**: if the user has no collections or the list fails to load, the default-collection
   picker MUST show an honest empty/error state and auto-add MUST be effectively off (no silent failure on submit).
-- **Reduced motion**: spinners MUST be suppressed under `prefers-reduced-motion`; textual progress remains.
+- **Reduced motion**: progress animation MUST be suppressed or made static under `prefers-reduced-motion`; textual
+  progress remains.
 - **Metrics in non-debug build**: the diagnostics channel that carries metrics MUST remain debug-gated; metrics MUST
   NOT leak into production-visible UI or into content-bearing telemetry.
 
@@ -373,18 +386,25 @@ hidden/disabled.
 
 **Progress feedback**
 
-- **FR-020**: For the capture/submit flow, the tray MUST show staged status text reflecting the actual phases
-  (e.g. "Checking…", "Submitting…", "Confirming…"), advancing as the operation proceeds and clearing on completion.
-- **FR-021**: Staged progress MUST appear only after a short debounce (~400 ms) so operations faster than the window
-  show no progress flash.
-- **FR-022**: Any spinner/animation MUST be suppressed under `prefers-reduced-motion`; the textual status MUST convey
-  progress on its own. Progress copy MUST be honest and MUST NOT show success before confirmation.
+- **FR-020**: For the capture/submit flow, the tray MUST show staged status text in a dedicated progress area,
+  reflecting the actual phases (`Checking quote`, `Saving to Quotewise`, `Confirming`), advancing as the operation
+  proceeds and clearing on completion. The submit button MUST remain a stable action-state surface
+  (`Submit Quote`/`Submitting...`/`Done!`/`Retry`) rather than duplicating the detailed phase copy. The progress area
+  MUST render in the action column above the submit button.
+- **FR-021**: Explicit submit progress MAY render immediately and MUST remain visible long enough to be perceived
+  rather than flashing. Debounce remains available for non-submit progress where a fast operation should not render
+  transient progress UI. During a long wait, the progress area MAY rotate secondary, non-assertive copy about what
+  Quotewise may be doing.
+- **FR-022**: Any progress animation MUST be suppressed or made static under `prefers-reduced-motion`; the textual
+  status MUST convey progress on its own. Progress copy MUST be honest and MUST NOT show success before confirmation.
 - **FR-023**: On error at any phase, the tray MUST show an honest error and a retry affordance, and MUST NOT show a
   success/"Done" state.
 
 **Authentication, logout & data hygiene**
 
-- **FR-030**: The UI MUST surface the existing logout action from both the tray account menu and the options page.
+- **FR-030**: The UI MUST surface a state-aware auth action from both the tray account menu and the options page:
+  `Log out` when authenticated, `Log in` when signed out/session-expired/permissions-needed, with a visible busy
+  state (`Logging out...`/`Logging in...`) that does not get stuck.
 - **FR-031**: Logout MUST clear OAuth tokens, cancel scheduled token refresh, and wipe all user-identifying cached
   data (`currentTweet`, `preloadedOriginator`, `preloadedDuplicateCheck`, and any per-user caches) (Article II.2).
   Logout MUST also clear the account-bound `defaultCollectionId` (it references the signed-in account's collection),
@@ -424,12 +444,12 @@ hidden/disabled.
 **Settings / options surface**
 
 - **FR-050**: The extension MUST provide a canonical settings/options page that opens via the standard Chrome entry
-  points, hosting: account identity, logout, Private-mode toggle, clear-my-data, and (per FR-06x) the
-  default-collection picker and auto-add toggle.
-- **FR-051**: The tray MUST provide a lightweight account menu exposing quick logout, the Private-mode toggle, and
-  an "Open settings" action.
-- **FR-052**: The toolbar icon click MUST continue to open the in-page overlay; no browser-action popup may replace
-  that behavior (spec 004).
+  points, hosting: account identity, the state-aware auth action, Private-mode toggle, clear-my-data, and (per
+  FR-06x) the default-collection picker and auto-add toggle.
+- **FR-051**: The tray MUST provide a lightweight account menu exposing the state-aware auth action, the Private-mode
+  toggle, and an "Open settings" action.
+- **FR-052**: The toolbar icon click MUST toggle the in-page overlay: open it when hidden and close it when visible.
+  No browser-action popup may replace that behavior (spec 004).
 - **FR-053**: Settings changes MUST take effect across surfaces (tray menu, toolbar resolution, capture flow) without
   requiring a manual reload.
 
@@ -471,7 +491,7 @@ hidden/disabled.
 **Toolbar coordination (spec-004 amendment)**
 
 - **FR-090**: A new **Paused** ambient toolbar state MUST be defined and applied when Private mode is ON: grey owl
-  artwork + pause glyph `‖`, tooltip "Quotewise — paused (private mode)". It MUST be distinguishable by
+  artwork + pause mark `⏸︎`, tooltip "Quotewise — paused (private mode)". It MUST be distinguishable by
   artwork/glyph, not color alone.
 - **FR-091**: In spec-004 precedence, **Paused** MUST sit **just below Logged-out** and above all remaining states:
   `Error → Logged-out → Paused → Loading → Auth-pending → Unsupported → Supported-idle → quote-status badges`. This
@@ -498,7 +518,7 @@ hidden/disabled.
 - **Private-mode state**: the global on/off that gates all pre-action background network activity and drives the
   Paused toolbar state.
 - **Capture progress**: the current phase of an in-flight capture (idle / checking / submitting / confirming /
-  success / error) that the staged status renders.
+  success / error) that the dedicated progress area renders.
 - **Similar-match diff model**: the captured text + the on-record quote text + the computed word-level difference;
   plus the matched record's published date (when available) used to gate the add-sighting action.
 - **Collection (reference)**: the user's collections, each with an identity, name, and a default flag, used to
@@ -512,8 +532,9 @@ hidden/disabled.
   layouts; in a debug build, 100% of the metrics remain inspectable via diagnostics.
 - **SC-002**: Refresh and close are at the top-right, top-aligned, in both the collapsed and expanded tray, verified
   with no host-page layout shift.
-- **SC-003**: For captures slower than the debounce window, users see staged progress that advances and resolves;
-  captures faster than the window show no progress flash.
+- **SC-003**: During submit, users see one coherent progress surface: the button remains `Submitting...` while the
+  progress area above it advances through the submit phases, optionally rotates tentative `Quotewise may be ...` wait
+  copy during long waits, and resolves to success/error without showing success before confirmation.
 - **SC-004**: After logout, a user can verify (e.g. via the browser's network panel) that loading tweets makes no
   Quotewise background calls, and the user-identifying caches are empty.
 - **SC-005**: With Private mode ON, browsing any number of tweets — including opening the overlay — produces **zero**
@@ -544,6 +565,7 @@ hidden/disabled.
   - **(a) [hard blocker for FR-080..082]** Expose the matched record's **published date** (`quote_date`) on the
     `check_duplicate` / `preflight` `matches[]` payload. Today only the record-creation timestamp is returned, which
     is **not** an acceptable provenance reference; the add-earlier-sighting action stays disabled until this ships.
+    The extension consumes `quote_date` as optional and keeps the action hidden/disabled whenever it is absent.
   - **(b) [future, for true variants]** A submit **intent** parameter (e.g. create-as-distinct-version) so an
     "add as variant" action can create a separate version rather than folding into a sighting. Until then, the action
     is honestly labelled as adding a sighting (FR-083).
@@ -555,7 +577,7 @@ hidden/disabled.
 
 - Any change to **what is extracted** from the page (spec 003 owns extraction).
 - Re-derivation of the backend's similarity thresholds; the extension consumes the backend recommendation.
-- A browser-action **popup** (explicitly excluded; icon-click keeps opening the overlay).
+- A browser-action **popup** (explicitly excluded; icon-click toggles the in-page overlay).
 - True distinct **variant creation** as a first-class action (blocked on backend intent param; honest sighting
   labelling used in the interim).
 - The spec-004 **icon resolver internals** beyond adding the Paused state and its precedence slot.
@@ -570,4 +592,5 @@ hidden/disabled.
   independent and still succeeds.
 - "Developers" means builds where the existing debug-mode condition is true (e.g. `[DEV]`/`[STAGING]` builds); the
   diagnostics channel is the existing one, not a new user-facing surface.
-- The debounce threshold (~400 ms) is a tunable starting point, to be validated for flicker-free fast captures.
+- The progress debounce threshold (~400 ms) remains available for non-submit/background progress; explicit submit
+  progress may render immediately with a short minimum visible duration so users can perceive the cycle.

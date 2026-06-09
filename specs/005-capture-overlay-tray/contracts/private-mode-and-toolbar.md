@@ -33,7 +33,7 @@ The **only** capture/preflight network path under Private mode is the explicit `
 ```typescript
 Paused: {
   iconVariant: 'grey',                       // reuse GREY_ICON_PATHS owl
-  badgeText: '‖',                            // pause glyph — decodable by glyph, not color
+  badgeText: '⏸︎',                           // U+23F8 text presentation — decodable by glyph, not color
   badgeColor: '<neutral grey>',
   title: 'Quotewise — paused (private mode)',
   scope: 'global',
@@ -89,6 +89,6 @@ injected on page load and never appears while logged out or while Private mode i
   when `privateMode`, and LoggedOut/Error still win over Paused.
 - Gate tests: each automatic entry point makes no network call when `privateMode === true`; `CHECK_NOW` does; toggle
   ON stops in-flight scheduling; toggle OFF resumes next tweet.
-- Icon-states: `Paused` config has grey variant, `‖` badge, correct title, global scope.
+- Icon-states: `Paused` config has grey variant, `⏸︎` badge, correct title, global scope.
 - First-run notice: overlay open shows the notice only for `authenticated && !privateMode && !firstRunNoticeShown`,
   sets `firstRunNoticeShown`, and does not render for logged-out/private/already-shown states.

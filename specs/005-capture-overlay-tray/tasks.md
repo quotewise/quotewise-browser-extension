@@ -33,9 +33,9 @@ Single-project MV3 extension (per plan.md): `src/` at repo root, tests in `tests
 
 **Purpose**: Shared type/mocks scaffolding used across stories. No new runtime dependency, no new permission.
 
-- [ ] T001 Add `Settings` interface + `DEFAULT_SETTINGS` const (privateMode, autoAddToCollection, defaultCollectionId, firstRunNoticeShown) to `src/types/chrome.ts` per data-model §1
-- [ ] T002 Add new `MessageType` members `OPEN_OPTIONS_PAGE`, `CHECK_NOW`, `CLEAR_USER_DATA`, `LIST_COLLECTIONS` to `src/types/chrome.ts` per contracts/messages.md (same file as T001 → after T001)
-- [ ] T003 [P] Extend chrome mock in `tests/setup.ts` with `chrome.storage.sync` (get/set), `chrome.storage.onChanged` (addListener/emit), and `chrome.runtime.openOptionsPage` stubs (extend, don't redefine)
+- [X] T001 Add `Settings` interface + `DEFAULT_SETTINGS` const (privateMode, autoAddToCollection, defaultCollectionId, firstRunNoticeShown) to `src/types/chrome.ts` per data-model §1
+- [X] T002 Add new `MessageType` members `OPEN_OPTIONS_PAGE`, `CHECK_NOW`, `CLEAR_USER_DATA`, `LIST_COLLECTIONS` to `src/types/chrome.ts` per contracts/messages.md (same file as T001 → after T001)
+- [X] T003 [P] Extend chrome mock in `tests/setup.ts` with `chrome.storage.sync` (get/set), `chrome.storage.onChanged` (addListener/emit), and `chrome.runtime.openOptionsPage` stubs (extend, don't redefine)
 
 **Checkpoint**: Shared types + test mocks ready.
 
@@ -45,9 +45,9 @@ Single-project MV3 extension (per plan.md): `src/` at repo root, tests in `tests
 
 **Purpose**: Plumbing that multiple user stories depend on. ⚠️ Complete before US4–US7.
 
-- [ ] T004 [P] Write FAILING tests for the settings store (get merges over defaults; `updateSettings` issues exactly one `chrome.storage.sync.set({settings})`; `onSettingsChanged` fires only for `area==='sync'` `settings` changes; unsubscribe stops callbacks; serialized settings ≪ 8192 B) in `tests/settings/settings-store.test.ts` per contracts/settings-storage.md
-- [ ] T005 Implement `src/settings/settings-store.ts` (`getSettings`, `updateSettings`, `onSettingsChanged`) to pass T004 (blocks US5/US6/US7)
-- [ ] T006 [P] Export canonical `USER_IDENTIFYING_CACHE_KEYS` (currentTweet, preloadedOriginator, preloadedDuplicateCheck, lastAuthCheck, originator_search_history) from `src/background/storage-cleanup.ts` per data-model §2 (blocks US4)
+- [X] T004 [P] Write FAILING tests for the settings store (get merges over defaults; `updateSettings` issues exactly one `chrome.storage.sync.set({settings})`; `onSettingsChanged` fires only for `area==='sync'` `settings` changes; unsubscribe stops callbacks; serialized settings ≪ 8192 B) in `tests/settings/settings-store.test.ts` per contracts/settings-storage.md
+- [X] T005 Implement `src/settings/settings-store.ts` (`getSettings`, `updateSettings`, `onSettingsChanged`) to pass T004 (blocks US5/US6/US7)
+- [X] T006 [P] Export canonical `USER_IDENTIFYING_CACHE_KEYS` (currentTweet, preloadedOriginator, preloadedDuplicateCheck, lastAuthCheck, originator_search_history) from `src/background/storage-cleanup.ts` per data-model §2 (blocks US4)
 
 **Checkpoint**: Settings store + cache-key set ready — user stories can begin.
 
@@ -60,9 +60,9 @@ Single-project MV3 extension (per plan.md): `src/` at repo root, tests in `tests
 **Independent Test**: Prod build → no metric/author/date chips in the tray. `[DEV]` build → metrics present in
 `GET_DIAGNOSTICS`/`debugLog`, still absent from the tray. Extraction (`TwitterData`) unchanged.
 
-- [ ] T007 [P] [US1] Characterization test: rendered tray markup has no metric chips (replies/retweets/likes/views/bookmarks) and no author/date chip in a prod build; `GET_DIAGNOSTICS` still carries metrics under `DEBUG_MODE`, in `tests/content/overlay-metrics.test.ts`
-- [ ] T008 [US1] Remove `buildMetaChips()` (≈overlay-bar.ts:410-433), the `#meta-row` markup, and its `.chip`/`.meta-row` styles from `src/content/ui/overlay-bar.ts` (FR-001)
-- [ ] T009 [US1] Verify/route raw extracted metrics through the existing `GET_DIAGNOSTICS`/`debugLog` channel gated by `DEBUG_MODE` (`src/background/service-worker.ts` diagnostics + `src/config/environment.ts`); confirm extraction in `src/platforms/twitter/adapter.ts` is untouched (FR-002/003)
+- [X] T007 [P] [US1] Characterization test: rendered tray markup has no metric chips (replies/retweets/likes/views/bookmarks) and no author/date chip in a prod build; `GET_DIAGNOSTICS` still carries metrics under `DEBUG_MODE`, in `tests/content/overlay-metrics.test.ts`
+- [X] T008 [US1] Remove `buildMetaChips()` (≈overlay-bar.ts:410-433), the `#meta-row` markup, and its `.chip`/`.meta-row` styles from `src/content/ui/overlay-bar.ts` (FR-001)
+- [X] T009 [US1] Verify/route raw extracted metrics through the existing `GET_DIAGNOSTICS`/`debugLog` channel gated by `DEBUG_MODE` (`src/background/service-worker.ts` diagnostics + `src/config/environment.ts`); confirm extraction in `src/platforms/twitter/adapter.ts` is untouched (FR-002/003)
 
 **Checkpoint**: Tray is decluttered; developers retain metrics via diagnostics. SC-001 satisfied.
 
@@ -75,9 +75,9 @@ Single-project MV3 extension (per plan.md): `src/` at repo root, tests in `tests
 **Independent Test**: Collapse then expand the tray → refresh/close stay top-right/top-aligned, no host-page layout
 shift, both keyboard-reachable with visible focus, close operable via keyboard.
 
-- [ ] T010 [P] [US2] Characterization test: refresh/close are top-right + top-aligned in both collapsed and expanded markup; no layout shift; controls keyboard-reachable with focus state, in `tests/content/overlay-controls.test.ts`
-- [ ] T011 [US2] Re-anchor refresh/close to top-right + top-aligned via CSS (replace `align-items: center` reliance on `.bar`; anchor the `.section.right` controls to the tray top) in `src/content/ui/overlay-bar.ts` (FR-010) — **after T008 (same file)**
-- [ ] T012 [US2] Add keyboard operability, visible focus styles, and ARIA labels to refresh/close (and ensure overlay stays dismissable, no layout shift) in `src/content/ui/overlay-bar.ts` (FR-011) — **after T011 (same file)**
+- [X] T010 [P] [US2] Characterization test: refresh/close are top-right + top-aligned in both collapsed and expanded markup; no layout shift; controls keyboard-reachable with focus state, in `tests/content/overlay-controls.test.ts`
+- [X] T011 [US2] Re-anchor refresh/close to top-right + top-aligned via CSS (replace `align-items: center` reliance on `.bar`; anchor the `.section.right` controls to the tray top) in `src/content/ui/overlay-bar.ts` (FR-010) — **after T008 (same file)**
+- [X] T012 [US2] Add keyboard operability, visible focus styles, and ARIA labels to refresh/close (and ensure overlay stays dismissable, no layout shift) in `src/content/ui/overlay-bar.ts` (FR-011) — **after T011 (same file)**
 
 **Checkpoint**: Controls stable + accessible. SC-002 satisfied.
 
@@ -85,14 +85,16 @@ shift, both keyboard-reachable with visible focus, close operable via keyboard.
 
 ## Phase 5: User Story 3 — Staged submit progress (Priority: P1)
 
-**Goal**: Debounced staged status ("Checking…"→"Submitting…"→"Confirming…") on submit; honest errors; reduced-motion aware.
+**Goal**: Dedicated submit progress surface (`Checking quote`→`Saving to Quotewise`→`Confirming`) above the button
+while the button stays in the action state; tentative long-wait copy; honest errors; reduced-motion aware.
 
-**Independent Test**: Throttle network → staged text advances then resolves; fast connection → no flash;
-`prefers-reduced-motion` → no spinner, text-only; error mid-flow → honest error + Retry, never success.
+**Independent Test**: Throttle network → button shows `Submitting...`, progress area advances through the phases
+with a linear bar above the button, then shows rotating `Quotewise may be ...` copy if still pending, then resolves;
+`prefers-reduced-motion` → static/no-animation bar with text; error mid-flow → honest error + Retry, never success.
 
-- [ ] T013 [P] [US3] Test-first: progress phase machine + ~400 ms debounce (fast path renders no progress DOM; slow path advances in order; reduced-motion → no spinner; error at any phase → error+retry, never success), in `tests/content/progress-indicator.test.ts` per contracts/progress-and-submit.md §A
-- [ ] T014 [P] [US3] Implement `src/content/ui/components/progress-indicator.ts` (`CaptureProgressPhase` machine, debounced via `src/utils/debounce.ts`, reduced-motion guard) to pass T013
-- [ ] T015 [US3] Wire staged phases into the submit flow (checking→submitting→confirming→success/error + retry; success only after confirmation) in `src/content/ui/components/action-button.ts` and `src/content/ui/overlay-bar.ts` (FR-020..023) — **overlay-bar.ts edit after T012**
+- [X] T013 [P] [US3] Test-first: progress phase machine + explicit submit rendering (button remains `Submitting...`; progress area advances in order above the button; delayed secondary `Quotewise may be ...` copy rotates and clears; reduced-motion → static/no-animation bar with text; error at any phase → error+retry, never success), in `tests/content/progress-indicator.test.ts` per contracts/progress-and-submit.md §A
+- [X] T014 [P] [US3] Implement `src/content/ui/components/progress-indicator.ts` (`CaptureProgressPhase` machine, optional debounce via `src/utils/debounce.ts`, linear-bar renderer, reduced-motion guard) to pass T013
+- [X] T015 [US3] Wire staged phases into the submit flow (checking→submitting→confirming→success/error + retry; success only after confirmation; submit phases held briefly for polish) in `src/content/ui/components/action-button.ts` and `src/content/ui/overlay-bar.ts` (FR-020..023) — **overlay-bar.ts edit after T012**
 
 **Checkpoint**: Honest staged progress. SC-003 satisfied.
 
@@ -107,10 +109,10 @@ device prefs; "Clear my data" does the cache wipe without touching login. (UI li
 cleared, refresh alarm cancelled, device prefs intact, `defaultCollectionId` null. Clear-data → same cache wipe,
 login unchanged. No secret in any log.
 
-- [ ] T016 [P] [US4] Test-first: `OAUTH_LOGOUT` clears `oauth_*` + `USER_IDENTIFYING_CACHE_KEYS` + nulls `defaultCollectionId`, cancels `token-refresh` alarm, preserves the 3 device prefs, blocks in-flight-after-logout cache writes, emits no secret, in `tests/background/logout.test.ts` per contracts/progress-and-submit.md §B
-- [ ] T017 [P] [US4] Test-first: `CLEAR_USER_DATA` clears the cache set + nulls `defaultCollectionId`, preserves device prefs AND tokens/login, in `tests/background/clear-data.test.ts` per contracts/progress-and-submit.md §C
-- [ ] T018 [US4] Extend the `OAUTH_LOGOUT` handler to wipe `USER_IDENTIFYING_CACHE_KEYS`, null `settings.defaultCollectionId`, and guard against in-flight preflight/originator responses repopulating caches post-logout, in `src/background/service-worker.ts` (FR-031/032/034)
-- [ ] T019 [US4] Add the `CLEAR_USER_DATA` message handler (cache-set wipe + null `defaultCollectionId`, no login change) in `src/background/service-worker.ts` (FR-033) — **after T018 (same file)**
+- [X] T016 [P] [US4] Test-first: `OAUTH_LOGOUT` clears `oauth_*` + `USER_IDENTIFYING_CACHE_KEYS` + nulls `defaultCollectionId`, cancels `token-refresh` alarm, preserves the 3 device prefs, blocks in-flight-after-logout cache writes, emits no secret, in `tests/background/logout.test.ts` per contracts/progress-and-submit.md §B
+- [X] T017 [P] [US4] Test-first: `CLEAR_USER_DATA` clears the cache set + nulls `defaultCollectionId`, preserves device prefs AND tokens/login, in `tests/background/clear-data.test.ts` per contracts/progress-and-submit.md §C
+- [X] T018 [US4] Extend the `OAUTH_LOGOUT` handler to wipe `USER_IDENTIFYING_CACHE_KEYS`, null `settings.defaultCollectionId`, and guard against in-flight preflight/originator responses repopulating caches post-logout, in `src/background/service-worker.ts` (FR-031/032/034)
+- [X] T019 [US4] Add the `CLEAR_USER_DATA` message handler (cache-set wipe + null `defaultCollectionId`, no login change) in `src/background/service-worker.ts` (FR-033) — **after T018 (same file)**
 
 **Checkpoint**: Privacy data-hygiene levers work. SC-004 satisfied.
 
@@ -122,20 +124,20 @@ login unchanged. No secret in any log.
 until explicit "Check now"/capture; toolbar shows **Paused**; one-time in-overlay first-run notice.
 
 **Independent Test**: Private mode OFF → auto checks + quote-status icon. ON → zero preflight/duplicate/originator
-requests across tweets incl. overlay open; toolbar Paused (grey owl + `‖`); "Check now" runs lookups
+requests across tweets incl. overlay open; toolbar Paused (grey owl + `⏸︎`); "Check now" runs lookups
 only on activation, stays Paused; auth-maintenance traffic is excluded; first-run notice appears once per synced
 profile on the first authenticated, Private-mode-OFF overlay open, never on page load. (Tests set
 `settings.privateMode` directly; the user toggle ships in US6.)
 
-- [ ] T020 [P] [US5] Test-first: extend `tests/background/icon-state-resolver.test.ts` with Paused precedence rows (Paused wins over Loading/AuthPending/Unsupported/SupportedIdle/quote-status when `privateMode`; Error/LoggedOut still win over Paused) per contracts/private-mode-and-toolbar.md §C
-- [ ] T021 [P] [US5] Test-first: Private-mode network gate — each automatic preflight/duplicate/originator entry point makes no network call when `privateMode===true`; `CHECK_NOW` does and leaves Private mode ON; toggle ON stops scheduling, OFF resumes next tweet; auth-maintenance traffic is excluded from this assertion, in `tests/background/private-mode.test.ts` per contracts/private-mode-and-toolbar.md §A
-- [ ] T022 [US5] Add `ICON_STATES.Paused` (grey owl, badge `‖`, title "Quotewise — paused (private mode)", scope global) to `src/config/icon-states.ts` (FR-090, spec-004 amendment)
-- [ ] T023 [US5] Add a `privateMode` input + the Paused branch (after `UNAUTHENTICATED→LoggedOut`, before `Loading`) to `src/background/icon-state-resolver.ts`, and thread `privateMode` (read via settings-store, refreshed via `onSettingsChanged`) at every `applyResolvedIconForTab` call site in `src/background/service-worker.ts` (FR-091)
-- [ ] T024 [US5] Gate the automatic preflight/duplicate/originator entry points (`requestTweetDataExtraction`, `runAutomaticPreflightForExtractedTweet`/`checkQuoteCollectionStatus`, `scheduleAutomaticOriginatorProbe`) on `settings.privateMode` in `src/background/service-worker.ts` (FR-040/041/044) — **after T023 (same file)**
-- [ ] T025 [US5] Implement the `CHECK_NOW` handler (explicit duplicate+originator lookup for the current tweet only; stale-tab no-op; keeps Paused) in `src/background/service-worker.ts` (FR-044) — **after T024 (same file)**
-- [ ] T026 [P] [US5] Test-first + implement `src/content/ui/components/first-run-notice.ts` (in-overlay, non-blocking, dismissible, one-time; keyboard/ARIA) with trigger cases in `tests/content/first-run-notice.test.ts` per FR-043
-- [ ] T027 [US5] Wire the first-run notice into the overlay open path (show only when `authenticated && !privateMode && !firstRunNoticeShown`; set `firstRunNoticeShown` on show/dismiss; no separate checks-ran storage flag; never injected on page load) and add the "Check now" control shown under Private mode, in `src/content/ui/overlay-bar.ts` (FR-043/044) — **overlay-bar.ts edit after T015**
-- [ ] T028 [US5] Fold the Paused state into spec-004 docs: add the state + precedence slot to `specs/004-extension-icon-states/contracts/icon-state-resolver.md` and its data-model/state table (single authoritative resolver preserved)
+- [X] T020 [P] [US5] Test-first: extend `tests/background/icon-state-resolver.test.ts` with Paused precedence rows (Paused wins over Loading/AuthPending/Unsupported/SupportedIdle/quote-status when `privateMode`; Error/LoggedOut still win over Paused) per contracts/private-mode-and-toolbar.md §C
+- [X] T021 [P] [US5] Test-first: Private-mode network gate — each automatic preflight/duplicate/originator entry point makes no network call when `privateMode===true`; `CHECK_NOW` does and leaves Private mode ON; toggle ON stops scheduling, OFF resumes next tweet; auth-maintenance traffic is excluded from this assertion, in `tests/background/private-mode.test.ts` per contracts/private-mode-and-toolbar.md §A
+- [X] T022 [US5] Add `ICON_STATES.Paused` (grey owl, badge `⏸︎`, title "Quotewise — paused (private mode)", scope global) to `src/config/icon-states.ts` (FR-090, spec-004 amendment)
+- [X] T023 [US5] Add a `privateMode` input + the Paused branch (after `UNAUTHENTICATED→LoggedOut`, before `Loading`) to `src/background/icon-state-resolver.ts`, and thread `privateMode` (read via settings-store, refreshed via `onSettingsChanged`) at every `applyResolvedIconForTab` call site in `src/background/service-worker.ts` (FR-091)
+- [X] T024 [US5] Gate the automatic preflight/duplicate/originator entry points (`requestTweetDataExtraction`, `runAutomaticPreflightForExtractedTweet`/`checkQuoteCollectionStatus`, `scheduleAutomaticOriginatorProbe`) on `settings.privateMode` in `src/background/service-worker.ts` (FR-040/041/044) — **after T023 (same file)**
+- [X] T025 [US5] Implement the `CHECK_NOW` handler (explicit duplicate+originator lookup for the current tweet only; stale-tab no-op; keeps Paused) in `src/background/service-worker.ts` (FR-044) — **after T024 (same file)**
+- [X] T026 [P] [US5] Test-first + implement `src/content/ui/components/first-run-notice.ts` (in-overlay, non-blocking, dismissible, one-time; keyboard/ARIA) with trigger cases in `tests/content/first-run-notice.test.ts` per FR-043
+- [X] T027 [US5] Wire the first-run notice into the overlay open path (show only when `authenticated && !privateMode && !firstRunNoticeShown`; set `firstRunNoticeShown` on show/dismiss; no separate checks-ran storage flag; never injected on page load) and add the "Check now" control shown under Private mode, in `src/content/ui/overlay-bar.ts` (FR-043/044) — **overlay-bar.ts edit after T015**
+- [X] T028 [US5] Fold the Paused state into spec-004 docs: add the state + precedence slot to `specs/004-extension-icon-states/contracts/icon-state-resolver.md` and its data-model/state table (single authoritative resolver preserved)
 
 **Checkpoint**: Constitution Article II.1 switch live; SC-005/SC-006 satisfied.
 
@@ -143,21 +145,23 @@ profile on the first authenticated, Private-mode-OFF overlay open, never on page
 
 ## Phase 8: User Story 6 — Settings page & tray account menu (Priority: P1 shell)
 
-**Goal**: Canonical `options_ui` page (account identity, logout, Private toggle, clear-data) + tray account menu
-(logout, Private toggle, Open settings). Icon click still opens the overlay (no popup). Live cross-surface sync.
+**Goal**: Canonical `options_ui` page (account identity, state-aware auth action, Private toggle, clear-data) + tray
+account menu (auth action, Private toggle, Open settings). Icon click toggles the overlay (no popup). Live
+cross-surface sync.
 
-**Independent Test**: Open options page → account identity + working logout + Private toggle + clear-data. Tray
-account menu → quick logout, Private toggle, Open settings. Icon click → overlay via `SHOW_OVERLAY` (no popup and no
-`default_popup`). Toggle Private on options page → tray + toolbar reflect it without reload.
+**Independent Test**: Open options page → account identity + working auth action + Private toggle + clear-data. Tray
+account menu → quick auth action, Private toggle, Open settings. Icon click → overlay opens via `SHOW_OVERLAY` when
+closed and closes when already visible (no popup and no `default_popup`). Toggle Private on options page → tray +
+toolbar reflect it without reload.
 
-- [ ] T029 [US6] Add `"options_ui": { "page": "options.html", "open_in_tab": true }` to `manifest.json`, `manifest.prod.json`, and `manifest.dev.json` (single-source rule; no new permission; do not add `default_popup`) per contracts/options-page.md
-- [ ] T030 [US6] Add the `'options/index': './src/options/index.ts'` webpack entry and a `copy-webpack-plugin` pattern copying `public/options.html` → `dist/` in `webpack.config.js` (keep `splitChunks: false`)
-- [ ] T031 [P] [US6] Create `public/options.html` shell loading `options/index.js` via `<script defer type="module">`
-- [ ] T032 [US6] Implement `src/options/index.ts`: account identity, Log out (`OAUTH_LOGOUT`), Private-mode toggle (`updateSettings`), Clear my data (`CLEAR_USER_DATA`); subscribe via `onSettingsChanged`; keyboard/ARIA/honest copy (FR-050)
-- [ ] T033 [P] [US6] Implement `src/content/ui/components/account-menu.ts`: Log out, Private-mode toggle, "Open settings" (sends `OPEN_OPTIONS_PAGE`); menu focus management, Escape-to-close, ARIA (FR-051)
-- [ ] T034 [US6] Add the `OPEN_OPTIONS_PAGE` handler calling `chrome.runtime.openOptionsPage()` in `src/background/service-worker.ts` (content scripts can't call it directly) (FR-051) — **after T025 (same file)**
-- [ ] T035 [US6] Mount the account menu into the tray (open/close, keyboard/ARIA) in `src/content/ui/overlay-bar.ts` (FR-051) — **overlay-bar.ts edit after T027**
-- [ ] T036 [P] [US6] Characterization test: manifests have `options_ui` and no `default_popup`; toolbar icon-click sends `SHOW_OVERLAY` (the legacy `OPEN_POPUP` path is not used by `chrome.action.onClicked`); options controls present + labelled; logout/clear-data send correct messages; tray account-menu logout sends `OAUTH_LOGOUT`; changing Private mode in one surface updates the other via `onChanged` (no reload); "Open settings" sends `OPEN_OPTIONS_PAGE` (never calls `openOptionsPage` from content), in `tests/options/options-page.test.ts` and `tests/content/account-menu.test.ts`
+- [X] T029 [US6] Add `"options_ui": { "page": "options.html", "open_in_tab": true }` to `manifest.json`, `manifest.prod.json`, and `manifest.dev.json` (single-source rule; no new permission; do not add `default_popup`) per contracts/options-page.md
+- [X] T030 [US6] Add the `'options/index': './src/options/index.ts'` webpack entry and a `copy-webpack-plugin` pattern copying `public/options.html` → `dist/` in `webpack.config.js` (keep `splitChunks: false`)
+- [X] T031 [P] [US6] Create `public/options.html` shell loading `options/index.js` via `<script defer type="module">`
+- [X] T032 [US6] Implement `src/options/index.ts`: account identity, state-aware Log out/Log in action (`OAUTH_LOGOUT`/`OAUTH_LOGIN`) with polished busy state, Private-mode toggle (`updateSettings`), Clear my data (`CLEAR_USER_DATA`); subscribe via `onSettingsChanged`; keyboard/ARIA/honest copy (FR-050)
+- [X] T033 [P] [US6] Implement `src/content/ui/components/account-menu.ts`: state-aware Log out/Log in action, Private-mode toggle, "Open settings" (sends `OPEN_OPTIONS_PAGE`); menu focus management, Escape-to-close, ARIA (FR-051)
+- [X] T034 [US6] Add the `OPEN_OPTIONS_PAGE` handler calling `chrome.runtime.openOptionsPage()` in `src/background/service-worker.ts` (content scripts can't call it directly) (FR-051) — **after T025 (same file)**
+- [X] T035 [US6] Mount the account menu into the tray (open/close, keyboard/ARIA) in `src/content/ui/overlay-bar.ts` (FR-051) — **overlay-bar.ts edit after T027**
+- [X] T036 [P] [US6] Characterization test: manifests have `options_ui` and no `default_popup`; toolbar icon-click sends `SHOW_OVERLAY` and toggles the tray when already visible (the legacy `OPEN_POPUP` path is not used by `chrome.action.onClicked`); options controls present + labelled; auth/clear-data send correct messages; tray account-menu auth action sends `OAUTH_LOGOUT`/`OAUTH_LOGIN` as appropriate; changing Private mode in one surface updates the other via `onChanged` (no reload); "Open settings" sends `OPEN_OPTIONS_PAGE` (never calls `openOptionsPage` from content), in `tests/options/options-page.test.ts` and `tests/content/account-menu.test.ts`
 
 **Checkpoint**: Settings home + account menu live; FR-052/053 satisfied. **P1 MVP set (US1–US6) complete.**
 
@@ -172,11 +176,11 @@ failure never loses the quote.
 collection; disable → not added; simulate collection failure → quote still succeeds with honest notice; no
 collections/list fails → honest empty/error, auto-add inert.
 
-- [ ] T037 [P] [US7] Test-first: submit includes verified `collection_id` (UUID string) when `autoAddToCollection` ON + `defaultCollectionId` set; omitted when OFF; collection-add failure → quote create still succeeds + honest "collection step didn't complete" path, in `tests/api/collection-autoadd.test.ts`; picker empty/error state + auto-add inert behavior in `tests/options/options-page.test.ts` per contracts (US7)
-- [ ] T038 [US7] Add optional `collection_id` (verified django-api `QuoteCreateSerializer` / `QuoteViewSet.create` field) to `QuoteSubmissionRequest` in `src/types/api.ts` and thread it into `submitQuote` in `src/api/quotewise-api.ts` (FR-061/062)
-- [ ] T039 [US7] Add the `LIST_COLLECTIONS` handler (reuse `listCollections()`) in `src/background/service-worker.ts` / `src/background/api-handler.ts` (FR-060)
-- [ ] T040 [US7] Add the default-collection picker + auto-add toggle to `src/options/index.ts` (populate from `LIST_COLLECTIONS`, preselect `default_collection_id`, honest empty/error state, persist choice to `settings`) (FR-060) — **after T032 (same file)**
-- [ ] T041 [US7] Apply auto-add on submit (read `settings.autoAddToCollection`/`defaultCollectionId`; on collection failure keep the successful quote and surface honest notice via the progress/error path) in `src/content/ui/overlay-bar.ts` / `action-button.ts` (FR-061/063) — **overlay-bar.ts edit after T035**
+- [X] T037 [P] [US7] Test-first: submit includes verified `collection_id` (UUID string) when `autoAddToCollection` ON + `defaultCollectionId` set; omitted when OFF; collection-add failure → quote create still succeeds + honest "collection step didn't complete" path, in `tests/api/collection-autoadd.test.ts`; picker empty/error state + auto-add inert behavior in `tests/options/options-page.test.ts` per contracts (US7)
+- [X] T038 [US7] Add optional `collection_id` (verified django-api `QuoteCreateSerializer` / `QuoteViewSet.create` field) to `QuoteSubmissionRequest` in `src/types/api.ts` and thread it into `submitQuote` in `src/api/quotewise-api.ts` (FR-061/062)
+- [X] T039 [US7] Add the `LIST_COLLECTIONS` handler (reuse `listCollections()`) in `src/background/service-worker.ts` / `src/background/api-handler.ts` (FR-060)
+- [X] T040 [US7] Add the default-collection picker + auto-add toggle to `src/options/index.ts` (populate from `LIST_COLLECTIONS`, preselect `default_collection_id`, honest empty/error state, persist choice to `settings`) (FR-060) — **after T032 (same file)**
+- [X] T041 [US7] Apply auto-add on submit (read `settings.autoAddToCollection`/`defaultCollectionId`; on collection failure keep the successful quote and surface honest notice via the progress/error path) in `src/content/ui/overlay-bar.ts` / `action-button.ts` (FR-061/063) — **overlay-bar.ts edit after T035**
 
 **Checkpoint**: SC-007 satisfied.
 
@@ -190,11 +194,11 @@ plus a "view existing quote" link; degrade gracefully when on-record text is mis
 **Independent Test**: Near match → marked word diff + view link, no %; decodable under simulated deuteranopia/
 protanopia + reduced motion/high contrast; exact/no-match → no diff; missing on-record text → read-only fallback.
 
-- [ ] T042 [P] [US8] Test-first: `diffWords` LCS (identical→all equal; pure insert/delete; substitution; reorder; empty captured/on-record; unicode/emoji), in `tests/utils/word-diff.test.ts` per contracts/similar-diff.md §A
-- [ ] T043 [P] [US8] Implement `src/utils/word-diff.ts` (`WordDiffToken`, `diffWords` LCS over whitespace tokens, **no dependency**) to pass T042
-- [ ] T044 [P] [US8] Characterization test: near-match (`new_version` family) renders marked diff + view link, no similarity %, markers decodable without color; exact/no-match render no diff; missing `matches[].text` → read-only fallback, in `tests/content/similar-diff.test.ts` per contracts/similar-diff.md §B
-- [ ] T045 [US8] Implement `src/content/ui/components/similar-diff.ts` (render `diffWords` with marker+typography for added/removed, `prefers-contrast` aware, view link from `matches[].url`/`short_code`, read-only fallback) (FR-070..073)
-- [ ] T046 [US8] Integrate `similar-diff` into the near-match path (replace the read-only near-match presentation for the `new_version` family) in `src/content/ui/components/duplicate-badge.ts` and `src/content/ui/overlay-bar.ts` (FR-070) — **overlay-bar.ts edit after T041**
+- [X] T042 [P] [US8] Test-first: `diffWords` LCS (identical→all equal; pure insert/delete; substitution; reorder; empty captured/on-record; unicode/emoji), in `tests/utils/word-diff.test.ts` per contracts/similar-diff.md §A
+- [X] T043 [P] [US8] Implement `src/utils/word-diff.ts` (`WordDiffToken`, `diffWords` LCS over whitespace tokens, **no dependency**) to pass T042
+- [X] T044 [P] [US8] Characterization test: near-match (`new_version` family) renders marked diff + view link, no similarity %, markers decodable without color; exact/no-match render no diff; missing `matches[].text` → read-only fallback, in `tests/content/similar-diff.test.ts` per contracts/similar-diff.md §B
+- [X] T045 [US8] Implement `src/content/ui/components/similar-diff.ts` (render `diffWords` with marker+typography for added/removed, `prefers-contrast` aware, view link from `matches[].url`/`short_code`, read-only fallback) (FR-070..073)
+- [X] T046 [US8] Integrate `similar-diff` into the near-match path (replace the read-only near-match presentation for the `new_version` family) in `src/content/ui/components/duplicate-badge.ts` and `src/content/ui/overlay-bar.ts` (FR-070) — **overlay-bar.ts edit after T041**
 
 **Checkpoint**: SC-008 satisfied.
 
@@ -210,10 +214,10 @@ record-creation time. Honest "sighting" label.
 present). Once present → offered only when tweet strictly older, with the "older than our records" hint; otherwise
 read-only. Label says "sighting", never "variant".
 
-- [ ] T047 [P] [US9] Test-first: capability gate — `addSighting.available===false` whenever `quote_date` absent (incl. record-creation present, which must NOT be used); `eligible` only when `quote_date` present AND `TwitterData.date` strictly earlier; label is the sighting wording, in `tests/content/add-sighting.test.ts` per contracts/similar-diff.md §C
-- [ ] T048 [US9] Add optional, consumed-only `quote_date` to `DuplicateCheckResult.matches[]` in `src/types/api.ts` (may be absent; absence ⇒ feature unavailable, not an error) (data-model §9)
-- [ ] T049 [US9] Implement the `SimilarMatchView.addSighting` capability check + hidden/disabled UI (date-gate; honest sighting label; never record-creation fallback) in `src/content/ui/components/similar-diff.ts` (FR-080..083) — **after T045 (same file)**
-- [ ] T050 [US9] Record the blocking django-api dependency (`matches[].quote_date` published date) in the spec Dependencies + keep the action hidden until shipped; optionally file a bd issue `--labels chrome-ext,django-api` (no `--repo`) tracking the unblock
+- [X] T047 [P] [US9] Test-first: capability gate — `addSighting.available===false` whenever `quote_date` absent (incl. record-creation present, which must NOT be used); `eligible` only when `quote_date` present AND `TwitterData.date` strictly earlier; label is the sighting wording, in `tests/content/add-sighting.test.ts` per contracts/similar-diff.md §C
+- [X] T048 [US9] Add optional, consumed-only `quote_date` to `DuplicateCheckResult.matches[]` in `src/types/api.ts` (may be absent; absence ⇒ feature unavailable, not an error) (data-model §9)
+- [X] T049 [US9] Implement the `SimilarMatchView.addSighting` capability check + hidden/disabled UI (date-gate; honest sighting label; never record-creation fallback) in `src/content/ui/components/similar-diff.ts` (FR-080..083) — **after T045 (same file)**
+- [X] T050 [US9] Record the blocking django-api dependency (`matches[].quote_date` published date) in the spec Dependencies + keep the action hidden until shipped; optionally file a bd issue `--labels chrome-ext,django-api` (no `--repo`) tracking the unblock
 
 **Checkpoint**: SC-009 satisfied in its gated (hidden) form; unblocks when the API field ships.
 
@@ -223,11 +227,11 @@ read-only. Label says "sighting", never "variant".
 
 **Purpose**: Constitution conformance + release hygiene across all stories.
 
-- [ ] T051 [P] Accessibility audit (FR-100): every new surface (options page, account menu, progress indicator, first-run notice, similar-diff) is keyboard-operable, ARIA-labelled, status by glyph/text not color, honors `prefers-reduced-motion`/`prefers-contrast`
-- [ ] T052 [P] Verify no new manifest permission and `cookies` absent in all three manifests; `package.json` `dependencies` stays empty (FR-101/SC-010)
-- [ ] T053 Verify `splitChunks: false` preserved and `options/index` bundles to a single file; run `bun run build`, `bun run type-check`, `bun run lint` green
-- [ ] T054 Run `specs/005-capture-overlay-tray/quickstart.md` validation across US1–US9
-- [ ] T055 [P] Secret-hygiene check (FR-034/Article III.3): no token/cookie/secret value appears in logs, errors, or diagnostics from the logout / clear-data / private-mode flows
+- [X] T051 [P] Accessibility audit (FR-100): every new surface (options page, account menu, progress indicator, first-run notice, similar-diff) is keyboard-operable, ARIA-labelled, status by glyph/text not color, honors `prefers-reduced-motion`/`prefers-contrast`
+- [X] T052 [P] Verify no new manifest permission and `cookies` absent in all three manifests; `package.json` `dependencies` stays empty (FR-101/SC-010)
+- [X] T053 Verify `splitChunks: false` preserved and `options/index` bundles to a single file; run `bun run build`, `bun run type-check`, `bun run lint` green
+- [X] T054 Run `specs/005-capture-overlay-tray/quickstart.md` validation across US1–US9
+- [X] T055 [P] Secret-hygiene check (FR-034/Article III.3): no token/cookie/secret value appears in logs, errors, or diagnostics from the logout / clear-data / private-mode flows
 
 ---
 

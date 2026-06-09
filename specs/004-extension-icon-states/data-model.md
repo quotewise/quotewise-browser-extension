@@ -45,6 +45,15 @@ AuthPending.
 Loading and Error are semantic ambient/system states even though they render on the badge layer.
 They outrank quote-status badges because they describe current work/auth health, not duplicate status.
 
+Spec 005 adds one global privacy state:
+
+```
+Paused // Private mode enabled for a logged-in/non-error user → grey owl + ⏸︎ badge
+```
+
+Paused outranks Loading/AuthPending/Unsupported/SupportedIdle/quote-status badges, but auth errors and
+LoggedOut still win because they are more actionable and accurate.
+
 ### 2.2 `QuoteStatus` — the badge layer (only when ambient is Ready/Loading-resolved)
 ```
 None         // no qualifying duplicate data, errored check, or non-tweet page
@@ -88,7 +97,7 @@ sets a badge text color (FR-003) — `IconPresentation` has no such field by des
 
 ## 4. Canonical state/title table (single source — `src/config/icon-states.ts`)
 
-There are **13 canonical states**. This table has **14 title rows** because the Error state has two
+There are **14 canonical states**. This table has **15 title rows** because the Error state has two
 distinct actionable tooltips (`SESSION_EXPIRED` and `INSUFFICIENT_PRIVILEGES`).
 
 | State | Layer | `iconVariant` | `badgeText` | `badgeColor` | `title` | `scope` |
@@ -98,6 +107,7 @@ distinct actionable tooltips (`SESSION_EXPIRED` and `INSUFFICIENT_PRIVILEGES`).
 | Unsupported page | artwork | `grey` | `''` | — | `Quotewise — capture works on X/Twitter tweets` | global |
 | Auth pending | artwork | `color` | `''` | — | `Quotewise` | global |
 | Logged out | artwork | `grey` | `''` | — | `Quotewise — log in to capture quotes` | global |
+| Paused | badge | `grey` | `⏸︎` | `#64748B` | `Quotewise — paused (private mode)` | global |
 | Loading | badge | `color` | `●` | `#56B4E9` | `Quotewise — checking this quote…` | tab |
 | Error: session expired | badge | `color` | `!` | `#D55E00` | `Quotewise — session expired, log in again` | global |
 | Error: insufficient priv | badge | `color` | `!` | `#D55E00` | `Quotewise — additional permissions required` | global |
@@ -148,22 +158,23 @@ from `DuplicateCheckResult` and MUST NOT be emitted for errored preflight result
 
 ## 6. Precedence (FR-030) — the resolver's top-level order
 
-`resolveIconPresentation(auth, dup, tab): IconPresentation`
+`resolveIconPresentation(auth, dup, tab, privateMode): IconPresentation`
 
 ```
 1. Error           if auth ∈ {SESSION_EXPIRED, INSUFFICIENT_PRIVILEGES}      → ! badge   (global)
 2. LoggedOut       elif auth === UNAUTHENTICATED                              → grey owl  (global)
-3. Loading         elif tab.isSupportedPlatform && tab.isTweetPage
+3. Paused          elif privateMode === true                                  → ⏸︎ badge   (global)
+4. Loading         elif tab.isSupportedPlatform && tab.isTweetPage
                    && tab.isCheckInFlight                                     → ● badge   (tab)
-4. AuthPending     elif auth ∈ {UNKNOWN, CHECKING, AUTHENTICATING}            → color owl (global)
-5. UnsupportedPage elif auth === AUTHENTICATED && !tab.isSupportedPlatform    → grey owl  (global)
-6. SupportedIdle   elif auth === AUTHENTICATED && !tab.isTweetPage            → color owl (global)
-7. Quote-status    elif auth === AUTHENTICATED && tab.isTweetPage:                         (tab)
+5. AuthPending     elif auth ∈ {UNKNOWN, CHECKING, AUTHENTICATING}            → color owl (global)
+6. UnsupportedPage elif auth === AUTHENTICATED && !tab.isSupportedPlatform    → grey owl  (global)
+7. SupportedIdle   elif auth === AUTHENTICATED && !tab.isTweetPage            → color owl (global)
+8. Quote-status    elif auth === AUTHENTICATED && tab.isTweetPage:                         (tab)
                        map(dup) → one of  InCollection > Conflict > Exact > Similar
                        elif tab.isOriginatorMissing → MissingOriginator
                        else map(dup) → New
                        (None ⇒ fall through to Ready)
-8. Ready           else                                                       → color owl (global)
+9. Ready           else                                                       → color owl (global)
 ```
 
 Step 5's internal order is enforced *inside* the mapping (Section 5): `InCollection` is checked
@@ -176,6 +187,7 @@ every state except `LoggedOut`.
 |---|---|---|---|
 | SESSION_EXPIRED | (any, even an exact match) | tweet | **Error** `!` — auth beats quote status (SC-003) |
 | UNAUTHENTICATED | (any) | tweet | **Logged out** grey owl — no quote badge |
+| AUTHENTICATED + privateMode | `recommendation:duplicate`, in flight | tweet | **Paused** `⏸︎` — private mode beats loading and quote status |
 | CHECKING | `recommendation:duplicate` | tweet | **Auth pending** color owl, no badge, neutral "Quotewise" title |
 | AUTHENTICATED | (n/a) | unsupported site | **Unsupported page** grey owl, no badge |
 | AUTHENTICATED | (n/a) | supported X/Twitter page, no tweet | **Supported idle** color owl, no badge |
