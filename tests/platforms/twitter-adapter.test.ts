@@ -329,6 +329,44 @@ describe('TwitterAdapter extraction', () => {
     expect(primaryTweetId).toBe('1111111111');
   });
 
+  test('captures the focal tweet date, not the embedded quoted tweet date', () => {
+    // Real-DOM ordering for a quote-tweet on a /status/ permalink: the embedded
+    // quoted card renders its own bare <time> EARLIER in document order than the
+    // focal tweet's standalone timestamp, which is the one wrapped in the focal
+    // tweet's own status-link anchor. A naive querySelector('time') grabs the
+    // quoted (older) date — see qw-hqhk.
+    window.history.pushState({}, '', '/main/status/1111111111');
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name">
+          <div><span><span>Main Author</span></span></div>
+          <a href="https://x.com/main">Main Author</a>
+        </div>
+        <div data-testid="tweetText">
+          <span lang="en">Check out this old tweet</span>
+        </div>
+        <div data-testid="quotedTweet">
+          <div role="link">
+            <div data-testid="User-Name">
+              <div><span><span>Quoted Author</span></span></div>
+            </div>
+            <div data-testid="tweetText">
+              <span lang="en">This is the quoted tweet from 2015</span>
+            </div>
+            <time datetime="2015-04-15T00:57:32.000Z"></time>
+          </div>
+        </div>
+        <a href="https://x.com/main/status/1111111111"><time datetime="2026-06-15T02:54:18.000Z"></time></a>
+      </article>
+    `;
+
+    const adapter = new TwitterAdapter();
+    const data = (adapter as any).extractFromDom();
+
+    expect(data?.platform_data.tweet_id).toBe('1111111111');
+    expect(data?.date).toBe('2026-06-15T02:54:18.000Z');
+  });
+
   test('uses primaryColumn positioning when no URL match', () => {
     // Simulate Twitter layout with primaryColumn
     document.body.innerHTML = `
