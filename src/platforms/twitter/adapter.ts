@@ -185,7 +185,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     const url = tweetId && author.username
       ? `https://x.com/${author.username}/status/${tweetId}`
       : cleanUrl(window.location.href);
-    const date = this.extractDate(article);
+    const date = this.extractDate(article, tweetId);
     const language = this.extractLanguage(article);
     const isProtected = this.detectProtected(article);
     const mediaPresent = this.detectMedia(article);
@@ -576,8 +576,16 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     return match ? match[1] : null;
   }
 
-  private extractDate(article: Element): string | null {
-    const time = article.querySelector('time');
+  private extractDate(article: Element, tweetId?: string | null): string | null {
+    // The focal tweet's timestamp is wrapped in its own status-link anchor.
+    // On quote-tweets the embedded quoted card renders its own <time> earlier
+    // in document order, so a naive querySelector('time') grabs the quoted
+    // (older) tweet's date. Prefer the timestamp inside the focal tweet's own
+    // status link, mirroring extractTweetIdFromArticleElement.
+    const time =
+      (tweetId && article.querySelector(`a[href*="/status/${tweetId}"] time`)) ||
+      article.querySelector('a[href*="/status/"] time') ||
+      article.querySelector('time');
     if (!time) return null;
     const date = time.getAttribute('datetime') || time.getAttribute('aria-label');
     return date ? new Date(date).toISOString() : null;
