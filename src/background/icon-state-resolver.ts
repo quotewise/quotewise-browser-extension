@@ -31,6 +31,7 @@ export function resolveIconPresentation(
   auth: AuthState,
   dup: DuplicateCheckResult | null,
   tab: TabContext,
+  privateMode = false,
 ): IconPresentation {
   const quoteStatus = mapRecommendationToQuoteStatus(dup);
 
@@ -44,6 +45,10 @@ export function resolveIconPresentation(
 
   if (auth === AuthState.UNAUTHENTICATED) {
     return ICON_STATES.LoggedOut;
+  }
+
+  if (privateMode) {
+    return ICON_STATES.Paused;
   }
 
   if (

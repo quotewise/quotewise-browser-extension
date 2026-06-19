@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Quotewise Quote Capture",
-  "version": "1.4.30",
+  "version": "1.5.5",
   "description": "Capture quotes from Twitter/X and add them to Quotewise with proper attribution",
   "permissions": [
     "activeTab",
@@ -39,6 +39,10 @@
       "48": "icons/icon48-grey.png",
       "128": "icons/icon128-grey.png"
     }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "icons": {
     "16": "icons/icon16.png",

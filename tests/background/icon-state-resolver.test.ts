@@ -216,6 +216,35 @@ describe('resolveIconPresentation', () => {
     });
   });
 
+  it('renders Paused after logged-out/errors and ahead of loading, idle, and quote status', () => {
+    for (const state of [AuthState.SESSION_EXPIRED, AuthState.INSUFFICIENT_PRIVILEGES]) {
+      expect(resolveIconPresentation(state, duplicate('new_quote'), tweetTab, true)).toMatchObject({
+        badgeText: '!',
+        scope: 'global',
+      });
+    }
+
+    expect(resolveIconPresentation(AuthState.UNAUTHENTICATED, null, tweetTab, true)).toMatchObject({
+      title: 'Quotewise — log in to capture quotes',
+      badgeText: '',
+    });
+
+    for (const state of [AuthState.AUTHENTICATED, AuthState.UNKNOWN, AuthState.CHECKING, AuthState.AUTHENTICATING]) {
+      expect(resolveIconPresentation(
+        state,
+        duplicate('duplicate'),
+        { ...tweetTab, isCheckInFlight: true },
+        true,
+      )).toMatchObject({
+        iconVariant: 'grey',
+        badgeText: '⏸︎',
+        badgeColor: '#64748B',
+        scope: 'global',
+        title: 'Quotewise — paused (private mode)',
+      });
+    }
+  });
+
   it('falls back to ready on errored duplicate checks and supported idle on non-tweet pages', () => {
     expect(resolveIconPresentation(
       AuthState.AUTHENTICATED,

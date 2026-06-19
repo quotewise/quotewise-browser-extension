@@ -45,6 +45,13 @@ export const ICON_STATES = {
     title: 'Quotewise — log in to capture quotes',
     scope: 'global',
   },
+  Paused: {
+    iconVariant: 'grey',
+    badgeText: '⏸︎',
+    badgeColor: '#64748B',
+    title: 'Quotewise — paused (private mode)',
+    scope: 'global',
+  },
   Loading: {
     iconVariant: 'color',
     badgeText: '●',

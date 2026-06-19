@@ -27,6 +27,11 @@ function makeDuplicateResult(
   };
 }
 
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe('OverlayBar', () => {
   const tweetData: TwitterData = {
     text: 'A just submitted quote',
@@ -93,6 +98,61 @@ describe('OverlayBar', () => {
 
     expect(chrome.storage.local.remove).toHaveBeenCalledWith(['preloadedDuplicateCheck']);
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
+  });
+
+  it('shows each submit progress phase before success', async () => {
+    let submitCallback: (response: unknown) => void = () => undefined;
+    let submitRequested = false;
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.SUBMIT_QUOTE) {
+        submitRequested = true;
+        submitCallback = callback;
+        return;
+      }
+
+      callback({ success: true });
+    });
+
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).mount();
+    (overlay as any).currentData = tweetData;
+    (overlay as any).captureState.originator = {
+      id: 42,
+      unique_id: 'author',
+      full_name: 'Author',
+      sort_name_display: 'Author',
+      confidence: 1,
+    };
+    (overlay as any).ensureActionButton();
+
+    const submitPromise = (overlay as any).submitQuote();
+    await flushPromises();
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const actionColumn = shadow.querySelector('.originator-row .section.right');
+    expect(shadow.getElementById('progress-indicator')?.textContent).toContain('Checking quote');
+    expect(actionColumn?.firstElementChild?.id).toBe('progress-indicator');
+    expect(shadow.querySelector('.progress-track')).toBeTruthy();
+    expect((shadow.getElementById('submit-btn') as HTMLButtonElement).textContent).toBe('Submitting...');
+
+    jest.advanceTimersByTime(350);
+    await flushPromises();
+
+    expect(shadow.getElementById('progress-indicator')?.textContent).toContain('Saving to Quotewise');
+    expect((shadow.getElementById('submit-btn') as HTMLButtonElement).textContent).toBe('Submitting...');
+    expect(submitRequested).toBe(true);
+
+    submitCallback({ success: true, message: 'Quote submitted successfully', quoteId: 'q1' });
+    await flushPromises();
+
+    expect(shadow.getElementById('progress-indicator')?.textContent).toContain('Confirming');
+    expect((shadow.getElementById('submit-btn') as HTMLButtonElement).textContent).toBe('Submitting...');
+
+    jest.advanceTimersByTime(350);
+    await submitPromise;
+
+    expect((shadow.getElementById('submit-btn') as HTMLButtonElement).textContent).toBe('Done!');
+    expect(shadow.getElementById('originator-info')?.textContent).toContain('Quote added successfully!');
   });
 
   it('blocks submit when the exact sighting already exists', async () => {
@@ -276,6 +336,25 @@ describe('OverlayBar', () => {
     (overlay as any).onPageSelectionChanged();
 
     expect((overlay as any).captureState.selectedText).toBe('previously selected');
+  });
+
+  it('closes the tray when Escape is pressed', () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).mount();
+    expect(overlay.isVisible()).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(overlay.isVisible()).toBe(false);
+  });
+
+  it('leaves the tray open for non-Escape keys', () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).mount();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+
+    expect(overlay.isVisible()).toBe(true);
   });
 
   it('attaches and detaches the selectionchange watcher', () => {

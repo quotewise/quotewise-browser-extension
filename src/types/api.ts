@@ -64,6 +64,7 @@ export interface DuplicateCheckResult {
     // Sighting status for platform awareness
     short_code?: string;
     url?: string;
+    quote_date?: string;
     sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
     platform_sighting_url?: string | null;
   }>;
@@ -90,6 +91,7 @@ export interface QuoteSubmissionResult {
   quoteId?: string;
   error?: string;
   id?: string; // For Django response format
+  collectionWarning?: string;
 }
 
 // Legacy interfaces for backwards compatibility
@@ -114,6 +116,7 @@ export interface QuoteSubmissionRequest {
   platform_code: PlatformCode;
   likes_count?: number;
   quote_date?: string;
+  collection_id?: string;
   attribution_type: AttributionType;
   context?: string;
   image_urls?: string[];

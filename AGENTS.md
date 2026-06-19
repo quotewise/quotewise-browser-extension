@@ -56,3 +56,8 @@
 - Rely on existing session cookies for auth tests; do not log or persist user credentials in code or tests.
 - Platform data flags protected tweets (`is_protected`); backend support pending—note rationale in PRs when touching submission flows.
 - The in-page overlay bar is injected by `src/content/index.ts` and shown on demand via toolbar click (`SHOW_OVERLAY`); popup is disabled in the manifest to favor the page bar.
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->

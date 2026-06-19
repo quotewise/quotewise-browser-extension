@@ -47,6 +47,15 @@ export class ActionButton {
     this.button.textContent = text;
   }
 
+  setBusy(isBusy: boolean): void {
+    if (!this.button) return;
+    if (isBusy) {
+      this.button.setAttribute('aria-busy', 'true');
+    } else {
+      this.button.removeAttribute('aria-busy');
+    }
+  }
+
   private ensureButton(mode: 'submit' | 'login' | 'view_quote'): void {
     if (this.button && this.mode === mode) return;
 
