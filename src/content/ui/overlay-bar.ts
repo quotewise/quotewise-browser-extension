@@ -58,6 +58,7 @@ export class OverlayBar {
   private unsubscribeSettings: (() => void) | null = null;
   private selectionChangeHandler: (() => void) | null = null;
   private selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private captureState: CaptureState = {
     expanded: false,
     isLookingUp: false,
@@ -596,6 +597,15 @@ export class OverlayBar {
 
     refreshBtn?.addEventListener('click', () => this.refresh());
     closeBtn?.addEventListener('click', () => this.hide());
+
+    // Escape dismisses the tray, mirroring the × button. Lower-risk than
+    // click-outside, which would collide with selecting tweet/article text.
+    this.keydownHandler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && this.isVisible()) {
+        this.hide();
+      }
+    };
+    document.addEventListener('keydown', this.keydownHandler);
 
     this.subscribeSettings();
     this.mountAccountMenu();
