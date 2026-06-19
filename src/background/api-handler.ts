@@ -91,6 +91,10 @@ export class ApiHandler {
                     await this.handlePreflightCheck(message, sendResponse);
                     break;
 
+                case 'LIST_COLLECTIONS':
+                    await this.handleListCollections(sendResponse);
+                    break;
+
                 default:
                     console.warn('Unknown message type:', message.type);
                     sendResponse({ 
@@ -225,6 +229,31 @@ export class ApiHandler {
                 ...this.authFailureFields(error),
                 message: error instanceof Error ? error.message : 'Quote submission failed',
                 error: error instanceof Error ? error.message : 'Quote submission failed'
+            });
+        }
+    }
+
+    /**
+     * Handle collections list for options page
+     */
+    private async handleListCollections(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sendResponse: (response: any) => void
+    ): Promise<void> {
+        try {
+            const result = await this.apiClient.listCollections();
+            sendResponse({
+                success: true,
+                ...result
+            });
+        } catch (error) {
+            console.error('Error listing collections:', error);
+            sendResponse({
+                success: false,
+                ...this.authFailureFields(error),
+                error: error instanceof Error ? error.message : 'Unable to list collections',
+                collections: [],
+                default_collection_id: null
             });
         }
     }

@@ -13,7 +13,7 @@ filenames, sizes, and color values.
   (drops interior detail — FR-061).
 - Composition (per design §6, adjusted after toolbar review): owl recolored `beige`, centered at
   full source scale on a `#304f50` rounded square (corner radius ≈ 19%). The grey variant: owl
-  `#dcdcdc` on `#6f6f6f` (FR-062).
+  `#6b7280` on `#e5e7eb` (FR-062).
 
 ## Generator
 

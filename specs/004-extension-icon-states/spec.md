@@ -328,7 +328,7 @@ questions and outrank quote-status badges.
 - **FR-061**: The master MUST be `quotewise.svg` (the 5-path version with explicit eye/nose/feet and an open
   chest), recolored to `beige` and composited on a `#304f50` rounded square. The 2-path `quotewise-light.svg`
   MUST NOT be used (its silhouette drops the interior detail).
-- **FR-062**: The grey variant MUST be the owl `#dcdcdc` on `#6f6f6f`. Rasterization MUST use a faithful,
+- **FR-062**: The grey variant MUST be the owl `#6b7280` on `#e5e7eb`. Rasterization MUST use a faithful,
   CI-portable renderer (`@resvg/resvg-js` or `sharp`); ImageMagick and `qlmanage` MUST NOT be used for the
   SVG→raster step.
 
@@ -344,9 +344,9 @@ questions and outrank quote-status badges.
 |---|---|---|---|---|
 | Ready | artwork | — (color owl) | — | `AUTHENTICATED` + supported tweet page |
 | Supported idle | artwork | — (color owl) | — | `AUTHENTICATED` + supported X/Twitter page, no tweet in focus |
-| Unsupported page | artwork | — (grey owl) | grey owl `#dcdcdc`/`#6f6f6f` | `AUTHENTICATED` + unsupported site |
+| Unsupported page | artwork | — (grey owl) | grey owl `#6b7280`/`#e5e7eb` | `AUTHENTICATED` + unsupported site |
 | Auth pending | artwork | — (color owl) | — | `UNKNOWN` / `CHECKING` / `AUTHENTICATING` |
-| Logged out | artwork | — (grey owl) | grey owl `#dcdcdc`/`#6f6f6f` | `UNAUTHENTICATED` |
+| Logged out | artwork | — (grey owl) | grey owl `#6b7280`/`#e5e7eb` | `UNAUTHENTICATED` |
 | Loading | badge | `●` (static) | `#56B4E9` | check in flight |
 | Error | badge | `!` | `#D55E00` | `SESSION_EXPIRED` / `INSUFFICIENT_PRIVILEGES` |
 | In your collection | badge | `✓` | `#009E73` | any match `in_user_collections: true` |

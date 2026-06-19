@@ -30,7 +30,7 @@ are therefore **sequential**, not `[P]`.
 **Purpose**: Tooling and source assets needed before any state logic or art exists.
 
 - [X] T001 [P] Add the rasterizer devDependency: `bun add -d @resvg/resvg-js`; confirm it lands in `package.json` devDependencies and is pinned in `bun.lock` (Constitution III.2; dev-only, never shipped)
-- [X] T002 [P] Vendor the vector master to `assets/owl.svg` from the brand `quotewise.svg` (the **5-path** version with eye/nose/feet; **not** `quotewise-light.svg`), composited per FR-061: owl `beige` centered ~78% on a `#304f50` rounded square (radius ≈19%); document the grey params (owl `#dcdcdc` on `#6f6f6f`)
+- [X] T002 [P] Vendor the vector master to `assets/owl.svg` from the brand `quotewise.svg` (the **5-path** version with eye/nose/feet; **not** `quotewise-light.svg`), composited per FR-061: owl `beige` centered ~78% on a `#304f50` rounded square (radius ≈19%); document the grey params (owl `#6b7280` on `#e5e7eb`)
 - [X] T003 [P] Create `scripts/generate-icons.mjs` (resvg: `new Resvg(svg,{fitTo:{mode:'width',value:n},shapeRendering:2}).render().asPng()` per `n∈{16,32,48,128}`, emitting color + `-grey` PNGs to `public/icons/`) and add `"icons": "node scripts/generate-icons.mjs"` to `package.json` scripts (per contracts/icon-assets.md)
 - [X] T004 [P] Extend Chrome API mocks in `tests/setup.ts` to cover `chrome.action.setIcon` and `chrome.action.getBadgeText` (existing mock covers setBadgeText/Color/setTitle), and add red applicator tests in `tests/background/icon-applicator.test.ts`: correct color/grey icon paths, `tabId` included iff `scope==='tab'` or auth-cleanup `forceTabScope` is used, `setBadgeTextColor` is never called, and a prior tab-scoped `★` is overwritten on logout/session-expiry
 

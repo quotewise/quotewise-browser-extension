@@ -7,6 +7,8 @@ export {
   MessageType,
   ExtensionMessage,
   TwitterData,
+  Settings,
+  DEFAULT_SETTINGS,
   ExtensionStorage,
   ExtensionError,
   Platform,

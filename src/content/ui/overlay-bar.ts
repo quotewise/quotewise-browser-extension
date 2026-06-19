@@ -1,6 +1,6 @@
 import type { TwitterData } from '../../types';
-import { MessageType } from '../../types';
-import type { DuplicateCheckResult, OriginatorSearchResult } from '../../types/api';
+import { DEFAULT_SETTINGS, MessageType, type Settings } from '../../types';
+import type { DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
 import { AuthState } from '../../auth/auth-state-machine';
 import type { AuthStateData } from '../../auth/auth-state-machine';
 import { DuplicateBadge } from './components/duplicate-badge';
@@ -8,9 +8,15 @@ import type { SubmitStateDirective } from './components/duplicate-badge';
 import { QuotePreview } from './components/quote-preview';
 import { OriginatorLookup } from './components/originator-lookup';
 import { ActionButton } from './components/action-button';
+import { CaptureProgressIndicator } from './components/progress-indicator';
+import { FirstRunNotice } from './components/first-run-notice';
+import { AccountMenu } from './components/account-menu';
 import { classifyDuplicateSighting } from '../../utils/duplicate-status';
+import { getSettings, onSettingsChanged, updateSettings } from '../../settings/settings-store';
 
 type DataProvider = () => Promise<TwitterData | null>;
+
+const SUBMIT_PHASE_MIN_VISIBLE_MS = 350;
 
 interface CaptureState {
   expanded: boolean;
@@ -30,7 +36,7 @@ interface CaptureState {
 /**
  * Overlay bar UI for tweet capture
  * Design:
- * - Row 1: Tweet preview with metadata chips and control buttons
+ * - Row 1: Tweet preview and control buttons
  * - Row 2 (expandable): Originator lookup/selection and submit
  */
 export class OverlayBar {
@@ -45,8 +51,14 @@ export class OverlayBar {
   private quotePreview: QuotePreview | null = null;
   private originatorLookup: OriginatorLookup | null = null;
   private actionButton: ActionButton | null = null;
+  private progressIndicator: CaptureProgressIndicator | null = null;
+  private firstRunNotice: FirstRunNotice | null = null;
+  private accountMenu: AccountMenu | null = null;
+  private settings: Settings = { ...DEFAULT_SETTINGS };
+  private unsubscribeSettings: (() => void) | null = null;
   private selectionChangeHandler: (() => void) | null = null;
   private selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private captureState: CaptureState = {
     expanded: false,
     isLookingUp: false,
@@ -79,11 +91,11 @@ export class OverlayBar {
       container?.setAttribute('aria-hidden', 'false');
     }
     // Auto-expand capture when showing (user clicked icon = they want to capture)
-    this.refresh().then(() => {
+    this.loadSettings().finally(() => this.refresh().then(() => {
       if (this.currentData) {
         this.expandCapture();
       }
-    });
+    }));
   }
 
   hide(): void {
@@ -96,6 +108,10 @@ export class OverlayBar {
       const container = this.shadow.querySelector('.container');
       container?.setAttribute('aria-hidden', 'true');
     }
+  }
+
+  isVisible(): boolean {
+    return !!this.root && !this.hidden;
   }
 
   async refresh(): Promise<void> {
@@ -140,7 +156,7 @@ export class OverlayBar {
           box-sizing: border-box;
           width: 100%;
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           gap: 12px;
           padding: 8px 12px;
           background: #0f172a;
@@ -151,6 +167,7 @@ export class OverlayBar {
         }
         .bar {
           border-bottom: 1px solid rgba(255,255,255,0.08);
+          min-height: 44px;
         }
         .capture-row {
           background: #1e293b;
@@ -216,7 +233,22 @@ export class OverlayBar {
           gap: 16px;
           min-width: 0;
         }
-        .right { flex: 0 0 auto; gap: 6px; }
+        .right {
+          flex: 0 0 auto;
+          gap: 6px;
+          align-self: flex-start;
+          margin-left: auto;
+        }
+        .originator-row .section.right {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 6px;
+          width: min(240px, 34vw);
+          min-width: 190px;
+        }
+        .originator-row .section.right button {
+          width: 100%;
+        }
         .badge {
           display: inline-flex;
           align-items: center;
@@ -240,28 +272,6 @@ export class OverlayBar {
           overflow-y: auto;
           overflow-x: hidden;
         }
-        .meta-row {
-          flex: 2 1 0%;
-          display: flex;
-          flex-wrap: nowrap;
-          gap: 8px;
-          font-size: 12px;
-          color: #cbd5e1;
-          justify-content: flex-end;
-          min-width: 0;
-          overflow-x: auto;
-          overflow-y: hidden;
-        }
-        .chip {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
-          padding: 3px 6px;
-          border-radius: 6px;
-          background: rgba(255,255,255,0.08);
-          white-space: nowrap;
-        }
-        .chip .icon { opacity: 0.8; }
         button {
           border: none;
           border-radius: 6px;
@@ -273,6 +283,10 @@ export class OverlayBar {
           line-height: 16px;
         }
         button:hover:not(:disabled) { background: rgba(255,255,255,0.18); }
+        button:focus-visible {
+          outline: 2px solid #93c5fd;
+          outline-offset: 2px;
+        }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
         button.primary { background: #2563eb; color: #fff; }
         button.primary:hover:not(:disabled) { background: #1d4ed8; }
@@ -290,6 +304,11 @@ export class OverlayBar {
           background: rgba(255,255,255,0.12);
           color: #e2e8f0;
         }
+        #account-menu-btn {
+          padding: 0;
+          font-size: 23px;
+          line-height: 1;
+        }
         .spinner {
           width: 14px;
           height: 14px;
@@ -298,8 +317,78 @@ export class OverlayBar {
           border-radius: 50%;
           animation: spin 0.8s linear infinite;
         }
+        .capture-progress {
+          display: flex;
+          flex-direction: column;
+          align-items: stretch;
+          gap: 5px;
+          color: #cbd5e1;
+          font-size: 12px;
+          line-height: 16px;
+          white-space: normal;
+        }
+        .capture-progress.error {
+          display: inline-flex;
+          flex-direction: row;
+          flex-wrap: wrap;
+          color: #fecaca;
+        }
+        .progress-track {
+          position: relative;
+          width: 100%;
+          height: 3px;
+          overflow: hidden;
+          border-radius: 999px;
+          background: rgba(255,255,255,0.16);
+        }
+        .progress-copy {
+          display: flex;
+          flex-direction: column;
+          gap: 1px;
+          min-width: 0;
+        }
+        .progress-text {
+          color: #e2e8f0;
+          font-weight: 600;
+        }
+        .progress-secondary {
+          color: #94a3b8;
+          font-size: 11px;
+          line-height: 15px;
+        }
+        .progress-bar {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          width: 38%;
+          border-radius: 999px;
+          background: #93c5fd;
+          animation: progress-slide 0.9s ease-in-out infinite;
+        }
+        .progress-retry {
+          padding: 3px 7px;
+          font-size: 11px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .container {
+            transition: none;
+          }
+          .spinner {
+            animation: none;
+          }
+          .progress-bar {
+            animation: none;
+            width: 100%;
+            opacity: 0.65;
+          }
+        }
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        @keyframes progress-slide {
+          from { transform: translateX(-120%); }
+          to { transform: translateX(260%); }
         }
         .originator-info {
           display: flex;
@@ -331,6 +420,104 @@ export class OverlayBar {
           color: #94a3b8;
           font-size: 12px;
         }
+        .first-run-notice {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 8px 12px;
+          background: rgba(37,99,235,0.15);
+          color: #dbeafe;
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .notice-dismiss {
+          flex: 0 0 auto;
+        }
+        .check-now {
+          margin-left: 8px;
+        }
+        .account-menu-wrap {
+          position: relative;
+        }
+        .account-menu {
+          position: absolute;
+          top: 34px;
+          right: 0;
+          min-width: 190px;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          padding: 6px;
+          border: 1px solid rgba(255,255,255,0.16);
+          border-radius: 6px;
+          background: #111827;
+          box-shadow: 0 12px 24px rgba(0,0,0,0.24);
+          z-index: 1;
+        }
+        .account-menu[hidden] {
+          display: none;
+        }
+        .account-menu .menu-status {
+          padding: 6px 8px 4px;
+          color: #94a3b8;
+          font-size: 12px;
+          line-height: 16px;
+        }
+        .account-menu button,
+        .account-menu .menu-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          box-sizing: border-box;
+          padding: 7px 8px;
+          border-radius: 4px;
+          color: #e2e8f0;
+          background: transparent;
+          text-align: left;
+        }
+        .account-menu button:hover,
+        .account-menu .menu-row:hover {
+          background: rgba(255,255,255,0.10);
+        }
+        .similar-diff {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          min-width: 0;
+          color: #dbeafe;
+        }
+        .similar-diff-text {
+          min-width: 0;
+        }
+        .diff-token.added {
+          text-decoration: underline;
+          text-decoration-thickness: 2px;
+        }
+        .diff-token.removed {
+          text-decoration: line-through;
+          opacity: 0.86;
+        }
+        .similar-diff a {
+          color: #93c5fd;
+          white-space: nowrap;
+        }
+        .sighting-hint {
+          color: #facc15;
+          font-size: 12px;
+        }
+        .add-sighting-action {
+          font-size: 11px;
+          padding: 3px 7px;
+        }
+        @media (prefers-contrast: more) {
+          .diff-token.added,
+          .diff-token.removed {
+            outline: 1px solid currentColor;
+            outline-offset: 1px;
+          }
+        }
       </style>
       <div class="container" aria-hidden="false">
         <div class="bar">
@@ -340,15 +527,16 @@ export class OverlayBar {
           </div>
           <div class="section center">
             <div class="text" id="tweet-preview">Collecting tweet data…</div>
-            <div class="meta-row" id="meta-row"></div>
           </div>
           <div class="section right">
-            <button id="refresh-btn">Refresh</button>
-            <button class="toggle" id="close-btn" aria-label="Close bar">×</button>
+            <div class="account-menu-wrap" id="account-menu-wrap"></div>
+            <button id="refresh-btn" aria-label="Refresh tweet capture">Refresh</button>
+            <button class="toggle" id="close-btn" aria-label="Close capture tray">×</button>
           </div>
         </div>
         <div class="capture-row" id="capture-row">
           <div class="capture-row-content">
+            <div id="first-run-notice-container"></div>
             <div class="quote-preview-row">
               <div class="section left">
                 <div class="badge info">Quote</div>
@@ -367,6 +555,7 @@ export class OverlayBar {
                 </div>
               </div>
               <div class="section right">
+                <div class="progress-indicator" id="progress-indicator"></div>
                 <!-- Action button inserted dynamically by updateActionButton() -->
               </div>
             </div>
@@ -381,7 +570,6 @@ export class OverlayBar {
     const previewEl = this.shadow.getElementById('tweet-preview');
     const protectedBadge = this.shadow.getElementById('protected-badge');
     const platformBadge = this.shadow.getElementById('platform-badge');
-    const metaRow = this.shadow.getElementById('meta-row');
     if (platformBadge) {
       platformBadge.textContent = this.currentPlatformLabel;
     }
@@ -390,7 +578,6 @@ export class OverlayBar {
     if (!data) {
       previewEl.textContent = 'No tweet detected on this page.';
       if (protectedBadge) protectedBadge.setAttribute('style', 'display:none;');
-      if (metaRow) metaRow.innerHTML = '';
       return;
     }
 
@@ -401,35 +588,6 @@ export class OverlayBar {
 
     const snippet = (data.text || '').trim();
     previewEl.textContent = snippet || 'Tweet text unavailable';
-
-    if (metaRow) {
-      metaRow.innerHTML = this.buildMetaChips(data);
-    }
-  }
-
-  private buildMetaChips(data: TwitterData): string {
-    const chips: string[] = [];
-
-    if (data.author?.username) {
-      chips.push(`<span class="chip"><span class="icon">@</span>${this.escapeHtml(data.author.username)}</span>`);
-    }
-
-    if (data.date) {
-      const date = new Date(data.date);
-      const dateText = isNaN(date.getTime()) ? data.date : date.toLocaleString();
-      chips.push(`<span class="chip"><span class="icon">🗓</span>${this.escapeHtml(dateText)}</span>`);
-    }
-
-    const metricChip = (icon: string, val?: number) =>
-      typeof val === 'number' && !isNaN(val) ? `<span class="chip"><span class="icon">${icon}</span>${val}</span>` : '';
-
-    chips.push(metricChip('💬', data.replies));
-    chips.push(metricChip('🔁', data.retweets));
-    chips.push(metricChip('❤️', data.likes));
-    chips.push(metricChip('👁', data.views));
-    chips.push(metricChip('🔖', data.bookmarks));
-
-    return chips.filter(Boolean).join('');
   }
 
   private wireInteractions(): void {
@@ -439,6 +597,18 @@ export class OverlayBar {
 
     refreshBtn?.addEventListener('click', () => this.refresh());
     closeBtn?.addEventListener('click', () => this.hide());
+
+    // Escape dismisses the tray, mirroring the × button. Lower-risk than
+    // click-outside, which would collide with selecting tweet/article text.
+    this.keydownHandler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && this.isVisible()) {
+        this.hide();
+      }
+    };
+    document.addEventListener('keydown', this.keydownHandler);
+
+    this.subscribeSettings();
+    this.mountAccountMenu();
 
     // Listen for auth state changes from AuthStateManager
     chrome.runtime.onMessage.addListener((message) => {
@@ -453,6 +623,8 @@ export class OverlayBar {
    * Reactively update overlay when user logs in/out
    */
   private handleAuthStateChanged(stateData: AuthStateData): void {
+    this.accountMenu?.setAuthState(stateData);
+
     // If we're showing login required and user just authenticated, retry capture
     if (
       stateData.state === AuthState.AUTHENTICATED &&
@@ -478,6 +650,39 @@ export class OverlayBar {
     }
   }
 
+  private async loadSettings(): Promise<void> {
+    try {
+      this.settings = await getSettings();
+    } catch {
+      this.settings = { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  private subscribeSettings(): void {
+    if (this.unsubscribeSettings) return;
+    this.unsubscribeSettings = onSettingsChanged((next) => {
+      this.settings = next;
+      if (this.captureState.expanded && this.currentData) {
+        if (next.privateMode && !this.captureState.originator) {
+          this.showPrivateModePaused();
+        }
+      }
+    });
+  }
+
+  private voidSettingsError(error: unknown): void {
+    console.warn('Unable to initialize settings UI:', error);
+  }
+
+  private mountAccountMenu(): void {
+    if (this.accountMenu) return;
+    const container = this.shadow?.getElementById('account-menu-wrap') as HTMLElement | null;
+    if (!container) return;
+
+    this.accountMenu = new AccountMenu(container, message => this.sendMessage(message));
+    void this.accountMenu.mount().catch(error => this.voidSettingsError(error));
+  }
+
   private async expandCapture(): Promise<void> {
     if (!this.shadow || !this.currentData) return;
 
@@ -487,6 +692,8 @@ export class OverlayBar {
       this.showLoginRequired();
       return;
     }
+
+    await this.loadSettings();
 
     // Check for text selection on the page before expanding
     const selectedText = this.getPageSelection();
@@ -501,6 +708,12 @@ export class OverlayBar {
 
     // Initialize action button based on current auth state
     this.updateActionButton(true); // We know we're authenticated at this point
+    await this.maybeShowFirstRunNotice();
+
+    if (this.settings.privateMode) {
+      this.showPrivateModePaused();
+      return;
+    }
 
     // On articles, watch for the user highlighting a passage after opening so
     // capture enables live without reopening the bar.
@@ -514,6 +727,132 @@ export class OverlayBar {
       await this.lookupOriginator(handle);
     } else {
       this.setOriginatorHtml('<span class="badge error">!</span> <span>No author handle available</span>');
+    }
+  }
+
+  private async maybeShowFirstRunNotice(): Promise<void> {
+    if (this.settings.privateMode || this.settings.firstRunNoticeShown) {
+      this.firstRunNotice?.hide();
+      return;
+    }
+
+    const container = this.shadow?.getElementById('first-run-notice-container') as HTMLElement | null;
+    if (!container) return;
+
+    if (!this.firstRunNotice) {
+      this.firstRunNotice = new FirstRunNotice(container, {
+        onDismiss: () => {
+          void updateSettings({ firstRunNoticeShown: true }).then(settings => {
+            this.settings = settings;
+          });
+        },
+      });
+    }
+
+    this.firstRunNotice.show();
+    this.settings = await updateSettings({ firstRunNoticeShown: true });
+  }
+
+  private showPrivateModePaused(): void {
+    this.captureState.lookupResult = null;
+    this.captureState.originator = null;
+    this.captureState.createUrl = null;
+    this.updateDuplicateInfo(null);
+    this.updateSubmitButton(false, 'Check first');
+
+    const infoEl = this.shadow?.getElementById('originator-info');
+    if (!infoEl) return;
+
+    infoEl.innerHTML = `
+      <span class="badge info">⏸︎</span>
+      <span>Private mode is on. Check this tweet only when you choose.</span>
+      <button type="button" class="check-now" id="check-now-btn" aria-label="Check this tweet now">Check now</button>
+    `;
+    infoEl.querySelector('#check-now-btn')?.addEventListener('click', () => {
+      void this.checkNow();
+    });
+  }
+
+  private originatorFromPreflight(result: unknown): OriginatorSearchResult | null {
+    if (!result || typeof result !== 'object') {
+      return null;
+    }
+
+    const value = result as PreflightOriginatorResult;
+    if (!value.found || !value.originator) {
+      return null;
+    }
+
+    const uniqueId = value.originator.unique_id ?? value.originator.slug;
+    if (!uniqueId) {
+      return null;
+    }
+
+    return {
+      id: value.originator.id,
+      unique_id: uniqueId,
+      full_name: value.originator.full_name,
+      sort_name_display: value.originator.full_name,
+      confidence: value.confidence ?? 1,
+    };
+  }
+
+  private async checkNow(): Promise<void> {
+    if (!this.currentData) return;
+
+    const handle = this.currentData.author?.username;
+    if (!handle) {
+      this.setOriginatorHtml('<span class="badge error">!</span> <span>No author handle available</span>');
+      return;
+    }
+
+    const progress = this.ensureProgressIndicator();
+    progress.setPhase('checking');
+    this.updateSubmitButton(false, 'Checking...');
+
+    try {
+      const response = await this.sendMessage({
+        type: MessageType.CHECK_NOW,
+        data: {
+          tweetId: this.currentData.platform_data?.tweet_id,
+          handle,
+          sourceUrl: this.currentData.url,
+          text: this.captureState.selectedText || this.currentData.text,
+        },
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Check failed');
+      }
+
+      const originator = this.originatorFromPreflight(response.originator);
+      if (originator) {
+        this.captureState.originator = originator;
+        this.captureState.lookupResult = 'found';
+        this.setOriginatorHtml(
+          `<span class="badge success">✓</span>
+           <span class="originator-name">${this.escapeHtml(originator.full_name)}</span>
+           <span class="originator-handle">@${this.escapeHtml(handle)}</span>`
+        );
+        this.updateSubmitButton(true);
+      } else {
+        this.captureState.lookupResult = 'not_found';
+        this.setOriginatorHtml(
+          `<span class="badge warning">!</span>
+           <span>No Quotewise originator found for @${this.escapeHtml(handle)}.</span>`
+        );
+        this.updateSubmitButton(false);
+      }
+
+      if (response.duplicate_check) {
+        this.captureState.duplicateResult = response.duplicate_check;
+        this.updateDuplicateInfo({ result: response.duplicate_check });
+      }
+      progress.setPhase('success');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Check failed';
+      progress.setError(message);
+      this.updateSubmitButton(false, 'Check first');
     }
   }
 
@@ -669,6 +1008,8 @@ export class OverlayBar {
     };
 
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
+    this.progressIndicator?.reset();
+    this.firstRunNotice?.hide();
     this.updateSubmitButton(false);
     this.updateDuplicateInfo(null);
   }
@@ -760,12 +1101,21 @@ export class OverlayBar {
     }
 
     this.captureState.isSubmitting = true;
+    this.setSubmitProgressPhase('checking');
     this.updateSubmitButton(false, 'Submitting...');
+    this.actionButton?.setBusy(true);
 
     // Use selected text if available, otherwise full tweet text
     const quoteText = this.captureState.selectedText || this.currentData.text;
+    const settingsLoad = this.loadSettings();
+    await this.waitForVisibleSubmitPhase();
+    await settingsLoad;
+    const collectionId = this.settings.autoAddToCollection
+      ? this.settings.defaultCollectionId
+      : null;
 
     try {
+      this.setSubmitProgressPhase('submitting');
       const response = await this.sendMessage({
         type: MessageType.SUBMIT_QUOTE,
         data: {
@@ -775,12 +1125,16 @@ export class OverlayBar {
           platform_code: 'TX',
           likes_count: this.currentData.likes || 0,
           quote_date: this.currentData.date || undefined,
+          ...(collectionId ? { collection_id: collectionId } : {}),
           attribution_type: 'DIRECT',
           platform_data: this.currentData.platform_data
         }
       });
 
       if (response.success) {
+        this.setSubmitProgressPhase('confirming');
+        await this.waitForVisibleSubmitPhase();
+        this.ensureProgressIndicator().setPhase('success');
         this.captureState.submitResult = 'success';
         this.captureState.isCheckingDuplicate = false;
         this.captureState.duplicateResult = null;
@@ -791,8 +1145,11 @@ export class OverlayBar {
         // Clear duplicate badge and show success in originator row
         this.updateDuplicateInfo(null);
         this.setOriginatorHtml(
-          `<span class="badge success">✓</span>
-           <span>Quote added successfully!</span>`
+          response.collectionWarning
+            ? `<span class="badge warning">!</span>
+               <span>Quote added. Collection step didn't complete.</span>`
+            : `<span class="badge success">✓</span>
+               <span>Quote added successfully!</span>`
         );
         this.updateSubmitButton(false, 'Done!');
 
@@ -821,6 +1178,7 @@ export class OverlayBar {
     } catch (error) {
       this.captureState.submitResult = 'error';
       this.captureState.errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.ensureProgressIndicator().setError(this.captureState.errorMessage);
       this.setOriginatorHtml(
         `<span class="badge error">!</span>
          <span>Submit failed: ${this.escapeHtml(this.captureState.errorMessage || '')}</span>`
@@ -828,6 +1186,7 @@ export class OverlayBar {
       this.updateSubmitButton(true, 'Retry');
     } finally {
       this.captureState.isSubmitting = false;
+      this.actionButton?.setBusy(false);
     }
   }
 
@@ -871,6 +1230,16 @@ export class OverlayBar {
     this.actionButton.showViewQuote(url, text);
   }
 
+  private setSubmitProgressPhase(phase: 'checking' | 'submitting' | 'confirming'): void {
+    this.ensureProgressIndicator().setPhase(phase, { immediate: true });
+  }
+
+  private async waitForVisibleSubmitPhase(): Promise<void> {
+    if (!this.shadow || this.hidden) return;
+
+    await new Promise(resolve => setTimeout(resolve, SUBMIT_PHASE_MIN_VISIBLE_MS));
+  }
+
   /**
    * Lazily initializes the ActionButton component targeting the right section of the originator row
    */
@@ -907,6 +1276,19 @@ export class OverlayBar {
       });
     }
     return this.actionButton;
+  }
+
+  private ensureProgressIndicator(): CaptureProgressIndicator {
+    if (!this.progressIndicator) {
+      const container = this.shadow?.getElementById('progress-indicator') as HTMLElement | null
+        ?? document.createElement('div');
+      this.progressIndicator = new CaptureProgressIndicator(container, {
+        onRetry: () => {
+          void this.submitQuote();
+        },
+      });
+    }
+    return this.progressIndicator;
   }
 
   /**
@@ -993,7 +1375,11 @@ export class OverlayBar {
       });
     }
 
-    this.duplicateBadge.update(state);
+    this.duplicateBadge.update(
+      state,
+      this.captureState.selectedText || this.currentData?.text,
+      this.currentData?.date,
+    );
   }
 
   private async clearPreloadedDuplicateCheckForCurrentUrl(): Promise<void> {
@@ -1012,11 +1398,13 @@ export class OverlayBar {
   private sendMessage(message: { type: MessageType; data?: unknown }): Promise<{
     success: boolean;
     found?: boolean;
-    originator?: OriginatorSearchResult;
+    originator?: OriginatorSearchResult | PreflightOriginatorResult;
     create_url?: string;
     error?: string;
     message?: string;
+    collectionWarning?: string;
     result?: DuplicateCheckResult;
+    duplicate_check?: DuplicateCheckResult;
     isAuthenticated?: boolean;
     scopes?: string[];
     data?: { state?: string; username?: string; error?: string };
