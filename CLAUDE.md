@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Chrome extension (Manifest V3) for capturing quotes from social media platforms (currently Twitter/X) and submitting them to the Quotewise backend (api.quotewise.io). Uses OAuth authentication.
+Chrome extension (Manifest V3) for capturing quotes from social media platforms (currently Twitter/X) and submitting them to the Quotewise backend (api.quotewise.io). Authenticates via OAuth 2.0 Authorization Code + PKCE, sending an `Authorization: Bearer <token>` header (no session cookies / CSRF).
 
 ## Beads Issue Tracker (shared with `quotewise` repo)
 
@@ -88,7 +88,7 @@ Other version files (for reference only):
 Content Script (page context)
     ↓ chrome.runtime.sendMessage
 Service Worker (background context)
-    ↓ fetch with session cookies
+    ↓ fetch with Authorization: Bearer <oauth-token>
 Quotewise API (Django backend)
 ```
 
@@ -126,7 +126,7 @@ All inter-context communication uses typed messages from `src/types/chrome.ts`. 
 - `LOOKUP_ORIGINATOR_BY_HANDLE` - Lookup originator by social handle
 - `CHECK_DUPLICATE` - Check for duplicate quotes (accepts originator_id, source_url, social_handle)
 - `SUBMIT_QUOTE` - Submit quote to backend
-- `CHECK_AUTH_STATUS` - Check Django session authentication
+- `CHECK_AUTH_STATUS` - Check OAuth Bearer-token authentication status
 
 API-related messages are delegated from service-worker to `api-handler.ts`.
 
@@ -146,17 +146,26 @@ API-related messages are delegated from service-worker to `api-handler.ts`.
 
 ```
 src/
-├── api/                 # API client and utilities
-│   ├── quotewise-api.ts # Main API client (auth, search, duplicate check, submit)
-│   └── csrf-utils.ts    # CSRF token handling for Django
-├── auth/                # Authentication utilities
-│   ├── auth-checker.ts  # Auth status checking
-│   └── login-handler.ts # Login flow handling
+├── api/
+│   └── quotewise-api.ts # Main API client (OAuth Bearer auth, search, duplicate check, preflight, submit)
+├── auth/                # OAuth 2.0 Authorization Code + PKCE (Bearer tokens; no session cookies/CSRF)
+│   ├── auth-flow.ts          # chrome.identity.launchWebAuthFlow login + token exchange
+│   ├── pkce.ts               # PKCE code challenge/verifier generation
+│   ├── token-storage.ts      # Access/refresh token persistence (chrome.storage.local)
+│   ├── token-refresh.ts      # Alarm-driven access-token refresh
+│   ├── auth-checker.ts       # Auth status checking
+│   ├── auth-state-machine.ts # Auth state transitions
+│   ├── auth-state-manager.ts # Owns auth state; broadcasts AUTH_STATE_CHANGED to overlay
+│   ├── auth-subscriber.ts    # Auth state subscription helper
+│   └── login-handler.ts      # Login flow handling
 ├── background/          # Service worker components
-│   ├── service-worker.ts # Main entry, message routing, badge updates
-│   ├── api-handler.ts   # API message delegation
-│   ├── auth-monitor.ts  # Session monitoring
-│   └── storage-cleanup.ts # Periodic storage cleanup
+│   ├── service-worker.ts     # Main entry, message routing, preloading, badge updates
+│   ├── api-handler.ts        # API message delegation
+│   ├── auth-monitor.ts       # Session monitoring
+│   ├── storage-cleanup.ts    # Periodic storage cleanup
+│   ├── privacy-cleanup.ts    # Clears user-data caches on logout / private mode
+│   ├── icon-state-resolver.ts# Pure toolbar icon + badge state resolution
+│   └── icon-applicator.ts    # Applies chrome.action icon/badge/title
 ├── content/             # Content script
 │   ├── index.ts         # ContentOrchestrator entry point
 │   ├── common.ts        # Shared utilities (cleanUrl, parseNumber, etc.)
@@ -166,9 +175,16 @@ src/
 │           ├── duplicate-badge.ts    # Duplicate status badge with Quotewise links
 │           ├── quote-preview.ts      # Quote text display, selection handling
 │           ├── originator-lookup.ts  # Handle lookup with cache + preload
-│           └── action-button.ts      # Submit/Login button management
+│           ├── action-button.ts      # Submit/Login button management
+│           ├── account-menu.ts       # Account / options dropdown menu
+│           ├── progress-indicator.ts # Phased capture-progress status (role=status)
+│           ├── first-run-notice.ts   # First-run onboarding notice
+│           └── similar-diff.ts       # Renders diff for similar (non-exact) matches
 ├── config/
-│   └── environment.ts   # Environment detection and config
+│   ├── environment.ts   # Environment detection and config
+│   └── icon-states.ts   # Canonical toolbar icon state table
+├── settings/
+│   └── settings-store.ts # User settings persistence (e.g. private mode)
 ├── platforms/           # Platform adapters
 │   ├── types.ts         # PlatformAdapter interface
 │   └── twitter/
@@ -207,8 +223,7 @@ When user reports a bug, don't start by trying to fix it. Instead:
 - `manifest.json` - Extension permissions, content script matching (twitter.com/x.com status pages)
 - `src/content/ui/overlay-bar.ts` - Overlay bar orchestrator (Shadow DOM, state, capture flow)
 - `src/content/ui/components/` - UI components: duplicate-badge, quote-preview, originator-lookup, action-button
-- `src/api/quotewise-api.ts` - Django API client with session auth
-- `src/api/csrf-utils.ts` - CSRF token handling for Django
+- `src/api/quotewise-api.ts` - Quotewise API client with OAuth Bearer-token auth
 - `src/background/service-worker.ts` - Message routing, preloading, resolver/applicator orchestration
 - `src/background/icon-state-resolver.ts` - Pure toolbar icon and badge state resolution
 - `src/background/icon-applicator.ts` - Chrome action icon, badge, and title application
