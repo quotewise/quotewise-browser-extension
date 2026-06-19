@@ -338,6 +338,25 @@ describe('OverlayBar', () => {
     expect((overlay as any).captureState.selectedText).toBe('previously selected');
   });
 
+  it('closes the tray when Escape is pressed', () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).mount();
+    expect(overlay.isVisible()).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(overlay.isVisible()).toBe(false);
+  });
+
+  it('leaves the tray open for non-Escape keys', () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).mount();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+
+    expect(overlay.isVisible()).toBe(true);
+  });
+
   it('attaches and detaches the selectionchange watcher', () => {
     const addSpy = jest.spyOn(document, 'addEventListener');
     const removeSpy = jest.spyOn(document, 'removeEventListener');
