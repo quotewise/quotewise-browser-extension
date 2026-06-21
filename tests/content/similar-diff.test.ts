@@ -41,6 +41,30 @@ describe('similar-diff', () => {
     expect(buildSimilarMatchView(similarDuplicateResult({
       matches: [duplicateMatch({ quote_id: 'not-a-number' })],
     }), 'captured')?.quoteId).toBeNull();
+
+    expect(buildSimilarMatchView(similarDuplicateResult({
+      matches: [duplicateMatch({ quote_id: '123abc' })],
+    }), 'captured')?.quoteId).toBeNull();
+  });
+
+  it('does not render linked actions for partially numeric quote IDs', () => {
+    const container = document.createElement('span');
+    const onResolve = jest.fn();
+    const view = buildSimilarMatchView(similarDuplicateResult({
+      matches: [duplicateMatch({
+        quote_id: '123abc',
+        text: 'hello old world',
+        quote_date: '2026-01-01T00:00:00Z',
+      })],
+    }), 'hello new world', '2025-01-01T00:00:00Z');
+    expect(view).not.toBeNull();
+
+    renderSimilarDiff(container, view!, { onResolve });
+
+    expect(container.querySelectorAll('button')).toHaveLength(0);
+    expect(container.textContent).not.toContain('Add another sighting');
+    expect(container.textContent).not.toContain('Add as variant');
+    expect(onResolve).not.toHaveBeenCalled();
   });
 
   it('renders marked word diff, decision buttons, and view link without similarity percentage', () => {

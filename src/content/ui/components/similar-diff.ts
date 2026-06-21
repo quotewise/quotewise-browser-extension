@@ -189,6 +189,7 @@ function addSightingState(
 
 function coerceQuoteId(quoteId: string | undefined): number | null {
   if (!quoteId) return null;
-  const parsed = Number.parseInt(quoteId, 10);
-  return Number.isFinite(parsed) ? parsed : null;
+  if (!/^\d+$/.test(quoteId)) return null;
+  const parsed = Number(quoteId);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
