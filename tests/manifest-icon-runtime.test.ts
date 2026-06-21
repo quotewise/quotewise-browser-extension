@@ -18,13 +18,18 @@ describe('manifest icon/runtime wiring', () => {
       });
     });
 
-    test(`${manifestName} injects content script on all X/Twitter pages for SPA quote navigation`, () => {
+    test(`${manifestName} injects content script on supported platform hosts`, () => {
       const manifest = readManifest(manifestName);
       const matches = manifest.content_scripts[0].matches;
 
       expect(matches).toEqual(expect.arrayContaining([
         'https://twitter.com/*',
         'https://x.com/*',
+        'https://threads.com/*',
+        'https://threads.net/*',
+        'https://bsky.app/*',
+        'https://substack.com/*',
+        'https://*.substack.com/*',
       ]));
     });
   }

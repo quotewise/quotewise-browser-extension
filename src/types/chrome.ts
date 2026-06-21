@@ -24,6 +24,15 @@ declare namespace chrome {
 
 // Extension-specific message types
 export enum MessageType {
+  // Content script to background (platform-neutral)
+  POST_DATA_EXTRACTED = 'POST_DATA_EXTRACTED',
+
+  // Background to content script (platform-neutral)
+  EXTRACT_POST_DATA = 'EXTRACT_POST_DATA',
+
+  // Popup to background (platform-neutral)
+  GET_POST_DATA = 'GET_POST_DATA',
+
   // Content script to background
   TWEET_DATA_EXTRACTED = 'TWEET_DATA_EXTRACTED',
   
@@ -94,10 +103,54 @@ export const DEFAULT_SETTINGS: Settings = {
   firstRunNoticeShown: false,
 };
 
-// Twitter/X specific types
-export interface TwitterData {
+export type CapturePlatform = 'twitter' | 'threads' | 'bluesky' | 'substack_notes';
+export type CapturePlatformCode = 'TX' | 'TH' | 'BS' | 'SS';
+
+export interface CapturedAuthor {
+  /**
+   * Platform handle without a leading @. New adapters must set this; Twitter
+   * legacy paths may also expose `username` until the migration is complete.
+   */
+  handle?: string;
+  username?: string;
+  displayName: string;
+  verified?: boolean;
+  profileUrl?: string;
+  avatarUrl?: string;
+}
+
+export interface CapturedPostData {
+  platform?: CapturePlatform;
+  platformCode?: CapturePlatformCode;
+  sourceUrl?: string;
+  sourceId?: string;
+  text: string;
+  author: CapturedAuthor;
+  postedAt?: string | null;
+  likesCount?: number;
+  requiresSelection?: boolean;
+  isProtected?: boolean;
+  platformData?: Record<string, string | number | boolean | null | undefined>;
+
+  // Compatibility aliases used by the current X/Twitter implementation.
+  url?: string;
+  date?: string | null;
+  likes?: number;
+  isArticle?: boolean;
+  platform_data?: Record<string, string | number | boolean | null | undefined>;
+}
+
+// Twitter/X specific compatibility type. The adapter now emits both the
+// platform-neutral fields above and the legacy tweet fields below so existing
+// overlay/background tests continue to cover the X path during migration.
+export interface TwitterData extends CapturedPostData {
+  platform?: 'twitter';
+  platformCode?: 'TX';
+  sourceUrl?: string;
+  sourceId?: string;
   text: string;
   author: {
+    handle?: string;
     username: string;
     displayName: string;
     verified?: boolean;
@@ -120,7 +173,10 @@ export interface TwitterData {
   isProtected?: boolean;
   /** True when the post is a long-form X Article (read-view), where capture requires an explicit text selection. */
   isArticle?: boolean;
-  platform_data: {
+  postedAt?: string | null;
+  likesCount?: number;
+  requiresSelection?: boolean;
+  platformData?: {
     tweet_id: string | null;
     reply_count: number;
     retweet_count: number;
@@ -134,6 +190,24 @@ export interface TwitterData {
     quoted_tweet_id?: string;
     retweeter_username?: string;
     retweeter_display_name?: string;
+    [key: string]: string | number | boolean | null | undefined;
+  };
+  platform_data: {
+    source_id?: string | null;
+    tweet_id: string | null;
+    reply_count: number;
+    retweet_count: number;
+    quote_count?: number;
+    bookmark_count: number;
+    view_count: number;
+    is_protected?: boolean;
+    thread_position?: number;
+    has_media?: boolean;
+    reply_to_tweet_id?: string;
+    quoted_tweet_id?: string;
+    retweeter_username?: string;
+    retweeter_display_name?: string;
+    [key: string]: string | number | boolean | null | undefined;
   };
 }
 
@@ -141,6 +215,11 @@ export interface TwitterData {
 export interface ExtensionStorage {
   currentTweet?: {
     data: TwitterData;
+    timestamp: number;
+    url: string;
+  };
+  currentPost?: {
+    data: CapturedPostData;
     timestamp: number;
     url: string;
   };
@@ -211,7 +290,7 @@ export interface CollectionBadgeInfo {
 }
 
 // Utility types
-export type Platform = 'twitter' | 'x' | 'unknown';
+export type Platform = CapturePlatform | 'x' | 'unknown';
 
 export interface PlatformDetection {
   platform: Platform;
