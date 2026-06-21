@@ -32,5 +32,5 @@
 ## Notes
 
 - The spec deliberately references the deployed backend contract (ADR-0001/0002) as a *dependency/assumption*, not as implementation detail in requirements — requirements stay user-facing (sighting vs. variant choice, honest failure state).
-- One assumption is flagged for `/speckit-clarify`: whether the sighting action should be offered for all `similar` matches regardless of relative dates (recommended), or remain date-gated as the current scaffolding implies.
-- Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`. All items currently pass.
+- `/speckit-clarify` (Session 2026-06-20) resolved 4 decisions: conflict → block + resolve-in-Quotewise; couldn't-verify → block + retry; sighting → date-gated (earlier-only); variant confirmation copy → "Added as variant". Button emphasis derived from the constitution (equal weight, no nudge).
+- Items marked incomplete require spec updates before `/speckit-plan`. All items currently pass.
