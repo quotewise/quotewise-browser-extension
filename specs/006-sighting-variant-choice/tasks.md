@@ -20,7 +20,7 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 [P] Add shared duplicate-check test fixtures (similar / conflict / exact / couldn't-verify / legacy-no-class variants of `DuplicateCheckResult`) in `tests/helpers/duplicate-fixtures.ts`
+- [X] T001 [P] Add shared duplicate-check test fixtures (similar / conflict / exact / couldn't-verify / legacy-no-class variants of `DuplicateCheckResult`) in `tests/helpers/duplicate-fixtures.ts`
 
 ---
 
@@ -28,10 +28,10 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete — every story routes through the classifier and the shared types.
 
-- [ ] T002 Extend API types in `src/types/api.ts`: add `match_source`, `match_class`, `existing_sighting_for_this_url` (all optional) to `DuplicateCheckResult.matches[]`; add `link_to_quote_id?: number` + `user_intent?: 'sighting' | 'variant'` to `QuoteSubmissionRequest`; add `action?: 'created' | 'sighting_added'` to `QuoteSubmissionResult`
-- [ ] T003 [P] Write FAILING unit tests for `classifyMatchResolution` in `tests/utils/duplicate-status.test.ts` (precedence `couldnt_verify` → `exact` → `conflict` → `similar` → `none`; legacy `recommendation` near-match when `match_class` absent → `similar`; absent fields never throw → `none`)
-- [ ] T004 Implement `classifyMatchResolution(result)` in `src/utils/duplicate-status.ts` to pass T003 (pure, total, degrade-not-throw per Article V)
-- [ ] T005 Refactor `DuplicateBadge.update()` to dispatch via `classifyMatchResolution` and extend `DuplicateBadgeCallbacks` with `onResolveDecision`, `onRetry`, `onResolveConflict` in `src/content/ui/components/duplicate-badge.ts` — preserve existing `exact`/`none` rendering; leave `similar`/`conflict`/`couldnt_verify` branches as no-op stubs for the story phases
+- [X] T002 Extend API types in `src/types/api.ts`: add `match_source`, `match_class`, `existing_sighting_for_this_url` (all optional) to `DuplicateCheckResult.matches[]`; add `link_to_quote_id?: number` + `user_intent?: 'sighting' | 'variant'` to `QuoteSubmissionRequest`; add `action?: 'created' | 'sighting_added'` to `QuoteSubmissionResult`
+- [X] T003 [P] Write FAILING unit tests for `classifyMatchResolution` in `tests/utils/duplicate-status.test.ts` (precedence `couldnt_verify` → `exact` → `conflict` → `similar` → `none`; legacy `recommendation` near-match when `match_class` absent → `similar`; absent fields never throw → `none`)
+- [X] T004 Implement `classifyMatchResolution(result)` in `src/utils/duplicate-status.ts` to pass T003 (pure, total, degrade-not-throw per Article V)
+- [X] T005 Refactor `DuplicateBadge.update()` to dispatch via `classifyMatchResolution` and extend `DuplicateBadgeCallbacks` with `onResolveDecision`, `onRetry`, `onResolveConflict` in `src/content/ui/components/duplicate-badge.ts` — preserve existing `exact`/`none` rendering; leave `similar`/`conflict`/`couldnt_verify` branches as no-op stubs for the story phases
 
 **Checkpoint**: Types + classifier + badge dispatch ready — stories can begin.
 
@@ -45,16 +45,16 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 ### Tests for User Story 1 (write first, must FAIL)
 
-- [ ] T006 [P] [US1] FAILING tests for `buildSimilarMatchView` in `tests/content/similar-diff.test.ts` (variant always available; sighting available only when tweet date < quote date; `quoteId` int coercion incl. NaN→null; no-text fallback to link-only; non-`https:` URL rejected)
-- [ ] T007 [P] [US1] FAILING tests for submit threading in `tests/api/quotewise-api.test.ts` (`submitQuote` includes `link_to_quote_id` + `user_intent` when both present, omits when not; surfaces response `action`)
-- [ ] T008 [P] [US1] FAILING overlay tests in `tests/content/ui/overlay-bar.test.ts` (choosing sighting/variant calls submit with correct `{linkToQuoteId,userIntent}`; confirmation copy from `action` → "Sighting added"/"Added as variant"; double-click a decision button → exactly one submit, FR-011/qw-0psq.1)
+- [X] T006 [P] [US1] FAILING tests for `buildSimilarMatchView` in `tests/content/similar-diff.test.ts` (variant always available; sighting available only when tweet date < quote date; `quoteId` int coercion incl. NaN→null; no-text fallback to link-only; non-`https:` URL rejected)
+- [X] T007 [P] [US1] FAILING tests for submit threading in `tests/api/quotewise-api.test.ts` (`submitQuote` includes `link_to_quote_id` + `user_intent` when both present, omits when not; surfaces response `action`)
+- [X] T008 [P] [US1] FAILING overlay tests in `tests/content/ui/overlay-bar.test.ts` (choosing sighting/variant calls submit with correct `{linkToQuoteId,userIntent}`; confirmation copy from `action` → "Sighting added"/"Added as variant"; double-click a decision button → exactly one submit, FR-011/qw-0psq.1)
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Rework `buildSimilarMatchView` + `renderSimilarDiff` in `src/content/ui/components/similar-diff.ts` — two equal-weight `type="button"` controls (no disabled placeholder), date-gated sighting, keyboard-operable + `aria-label`s (Article VII), `href` set via property with `https:` validation (qw-0psq.6); pass T006
-- [ ] T010 [US1] Wire the `similar` branch of `DuplicateBadge` → `renderSimilarDiff(...)` and forward `onResolveDecision` in `src/content/ui/components/duplicate-badge.ts`
-- [ ] T011 [US1] Thread `link_to_quote_id` + `user_intent` into the POST body and return `action` in `src/api/quotewise-api.ts`; forward both fields through `SUBMIT_QUOTE` in `src/background/api-handler.ts` (`handleSubmitQuote` — pass `message.data` through **without a field whitelist**; `service-worker.ts:1683` already delegates the message wholesale, verified); pass T007
-- [ ] T012 [US1] In `src/content/ui/overlay-bar.ts`: add `submitQuote(opts?: {linkToQuoteId?, userIntent?})` threading the pair; wire `onResolveDecision` → submit; set confirmation copy from `action`; add the `isSubmitting` re-entrancy guard (qw-0psq.1); pass T008
+- [X] T009 [US1] Rework `buildSimilarMatchView` + `renderSimilarDiff` in `src/content/ui/components/similar-diff.ts` — two equal-weight `type="button"` controls (no disabled placeholder), date-gated sighting, keyboard-operable + `aria-label`s (Article VII), `href` set via property with `https:` validation (qw-0psq.6); pass T006
+- [X] T010 [US1] Wire the `similar` branch of `DuplicateBadge` → `renderSimilarDiff(...)` and forward `onResolveDecision` in `src/content/ui/components/duplicate-badge.ts`
+- [X] T011 [US1] Thread `link_to_quote_id` + `user_intent` into the POST body and return `action` in `src/api/quotewise-api.ts`; forward both fields through `SUBMIT_QUOTE` in `src/background/api-handler.ts` (`handleSubmitQuote` — pass `message.data` through **without a field whitelist**; `service-worker.ts:1683` already delegates the message wholesale, verified); pass T007
+- [X] T012 [US1] In `src/content/ui/overlay-bar.ts`: add `submitQuote(opts?: {linkToQuoteId?, userIntent?})` threading the pair; wire `onResolveDecision` → submit; set confirmation copy from `action`; add the `isSubmitting` re-entrancy guard (qw-0psq.1); pass T008
 
 **Checkpoint**: US1 fully functional — the MVP for `qw-hsly`.
 
@@ -68,14 +68,14 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 ### Tests for User Story 2 (write first, must FAIL)
 
-- [ ] T013 [P] [US2] FAILING test in `tests/api/quotewise-api.test.ts`: `checkQuoteDuplicate` on non-2xx/network failure resolves to a result with `search_metadata.error === true` (not a fabricated healthy `new_quote`, FR-009)
-- [ ] T014 [P] [US2] FAILING tests in `tests/content/ui/components/duplicate-badge.test.ts` and `tests/content/ui/overlay-bar.test.ts`: `couldnt_verify` renders "Couldn't verify duplicates" + Retry; overlay disables Submit and Retry re-runs `checkDuplicate`
+- [X] T013 [P] [US2] FAILING test in `tests/api/quotewise-api.test.ts`: `checkQuoteDuplicate` on non-2xx/network failure resolves to a result with `search_metadata.error === true` (not a fabricated healthy `new_quote`, FR-009)
+- [X] T014 [P] [US2] FAILING tests in `tests/content/ui/components/duplicate-badge.test.ts` and `tests/content/ui/overlay-bar.test.ts`: `couldnt_verify` renders "Couldn't verify duplicates" + Retry; overlay disables Submit and Retry re-runs `checkDuplicate`
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Update `checkQuoteDuplicate` error handling in `src/api/quotewise-api.ts` to return `search_metadata.error: true` on failure; pass T013
-- [ ] T016 [US2] Implement the `couldnt_verify` branch of `DuplicateBadge` (warning glyph+text; keyboard-operable Retry `button` with an `aria-label`; status announced via `aria-live` and conveyed by glyph+text not color alone — FR-010/SC-006) wired to `onRetry`, in `src/content/ui/components/duplicate-badge.ts`
-- [ ] T017 [US2] In `src/content/ui/overlay-bar.ts`: `couldnt_verify` disables Submit and wires Retry → re-run `checkDuplicate`; pass T014
+- [X] T015 [US2] Update `checkQuoteDuplicate` error handling in `src/api/quotewise-api.ts` to return `search_metadata.error: true` on failure; pass T013
+- [X] T016 [US2] Implement the `couldnt_verify` branch of `DuplicateBadge` (warning glyph+text; keyboard-operable Retry `button` with an `aria-label`; status announced via `aria-live` and conveyed by glyph+text not color alone — FR-010/SC-006) wired to `onRetry`, in `src/content/ui/components/duplicate-badge.ts`
+- [X] T017 [US2] In `src/content/ui/overlay-bar.ts`: `couldnt_verify` disables Submit and wires Retry → re-run `checkDuplicate`; pass T014
 
 **Checkpoint**: US1 + US2 both work independently.
 
@@ -89,12 +89,12 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 ### Tests for User Story 3 (write first, must FAIL)
 
-- [ ] T018 [P] [US3] FAILING tests in `tests/content/ui/components/duplicate-badge.test.ts` and `tests/content/ui/overlay-bar.test.ts`: `conflict` shows the attribution notice + resolve link and no sighting/variant; overlay blocks submission for `conflict`
+- [X] T018 [P] [US3] FAILING tests in `tests/content/ui/components/duplicate-badge.test.ts` and `tests/content/ui/overlay-bar.test.ts`: `conflict` shows the attribution notice + resolve link and no sighting/variant; overlay blocks submission for `conflict`
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Implement the `conflict` branch of `DuplicateBadge` (attribution notice naming the other originator from `match.originator.full_name`, with a generic fallback when that field is absent; keyboard-operable resolve-in-Quotewise link with an `aria-label`, `https:`-validated, via `onResolveConflict`; status by glyph+text not color — FR-010/SC-006) in `src/content/ui/components/duplicate-badge.ts`
-- [ ] T020 [US3] In `src/content/ui/overlay-bar.ts`: guard `submitQuote` to block when the current resolution is `conflict`; pass T018
+- [X] T019 [US3] Implement the `conflict` branch of `DuplicateBadge` (attribution notice naming the other originator from `match.originator.full_name`, with a generic fallback when that field is absent; keyboard-operable resolve-in-Quotewise link with an `aria-label`, `https:`-validated, via `onResolveConflict`; status by glyph+text not color — FR-010/SC-006) in `src/content/ui/components/duplicate-badge.ts`
+- [X] T020 [US3] In `src/content/ui/overlay-bar.ts`: guard `submitQuote` to block when the current resolution is `conflict`; pass T018
 
 **Checkpoint**: All three stories independently functional.
 
@@ -102,11 +102,11 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T021 [P] FR-013 degradation + FR-006/SC-007 regression tests in `tests/content/ui/components/duplicate-badge.test.ts`: (a) response lacking `match_class`/`match_source` → legacy recommendation rendering, no error; (b) an `exact`/URL match still renders the single-action "Already captured" behavior unchanged (FR-006); and confirm the existing spec-002 sighting-badge suite stays green (SC-007 regression guard)
-- [ ] T022 [P] Consolidate the duplicate `escapeHtml` helpers and assert no `javascript:` URI survives `href` validation across the touched components (qw-0psq.6) in `src/content/ui/components/` + a focused test
+- [X] T021 [P] FR-013 degradation + FR-006/SC-007 regression tests in `tests/content/ui/components/duplicate-badge.test.ts`: (a) response lacking `match_class`/`match_source` → legacy recommendation rendering, no error; (b) an `exact`/URL match still renders the single-action "Already captured" behavior unchanged (FR-006); and confirm the existing spec-002 sighting-badge suite stays green (SC-007 regression guard)
+- [X] T022 [P] Consolidate the duplicate `escapeHtml` helpers and assert no `javascript:` URI survives `href` validation across the touched components (qw-0psq.6) in `src/content/ui/components/` + a focused test
 - [ ] T023 Run `bun run test` + `bun run type-check` + `bun run lint` (all green) and execute `quickstart.md` manual verification (US1–US3 + accessibility SC-006 + SC-002: confirmation appears within ~1s of the submit response — manual UX check, not auto-asserted)
-- [ ] T024 [P] Add a cross-reference note linking spec `002-sighting-status-ui` → this feature in `specs/002-sighting-status-ui/spec.md`
-- [ ] T025 [P] FR-012 invariant guard test: assert the overlay exposes **no editable quote-text input** (only excerpt selection) in `tests/content/ui/overlay-bar.test.ts`
+- [X] T024 [P] Add a cross-reference note linking spec `002-sighting-status-ui` → this feature in `specs/002-sighting-status-ui/spec.md`
+- [X] T025 [P] FR-012 invariant guard test: assert the overlay exposes **no editable quote-text input** (only excerpt selection) in `tests/content/ui/overlay-bar.test.ts`
 
 ---
 
