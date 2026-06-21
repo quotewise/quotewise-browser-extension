@@ -11,12 +11,17 @@ import { ActionButton } from './components/action-button';
 import { CaptureProgressIndicator } from './components/progress-indicator';
 import { FirstRunNotice } from './components/first-run-notice';
 import { AccountMenu } from './components/account-menu';
-import { classifyDuplicateSighting } from '../../utils/duplicate-status';
+import { classifyDuplicateSighting, classifyMatchResolution } from '../../utils/duplicate-status';
 import { getSettings, onSettingsChanged, updateSettings } from '../../settings/settings-store';
 
 type DataProvider = () => Promise<TwitterData | null>;
 
 const SUBMIT_PHASE_MIN_VISIBLE_MS = 350;
+
+interface SubmitQuoteOptions {
+  linkToQuoteId?: number;
+  userIntent?: 'sighting' | 'variant';
+}
 
 interface CaptureState {
   expanded: boolean;
@@ -507,7 +512,13 @@ export class OverlayBar {
           color: #facc15;
           font-size: 12px;
         }
-        .add-sighting-action {
+        .similar-actions {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+        .similar-decision {
           font-size: 11px;
           padding: 3px 7px;
         }
@@ -1065,7 +1076,8 @@ export class OverlayBar {
     }
   }
 
-  private async submitQuote(): Promise<void> {
+  private async submitQuote(opts: SubmitQuoteOptions = {}): Promise<void> {
+    if (this.captureState.isSubmitting) return;
     if (!this.currentData || !this.captureState.originator) return;
 
     // The slug is the public write identifier. Guard against a resolved
@@ -1083,6 +1095,16 @@ export class OverlayBar {
 
     // Block submission when this URL or another sighting on the same platform is already captured.
     const duplicateResult = this.captureState.duplicateResult;
+    const matchResolution = classifyMatchResolution(duplicateResult);
+    if (matchResolution === 'couldnt_verify') {
+      this.updateSubmitButton(false, "Couldn't Verify");
+      return;
+    }
+    if (matchResolution === 'conflict') {
+      this.updateSubmitButton(false, 'Resolve Attribution');
+      return;
+    }
+
     const sightingState = classifyDuplicateSighting(duplicateResult);
     if (sightingState === 'exact_sighting') {
       // Submission should already be blocked via UI, but double-check here
@@ -1113,6 +1135,7 @@ export class OverlayBar {
     const collectionId = this.settings.autoAddToCollection
       ? this.settings.defaultCollectionId
       : null;
+    const decisionFields = this.decisionFieldsForSubmit(opts);
 
     try {
       this.setSubmitProgressPhase('submitting');
@@ -1127,7 +1150,8 @@ export class OverlayBar {
           quote_date: this.currentData.date || undefined,
           ...(collectionId ? { collection_id: collectionId } : {}),
           attribution_type: 'DIRECT',
-          platform_data: this.currentData.platform_data
+          platform_data: this.currentData.platform_data,
+          ...decisionFields
         }
       });
 
@@ -1144,12 +1168,13 @@ export class OverlayBar {
 
         // Clear duplicate badge and show success in originator row
         this.updateDuplicateInfo(null);
+        const successMessage = this.successMessageForSubmit(response, opts.userIntent);
         this.setOriginatorHtml(
           response.collectionWarning
             ? `<span class="badge warning">!</span>
                <span>Quote added. Collection step didn't complete.</span>`
             : `<span class="badge success">✓</span>
-               <span>Quote added successfully!</span>`
+               <span>${this.escapeHtml(successMessage)}</span>`
         );
         this.updateSubmitButton(false, 'Done!');
 
@@ -1188,6 +1213,43 @@ export class OverlayBar {
       this.captureState.isSubmitting = false;
       this.actionButton?.setBusy(false);
     }
+  }
+
+  private decisionFieldsForSubmit(opts: SubmitQuoteOptions): {
+    link_to_quote_id?: number;
+    user_intent?: 'sighting' | 'variant';
+  } {
+    if (
+      typeof opts.linkToQuoteId === 'number' &&
+      Number.isFinite(opts.linkToQuoteId) &&
+      opts.userIntent
+    ) {
+      return {
+        link_to_quote_id: opts.linkToQuoteId,
+        user_intent: opts.userIntent,
+      };
+    }
+
+    return {};
+  }
+
+  private successMessageForSubmit(
+    response: { action?: 'created' | 'sighting_added' },
+    userIntent?: 'sighting' | 'variant',
+  ): string {
+    if (response.action === 'sighting_added' || userIntent === 'sighting') {
+      return 'Sighting added';
+    }
+
+    if (response.action === 'created' && userIntent === 'variant') {
+      return 'Added as variant';
+    }
+
+    if (userIntent === 'variant') {
+      return 'Added as variant';
+    }
+
+    return 'Quote added successfully!';
   }
 
   /**
@@ -1372,6 +1434,23 @@ export class OverlayBar {
             this.updateSubmitButton(directive.enabled, directive.text);
           }
         },
+        onResolveDecision: (decision) => {
+          void this.submitQuote({
+            linkToQuoteId: decision.quoteId,
+            userIntent: decision.intent,
+          });
+        },
+        onRetry: () => {
+          const originatorSlug = this.captureState.originator?.unique_id;
+          if (originatorSlug) {
+            void this.checkDuplicate(originatorSlug);
+          }
+        },
+        onResolveConflict: (existingQuoteUrl) => {
+          if (existingQuoteUrl) {
+            window.open(existingQuoteUrl, '_blank', 'noopener,noreferrer');
+          }
+        },
       });
     }
 
@@ -1403,6 +1482,7 @@ export class OverlayBar {
     error?: string;
     message?: string;
     collectionWarning?: string;
+    action?: 'created' | 'sighting_added';
     result?: DuplicateCheckResult;
     duplicate_check?: DuplicateCheckResult;
     isAuthenticated?: boolean;

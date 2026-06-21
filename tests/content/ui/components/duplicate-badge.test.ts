@@ -1,5 +1,13 @@
 import { DuplicateBadge, SubmitStateDirective } from '../../../../src/content/ui/components/duplicate-badge';
 import type { DuplicateCheckResult } from '../../../../src/types/api';
+import {
+  conflictDuplicateResult,
+  couldntVerifyDuplicateResult,
+  duplicateMatch,
+  duplicateResult,
+  exactDuplicateResult,
+  legacyNearMatchDuplicateResult,
+} from '../../../helpers/duplicate-fixtures';
 
 function makeResult(overrides: Partial<DuplicateCheckResult> = {}): DuplicateCheckResult {
   return {
@@ -33,13 +41,19 @@ function makeMatch(
 describe('DuplicateBadge', () => {
   let container: HTMLElement;
   let directives: SubmitStateDirective[];
+  let retry: jest.Mock;
+  let resolveConflict: jest.Mock;
   let badge: DuplicateBadge;
 
   beforeEach(() => {
     container = document.createElement('span');
     directives = [];
+    retry = jest.fn();
+    resolveConflict = jest.fn();
     badge = new DuplicateBadge(container, {
       onSubmitStateChange: (d) => directives.push(d),
+      onRetry: retry,
+      onResolveConflict: resolveConflict,
     });
   });
 
@@ -198,6 +212,44 @@ describe('DuplicateBadge', () => {
     expect(container.innerHTML).toBe('');
   });
 
+  it('renders a couldnt-verify warning with retry and disables submit', () => {
+    badge.update({ result: couldntVerifyDuplicateResult() });
+
+    expect(container.textContent).toContain("Couldn't verify duplicates");
+    const retryButton = container.querySelector('button') as HTMLButtonElement;
+    expect(retryButton).toBeTruthy();
+    expect(retryButton.type).toBe('button');
+    expect(retryButton.textContent).toBe('Retry');
+    expect(retryButton.getAttribute('aria-label')).toBe('Retry duplicate check');
+    expect(container.getAttribute('aria-live')).toBe('polite');
+    expect(directives).toEqual([
+      { type: 'submit', enabled: false, text: "Couldn't Verify" },
+    ]);
+
+    retryButton.click();
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders an attribution conflict notice with resolve link and no decision buttons', () => {
+    badge.update({ result: conflictDuplicateResult() });
+
+    expect(container.textContent).toContain('Already attributed to Different Author');
+    expect(container.textContent).not.toContain('Add another sighting');
+    expect(container.textContent).not.toContain('Add as variant');
+
+    const link = container.querySelector('a') as HTMLAnchorElement;
+    expect(link).toBeTruthy();
+    expect(link.textContent).toBe('Resolve in Quotewise');
+    expect(link.href).toBe('https://quotewise.io/quotes/existing-quote');
+    expect(link.getAttribute('aria-label')).toBe('Resolve attribution conflict in Quotewise');
+    expect(directives).toEqual([
+      { type: 'submit', enabled: false, text: 'Resolve Attribution' },
+    ]);
+
+    link.click();
+    expect(resolveConflict).toHaveBeenCalledWith('https://quotewise.io/quotes/existing-quote');
+  });
+
   it('clears previous content on update', () => {
     badge.update({ checking: true });
     expect(container.querySelector('.spinner')).toBeTruthy();
@@ -213,5 +265,68 @@ describe('DuplicateBadge', () => {
       }),
     });
     expect(container.innerHTML).not.toContain('<script>');
+  });
+
+  it('degrades gracefully for legacy near-match responses without match classification', () => {
+    expect(() => badge.update({
+      result: legacyNearMatchDuplicateResult({
+        matches: [duplicateMatch({
+          quote_id: '101',
+          text: 'existing words',
+          match_source: undefined,
+          match_class: undefined,
+        })],
+      }),
+    }, 'captured words')).not.toThrow();
+
+    expect(container.textContent).toContain('Add as variant');
+  });
+
+  it('keeps exact URL matches on the single already-captured action', () => {
+    badge.update({
+      result: exactDuplicateResult({
+        matches: [duplicateMatch({
+          match_source: 'url',
+          match_class: 'exact',
+          url: 'https://quotewise.io/quotes/exact',
+        })],
+      }),
+    }, 'captured words');
+
+    expect(container.textContent).toContain('Already captured');
+    expect(container.textContent).not.toContain('Add another sighting');
+    expect(container.textContent).not.toContain('Add as variant');
+    expect(directives).toEqual([
+      { type: 'view_quote', url: 'https://quotewise.io/quotes/exact', text: 'View Quote' },
+    ]);
+  });
+
+  it('does not render javascript hrefs in legacy badges', () => {
+    badge.update({
+      result: duplicateResult({
+        recommendation: 'duplicate',
+        matches: [makeMatch({ url: 'javascript:alert(1)' })],
+      }),
+    });
+
+    expect(container.textContent).toContain('Duplicate');
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.innerHTML).not.toContain('javascript:');
+  });
+
+  it('does not render javascript hrefs in conflict badges', () => {
+    badge.update({
+      result: conflictDuplicateResult({
+        matches: [duplicateMatch({
+          match_source: 'similarity',
+          match_class: 'conflict',
+          url: 'javascript:alert(1)',
+        })],
+      }),
+    });
+
+    expect(container.textContent).toContain('Already attributed');
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.innerHTML).not.toContain('javascript:');
   });
 });

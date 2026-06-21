@@ -274,13 +274,13 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         throw error;
       }
       
-      // Return no duplicates for other errors to allow submission
+      // Return a structured error state so the UI can block and offer Retry.
       return {
         recommendation: 'new_quote',
-        confidence: 0.5,
+        confidence: 0,
         in_quotewise: false,
         matches: [],
-        reasoning: 'Error occurred during duplicate check, proceeding as new quote',
+        reasoning: "Couldn't verify duplicates",
         search_metadata: { error: true }
       };
     }
@@ -308,7 +308,12 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         };
       }
 
-      const result = await this.makeRequest<{ id: string; message?: string; collection_warning?: string }>(
+      const result = await this.makeRequest<{
+        id: string;
+        message?: string;
+        collection_warning?: string;
+        action?: QuoteSubmissionResult['action'];
+      }>(
         '/v1/quotes/',
         {
           method: 'POST',
@@ -320,7 +325,8 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         success: true,
         message: result.message || 'Quote submitted successfully',
         quoteId: result.id,
-        collectionWarning: result.collection_warning
+        collectionWarning: result.collection_warning,
+        action: result.action
       };
     } catch (error) {
       console.error('Error submitting quote:', error);

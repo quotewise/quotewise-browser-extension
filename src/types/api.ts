@@ -65,6 +65,9 @@ export interface DuplicateCheckResult {
     short_code?: string;
     url?: string;
     quote_date?: string;
+    match_source?: 'url' | 'similarity';
+    match_class?: 'exact' | 'conflict' | 'similar';
+    existing_sighting_for_this_url?: boolean;
     sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
     platform_sighting_url?: string | null;
   }>;
@@ -92,6 +95,7 @@ export interface QuoteSubmissionResult {
   error?: string;
   id?: string; // For Django response format
   collectionWarning?: string;
+  action?: 'created' | 'sighting_added';
 }
 
 // Legacy interfaces for backwards compatibility
@@ -121,6 +125,8 @@ export interface QuoteSubmissionRequest {
   context?: string;
   image_urls?: string[];
   platform_data?: PlatformData;
+  link_to_quote_id?: number;
+  user_intent?: 'sighting' | 'variant';
 }
 
 export interface QuoteSubmissionResponse {
