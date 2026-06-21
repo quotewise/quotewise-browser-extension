@@ -14,6 +14,13 @@ specs/008-multi-platform-capture/audits/
 └── substack-notes/
 ```
 
+The reusable page-context probes and fixture manifest live in the same packet:
+
+- `specs/008-multi-platform-capture/audits/fixtures.json`
+- `specs/008-multi-platform-capture/audits/probes/capture-contract-probe.js`
+- `specs/008-multi-platform-capture/audits/probes/selection-probe.js`
+- `specs/008-multi-platform-capture/audits/probes/other-features-probe.js`
+
 Each fixture should include:
 
 - raw Probe A JSON
@@ -37,4 +44,3 @@ Run the backend checklist for each platform:
 ## Promotion Rule
 
 Threads, Bluesky, and Substack Notes remain runtime-disabled until permalink extraction, handle resolution, duplicate/preflight, and submit succeed against live pages plus deterministic adapter fixtures. Likes stay optional and must only be captured when visibly reliable.
-
