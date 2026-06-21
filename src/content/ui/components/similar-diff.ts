@@ -1,17 +1,22 @@
 import type { DuplicateCheckResult } from '../../../types/api';
 import { getWebBaseUrl } from '../../../config/environment';
+import { classifyMatchResolution } from '../../../utils/duplicate-status';
 import { diffWords, type WordDiffToken } from '../../../utils/word-diff';
+import { safeHttpsUrl } from './dom-utils';
 
 export interface SimilarMatchView {
-  isNearMatch: boolean;
+  quoteId: number | null;
+  existingQuoteText: string | null;
   diff: WordDiffToken[] | null;
   existingQuoteUrl: string | null;
-  addSighting: {
-    eligible: boolean;
-    available: boolean;
-    hint: string | null;
-    label: 'Add as earlier sighting of this similar quote';
-  };
+  sightingAvailable: boolean;
+  sightingHint: string | null;
+  variantAvailable: boolean;
+}
+
+export interface ResolutionDecision {
+  quoteId: number;
+  intent: 'sighting' | 'variant';
 }
 
 export function isNearMatchRecommendation(recommendation: string): boolean {
@@ -23,29 +28,43 @@ export function buildSimilarMatchView(
   capturedText: string,
   tweetDate?: string | null,
 ): SimilarMatchView | null {
-  if (!isNearMatchRecommendation(result.recommendation)) {
+  if (classifyMatchResolution(result) !== 'similar') {
     return null;
   }
 
-  const match = result.matches[0];
+  const match = Array.isArray(result.matches) ? result.matches[0] : undefined;
+  const quoteId = coerceQuoteId(match?.quote_id);
   if (!match) {
     return {
-      isNearMatch: true,
+      quoteId,
+      existingQuoteText: null,
       diff: null,
       existingQuoteUrl: null,
-      addSighting: addSightingState(tweetDate, undefined),
+      sightingAvailable: false,
+      sightingHint: null,
+      variantAvailable: false,
     };
   }
 
+  const existingQuoteText = match.text?.trim() ? match.text : null;
+  const sightingState = addSightingState(tweetDate, match.quote_date);
+
   return {
-    isNearMatch: true,
-    diff: match.text?.trim() ? diffWords(match.text, capturedText) : null,
+    quoteId,
+    existingQuoteText,
+    diff: existingQuoteText ? diffWords(match.text, capturedText) : null,
     existingQuoteUrl: quotePageUrl(match),
-    addSighting: addSightingState(tweetDate, match.quote_date),
+    sightingAvailable: quoteId !== null && sightingState.eligible,
+    sightingHint: sightingState.hint,
+    variantAvailable: quoteId !== null,
   };
 }
 
-export function renderSimilarDiff(container: HTMLElement, view: SimilarMatchView): void {
+export function renderSimilarDiff(
+  container: HTMLElement,
+  view: SimilarMatchView,
+  handlers: { onResolve: (decision: ResolutionDecision) => void },
+): void {
   container.innerHTML = '';
   container.className = 'similar-diff';
   container.setAttribute('role', 'group');
@@ -54,39 +73,58 @@ export function renderSimilarDiff(container: HTMLElement, view: SimilarMatchView
   if (!view.diff) {
     const fallback = document.createElement('span');
     fallback.className = 'badge info';
-    fallback.textContent = 'Similar version';
+    fallback.textContent = 'Similar quote';
     container.appendChild(fallback);
     appendViewLink(container, view.existingQuoteUrl);
-    return;
+  } else {
+    const diff = document.createElement('span');
+    diff.className = 'similar-diff-text';
+
+    for (const token of view.diff) {
+      const span = document.createElement('span');
+      span.className = `diff-token ${token.type}`;
+      span.textContent = markerFor(token.type) + token.value;
+      diff.appendChild(span);
+    }
+
+    container.appendChild(diff);
+    appendViewLink(container, view.existingQuoteUrl);
   }
 
-  const diff = document.createElement('span');
-  diff.className = 'similar-diff-text';
-
-  for (const token of view.diff) {
-    const span = document.createElement('span');
-    span.className = `diff-token ${token.type}`;
-    span.textContent = markerFor(token.type) + token.value;
-    diff.appendChild(span);
-  }
-
-  container.appendChild(diff);
-  appendViewLink(container, view.existingQuoteUrl);
-
-  if (view.addSighting.available && view.addSighting.eligible) {
+  if (view.sightingAvailable && view.sightingHint) {
     const hint = document.createElement('span');
     hint.className = 'sighting-hint';
-    hint.textContent = view.addSighting.hint || '';
+    hint.textContent = view.sightingHint;
     container.appendChild(hint);
-
-    const action = document.createElement('button');
-    action.type = 'button';
-    action.className = 'add-sighting-action';
-    action.disabled = true;
-    action.textContent = view.addSighting.label;
-    action.setAttribute('aria-disabled', 'true');
-    container.appendChild(action);
   }
+
+  if (view.quoteId === null) return;
+
+  const actions = document.createElement('span');
+  actions.className = 'similar-actions';
+
+  if (view.sightingAvailable) {
+    actions.appendChild(createDecisionButton(
+      'Add another sighting',
+      'Add another sighting of this existing quote',
+      { quoteId: view.quoteId, intent: 'sighting' },
+      handlers,
+    ));
+  }
+
+  if (view.variantAvailable) {
+    actions.appendChild(createDecisionButton(
+      'Add as variant',
+      'Add captured text as a variant of this existing quote',
+      { quoteId: view.quoteId, intent: 'variant' },
+      handlers,
+    ));
+  }
+
+  if (actions.childElementCount === 0) return;
+
+  container.appendChild(actions);
+  (actions.querySelector('button') as HTMLButtonElement | null)?.focus();
 }
 
 function appendViewLink(container: HTMLElement, url: string | null): void {
@@ -99,6 +137,21 @@ function appendViewLink(container: HTMLElement, url: string | null): void {
   container.appendChild(link);
 }
 
+function createDecisionButton(
+  label: string,
+  ariaLabel: string,
+  decision: ResolutionDecision,
+  handlers: { onResolve: (decision: ResolutionDecision) => void },
+): HTMLButtonElement {
+  const action = document.createElement('button');
+  action.type = 'button';
+  action.className = 'similar-decision';
+  action.textContent = label;
+  action.setAttribute('aria-label', ariaLabel);
+  action.addEventListener('click', () => handlers.onResolve(decision));
+  return action;
+}
+
 function markerFor(type: WordDiffToken['type']): string {
   if (type === 'added') return '+';
   if (type === 'removed') return '-';
@@ -106,24 +159,21 @@ function markerFor(type: WordDiffToken['type']): string {
 }
 
 function quotePageUrl(match: DuplicateCheckResult['matches'][number]): string | null {
-  if (match.url) return match.url;
+  if (match.url) return safeHttpsUrl(match.url);
   if (!match.short_code) return null;
 
   const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
-  return `${baseUrl}/quotes/${encodeURIComponent(match.short_code)}`;
+  return safeHttpsUrl(`${baseUrl}/quotes/${encodeURIComponent(match.short_code)}`);
 }
 
 function addSightingState(
   tweetDate: string | null | undefined,
   quoteDate: string | undefined,
-): SimilarMatchView['addSighting'] {
-  const label = 'Add as earlier sighting of this similar quote' as const;
+): { eligible: boolean; hint: string | null } {
   if (!quoteDate) {
     return {
-      available: false,
       eligible: false,
       hint: null,
-      label,
     };
   }
 
@@ -132,9 +182,13 @@ function addSightingState(
   const eligible = Number.isFinite(tweetTime) && Number.isFinite(quoteTime) && tweetTime < quoteTime;
 
   return {
-    available: true,
     eligible,
     hint: eligible ? 'This tweet is older than our records' : null,
-    label,
   };
+}
+
+function coerceQuoteId(quoteId: string | undefined): number | null {
+  if (!quoteId) return null;
+  const parsed = Number.parseInt(quoteId, 10);
+  return Number.isFinite(parsed) ? parsed : null;
 }

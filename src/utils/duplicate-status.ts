@@ -4,6 +4,8 @@ type SightingStatus = 'exact_url' | 'has_platform_sighting' | 'no_platform_sight
 
 export type QuoteStatus = 'None' | 'InCollection' | 'Conflict' | 'Exact' | 'Similar' | 'New';
 
+export type MatchResolution = 'exact' | 'conflict' | 'similar' | 'couldnt_verify' | 'none';
+
 export type DuplicateSightingState =
   | 'exact_sighting'
   | 'same_platform_sighting'
@@ -59,6 +61,44 @@ export function getMatchForDuplicateSightingState<T extends DuplicateSightingMat
     default:
       return matches[0];
   }
+}
+
+export function classifyMatchResolution(result?: DuplicateCheckResult | null): MatchResolution {
+  if (!result) return 'none';
+
+  if (result.search_metadata?.error === true) {
+    return 'couldnt_verify';
+  }
+
+  const match = Array.isArray(result.matches) ? result.matches[0] : undefined;
+  const hasExactUrlSighting = (result.existing_sightings_for_url || []).length > 0;
+
+  if (
+    hasExactUrlSighting ||
+    match?.existing_sighting_for_this_url === true ||
+    match?.match_source === 'url' ||
+    match?.match_class === 'exact' ||
+    match?.sighting_status === 'exact_url'
+  ) {
+    return 'exact';
+  }
+
+  if (match?.match_class === 'conflict') {
+    return 'conflict';
+  }
+
+  if (match?.match_class === 'similar') {
+    return 'similar';
+  }
+
+  if (
+    match?.match_class == null &&
+    (result.recommendation === 'new_version' || result.recommendation === 'new_version_known_author')
+  ) {
+    return 'similar';
+  }
+
+  return 'none';
 }
 
 export function mapRecommendationToQuoteStatus(result: DuplicateCheckResult | null): QuoteStatus {

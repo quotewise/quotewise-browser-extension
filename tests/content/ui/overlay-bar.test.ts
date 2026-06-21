@@ -2,6 +2,12 @@ import { OverlayBar } from '../../../src/content/ui/overlay-bar';
 import { MessageType } from '../../../src/types';
 import type { TwitterData } from '../../../src/types';
 import type { DuplicateCheckResult } from '../../../src/types/api';
+import {
+  conflictDuplicateResult,
+  couldntVerifyDuplicateResult,
+  duplicateMatch,
+  similarDuplicateResult,
+} from '../../helpers/duplicate-fixtures';
 
 function makeDuplicateResult(
   sightingStatus: DuplicateCheckResult['matches'][number]['sighting_status']
@@ -30,6 +36,14 @@ function makeDuplicateResult(
 async function flushPromises(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function flushSubmitTimers(): Promise<void> {
+  for (let i = 0; i < 5; i += 1) {
+    await flushPromises();
+    jest.advanceTimersByTime(350);
+  }
+  await flushPromises();
 }
 
 describe('OverlayBar', () => {
@@ -81,6 +95,31 @@ describe('OverlayBar', () => {
     jest.useRealTimers();
   });
 
+  function setupReadyOverlay(data: TwitterData = tweetData): OverlayBar {
+    const overlay = new OverlayBar(async () => data);
+    (overlay as any).mount();
+    (overlay as any).currentData = data;
+    (overlay as any).captureState.originator = {
+      id: 42,
+      unique_id: 'author',
+      full_name: 'Author',
+      sort_name_display: 'Author',
+      confidence: 1,
+    };
+    (overlay as any).ensureActionButton();
+    return overlay;
+  }
+
+  function similarResult(): DuplicateCheckResult {
+    return similarDuplicateResult({
+      matches: [duplicateMatch({
+        quote_id: '101',
+        text: 'A just submitted quotation',
+        quote_date: '2026-06-01T00:00:00Z',
+      })],
+    });
+  }
+
   it('clears stale duplicate preload and auto-hides after 1000ms after successful submit', async () => {
     const overlay = new OverlayBar(async () => tweetData);
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
@@ -98,6 +137,122 @@ describe('OverlayBar', () => {
 
     expect(chrome.storage.local.remove).toHaveBeenCalledWith(['preloadedDuplicateCheck']);
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
+  });
+
+  it('submits a similar match as a sighting with the linked quote id and confirmation copy', async () => {
+    const overlay = setupReadyOverlay();
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.SUBMIT_QUOTE) {
+        callback({ success: true, message: 'Sighting added', quoteId: 'q1', action: 'sighting_added' });
+        return;
+      }
+
+      callback({ success: true });
+    });
+
+    (overlay as any).updateDuplicateInfo({ result: similarResult() });
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const sightingButton = [...shadow.querySelectorAll('button')]
+      .find(button => button.textContent === 'Add another sighting') as HTMLButtonElement;
+
+    sightingButton.click();
+    await flushSubmitTimers();
+
+    const submitCall = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .find(c => c[0]?.type === MessageType.SUBMIT_QUOTE);
+    expect(submitCall?.[0].data.link_to_quote_id).toBe(101);
+    expect(submitCall?.[0].data.user_intent).toBe('sighting');
+    expect(shadow.getElementById('originator-info')?.textContent).toContain('Sighting added');
+  });
+
+  it('submits a similar match as a variant with the linked quote id and confirmation copy', async () => {
+    const overlay = setupReadyOverlay();
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.SUBMIT_QUOTE) {
+        callback({ success: true, message: 'Quote created', quoteId: 'q1', action: 'created' });
+        return;
+      }
+
+      callback({ success: true });
+    });
+
+    (overlay as any).updateDuplicateInfo({ result: similarResult() });
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const variantButton = [...shadow.querySelectorAll('button')]
+      .find(button => button.textContent === 'Add as variant') as HTMLButtonElement;
+
+    variantButton.click();
+    await flushSubmitTimers();
+
+    const submitCall = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .find(c => c[0]?.type === MessageType.SUBMIT_QUOTE);
+    expect(submitCall?.[0].data.link_to_quote_id).toBe(101);
+    expect(submitCall?.[0].data.user_intent).toBe('variant');
+    expect(shadow.getElementById('originator-info')?.textContent).toContain('Added as variant');
+  });
+
+  it('double-clicking a similar-match decision submits exactly once', async () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).updateDuplicateInfo({ result: similarResult() });
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const variantButton = [...shadow.querySelectorAll('button')]
+      .find(button => button.textContent === 'Add as variant') as HTMLButtonElement;
+
+    variantButton.click();
+    variantButton.click();
+    await flushSubmitTimers();
+
+    const submitCalls = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .filter(c => c[0]?.type === MessageType.SUBMIT_QUOTE);
+    expect(submitCalls).toHaveLength(1);
+  });
+
+  it('blocks submit and offers retry when duplicate verification could not complete', async () => {
+    const overlay = setupReadyOverlay();
+    const checkDuplicate = jest.spyOn(overlay as any, 'checkDuplicate').mockResolvedValue(undefined);
+    (overlay as any).captureState.duplicateResult = couldntVerifyDuplicateResult();
+
+    (overlay as any).updateDuplicateInfo({ result: (overlay as any).captureState.duplicateResult });
+    await (overlay as any).submitQuote();
+
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: MessageType.SUBMIT_QUOTE }),
+      expect.any(Function)
+    );
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.textContent).toBe("Couldn't Verify");
+
+    const retryButton = [...shadow.querySelectorAll('button')]
+      .find(button => button.textContent === 'Retry') as HTMLButtonElement;
+    retryButton.click();
+    expect(checkDuplicate).toHaveBeenCalledWith('author');
+  });
+
+  it('blocks submit for attribution conflicts and shows a resolve link without decision buttons', async () => {
+    const overlay = setupReadyOverlay();
+    const conflict = conflictDuplicateResult();
+    (overlay as any).captureState.duplicateResult = conflict;
+
+    (overlay as any).updateDuplicateInfo({ result: conflict });
+    await (overlay as any).submitQuote();
+
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: MessageType.SUBMIT_QUOTE }),
+      expect.any(Function)
+    );
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    expect(shadow.textContent).toContain('Already attributed to Different Author');
+    expect(shadow.textContent).toContain('Resolve in Quotewise');
+    expect(shadow.textContent).not.toContain('Add another sighting');
+    expect(shadow.textContent).not.toContain('Add as variant');
+
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.textContent).toBe('Resolve Attribution');
   });
 
   it('shows each submit progress phase before success', async () => {
@@ -370,5 +525,14 @@ describe('OverlayBar', () => {
 
     addSpy.mockRestore();
     removeSpy.mockRestore();
+  });
+
+  it('does not expose an editable quote-text input', () => {
+    const overlay = setupReadyOverlay();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+
+    expect(shadow.querySelector('textarea')).toBeNull();
+    expect(shadow.querySelector('input[type="text"]')).toBeNull();
+    expect(shadow.querySelector('[contenteditable="true"]')).toBeNull();
   });
 });

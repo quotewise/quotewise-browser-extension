@@ -144,6 +144,8 @@ These are two distinct badge systems that share the same duplicate check data:
 
 **v1.4.4 fix**: The extension icon badge had a race condition where `tabs.onUpdated` would overwrite the final collection badge (★/✓/+) with `○` (analyzing) when both handlers ran concurrently on cold service worker startup. Fixed by removing the `○` badge from `updateExtensionIconForTweetPage()` — the `TWEET_DATA_EXTRACTED` handler now exclusively owns the collection badge lifecycle. The overlay sighting badges were not affected (they live inside the overlay DOM, not the toolbar icon).
 
+**Spec 006 cross-reference**: `006-sighting-variant-choice` extends the overlay sighting badge flow for backend `match_class` values. `exact`/URL matches preserve this spec's single-action "Already captured" behavior; `similar` adds the user choice between an eligible sighting and a variant; `conflict` and `couldnt_verify` block submission with explicit resolution/retry states.
+
 ## Out of Scope
 
 - Displaying multiple sighting statuses when multiple matches exist
