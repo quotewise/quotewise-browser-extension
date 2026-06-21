@@ -28,6 +28,7 @@ import type { DuplicateCheckResult, PreflightOriginatorResult } from '../types/a
 import type { CollectionBadgeInfo } from '../types/chrome';
 import { clearUserDataCaches, logoutAndClearUserData } from './privacy-cleanup';
 import { getSettings, onSettingsChanged } from '../settings/settings-store';
+import { buildFeedbackUrl } from '../utils/feedback-url';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -1003,6 +1004,20 @@ async function showOverlayInTab(tab: chrome.tabs.Tab): Promise<void> {
   }
 }
 
+async function openFeedbackPage(): Promise<void> {
+  const manifest = chrome.runtime.getManifest();
+  const version = typeof manifest.version === 'string' && manifest.version.trim()
+    ? manifest.version
+    : undefined;
+
+  await chrome.tabs.create({
+    url: buildFeedbackUrl({
+      version,
+      platform: 'twitter',
+    }),
+  });
+}
+
 function getCurrentAuthState(): AuthState {
   return authStateManager?.getState() ?? AuthState.UNKNOWN;
 }
@@ -1637,6 +1652,16 @@ chrome.runtime.onMessage.addListener((
   if (message.type === MessageType.GET_DIAGNOSTICS) {
     getRuntimeDiagnostics().then(diagnostics => {
       sendResponse({ success: true, data: diagnostics });
+    }).catch(error => {
+      sendResponse({ success: false, error: errorMessage(error) });
+    });
+
+    return true;
+  }
+
+  if (message.type === MessageType.OPEN_FEEDBACK_PAGE) {
+    openFeedbackPage().then(() => {
+      sendResponse({ success: true });
     }).catch(error => {
       sendResponse({ success: false, error: errorMessage(error) });
     });

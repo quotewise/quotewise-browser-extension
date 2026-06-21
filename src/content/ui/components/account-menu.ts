@@ -84,6 +84,7 @@ export class AccountMenu {
         <span>Private mode</span>
       </label>
       <button type="button" role="menuitem" id="account-open-settings">Open settings</button>
+      <button type="button" role="menuitem" id="account-send-feedback">Send feedback</button>
       <button type="button" role="menuitem" id="account-auth-action">${authActionText}</button>
     `;
     this.menu.querySelector('#account-private-toggle')?.addEventListener('change', event => {
@@ -93,6 +94,9 @@ export class AccountMenu {
     this.menu.querySelector('#account-open-settings')?.addEventListener('click', () => {
       void this.sendMessage({ type: MessageType.OPEN_OPTIONS_PAGE });
       this.close();
+    });
+    this.menu.querySelector('#account-send-feedback')?.addEventListener('click', () => {
+      void this.openFeedback();
     });
     this.menu.querySelector('#account-auth-action')?.addEventListener('click', () => {
       void this.runAuthAction();
@@ -119,6 +123,34 @@ export class AccountMenu {
     }
     this.authState = AuthState.UNAUTHENTICATED;
     this.username = null;
+  }
+
+  private async openFeedback(): Promise<void> {
+    if (!this.menu) return;
+    const button = this.menu.querySelector('#account-send-feedback') as HTMLButtonElement | null;
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Opening feedback...';
+      button.setAttribute('aria-busy', 'true');
+    }
+
+    try {
+      const response = await this.sendMessage({ type: MessageType.OPEN_FEEDBACK_PAGE });
+      if (response.success) {
+        this.statusMessage = null;
+        this.renderMenu();
+        this.close();
+        return;
+      }
+      this.statusMessage = response.error || 'Unable to open feedback.';
+    } catch (error) {
+      this.statusMessage = error instanceof Error
+        ? error.message
+        : 'Unable to open feedback.';
+    }
+
+    this.renderMenu();
+    this.open();
   }
 
   private async runAuthAction(): Promise<void> {

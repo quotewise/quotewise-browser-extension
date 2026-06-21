@@ -87,6 +87,29 @@ describe('options page', () => {
     );
   });
 
+  it('shows explanatory feedback text and opens feedback from settings', async () => {
+    const root = document.createElement('main');
+    document.body.appendChild(root);
+
+    await initializeOptionsPage(root);
+
+    expect(root.textContent).toContain('Send feedback');
+    expect(root.textContent).toContain('Opens a Quotewise feedback form');
+    expect(root.textContent).toContain('No quote text or account details are attached.');
+
+    const feedbackButton = root.querySelector('#send-feedback-btn') as HTMLButtonElement;
+    expect(feedbackButton).not.toBeNull();
+    expect(feedbackButton.textContent).toBe('Send feedback');
+    feedbackButton.focus();
+    expect(document.activeElement).toBe(feedbackButton);
+
+    feedbackButton.click();
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      { type: MessageType.OPEN_FEEDBACK_PAGE, data: undefined },
+      expect.any(Function),
+    );
+  });
+
   it('offers login instead of disabled logout when signed out', async () => {
     authState = AuthState.UNAUTHENTICATED;
     const root = document.createElement('main');
@@ -103,6 +126,68 @@ describe('options page', () => {
       { type: MessageType.OAUTH_LOGIN, data: undefined },
       expect.any(Function),
     );
+  });
+
+  it('keeps feedback available when signed out or session expired', async () => {
+    for (const state of [AuthState.UNAUTHENTICATED, AuthState.SESSION_EXPIRED, AuthState.INSUFFICIENT_PRIVILEGES]) {
+      authState = state;
+      const root = document.createElement('main');
+
+      await initializeOptionsPage(root);
+
+      const feedbackButton = root.querySelector('#send-feedback-btn') as HTMLButtonElement | null;
+      expect(feedbackButton).not.toBeNull();
+      expect(feedbackButton?.disabled).toBe(false);
+
+      feedbackButton?.click();
+      expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+        { type: MessageType.OPEN_FEEDBACK_PAGE, data: undefined },
+        expect.any(Function),
+      );
+
+      jest.clearAllMocks();
+    }
+  });
+
+  it('shows a non-blocking status when feedback cannot open', async () => {
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.AUTH_STATE_GET) {
+        callback({
+          success: true,
+          data: {
+            state: AuthState.AUTHENTICATED,
+            username: 'chris',
+          },
+        });
+        return;
+      }
+      if (message.type === MessageType.LIST_COLLECTIONS) {
+        callback({
+          success: true,
+          collections: [],
+          default_collection_id: null,
+        });
+        return;
+      }
+      if (message.type === MessageType.OPEN_FEEDBACK_PAGE) {
+        callback({ success: false, error: 'Tabs unavailable' });
+        return;
+      }
+      callback({ success: true });
+    });
+
+    const root = document.createElement('main');
+    await initializeOptionsPage(root);
+
+    const feedbackButton = root.querySelector('#send-feedback-btn') as HTMLButtonElement;
+    const privateToggle = root.querySelector('#private-mode-toggle') as HTMLInputElement;
+
+    feedbackButton.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(root.querySelector('#status')?.textContent).toBe('Tabs unavailable');
+    expect(feedbackButton.disabled).toBe(false);
+    expect(privateToggle.disabled).toBe(false);
   });
 
   it('persists private-mode changes through the settings store', async () => {

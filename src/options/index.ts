@@ -109,7 +109,17 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
             <span id="account-identity">Checking account...</span>
             <span class="hint">Used only to submit captures to Quotewise.</span>
           </div>
-  <button type="button" id="logout-btn">Log out</button>
+          <button type="button" id="logout-btn">Log out</button>
+        </div>
+      </section>
+      <section aria-labelledby="support-title">
+        <h2 id="support-title">Support</h2>
+        <div class="row">
+          <span class="label">
+            <span>Send feedback</span>
+            <span class="hint">Opens a Quotewise feedback form. No quote text or account details are attached.</span>
+          </span>
+          <button type="button" id="send-feedback-btn">Send feedback</button>
         </div>
       </section>
       <section aria-labelledby="privacy-title">
@@ -158,6 +168,7 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
   const collectionsHint = root.querySelector('#collections-hint') as HTMLElement;
   const logoutButton = root.querySelector('#logout-btn') as HTMLButtonElement;
   const clearDataButton = root.querySelector('#clear-data-btn') as HTMLButtonElement;
+  const feedbackButton = root.querySelector('#send-feedback-btn') as HTMLButtonElement;
   let authState = AuthState.UNKNOWN;
 
   function applySettings(settings: Settings): void {
@@ -244,6 +255,14 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
     void sendMessage(MessageType.CLEAR_USER_DATA).then(response => {
       clearDataButton.disabled = false;
       setStatus(response.success ? 'Cached data cleared.' : response.error || 'Clear data failed.');
+    });
+  });
+
+  feedbackButton.addEventListener('click', () => {
+    feedbackButton.disabled = true;
+    void sendMessage(MessageType.OPEN_FEEDBACK_PAGE).then(response => {
+      feedbackButton.disabled = false;
+      setStatus(response.success ? 'Feedback opened in a new tab.' : response.error || 'Unable to open feedback.');
     });
   });
 

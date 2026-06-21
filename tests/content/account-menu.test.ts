@@ -14,6 +14,8 @@ describe('AccountMenu', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     container = document.createElement('div');
+    document.body.innerHTML = '';
+    document.body.appendChild(container);
     sendMessage = jest.fn().mockResolvedValue({ success: true });
     (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
       settings: {
@@ -116,6 +118,95 @@ describe('AccountMenu', () => {
 
     expect(sendMessage).toHaveBeenCalledWith({ type: MessageType.OAUTH_LOGIN });
     expect(container.textContent).toContain('Logged in.');
+  });
+
+  it('shows Send feedback in the gear menu and dispatches the feedback message', async () => {
+    const menu = new AccountMenu(container, sendMessage);
+    await menu.mount();
+
+    const trigger = container.querySelector('#account-menu-btn') as HTMLButtonElement;
+    trigger.click();
+
+    const feedbackButton = container.querySelector('#account-send-feedback') as HTMLButtonElement;
+    expect(feedbackButton).not.toBeNull();
+    expect(feedbackButton.textContent).toBe('Send feedback');
+    expect(feedbackButton.getAttribute('role')).toBe('menuitem');
+    expect(feedbackButton.disabled).toBe(false);
+
+    feedbackButton.focus();
+    expect(document.activeElement).toBe(feedbackButton);
+
+    feedbackButton.click();
+    await flushPromises();
+
+    expect(sendMessage).toHaveBeenCalledWith({ type: MessageType.OPEN_FEEDBACK_PAGE });
+    expect((container.querySelector('#account-menu') as HTMLElement).hidden).toBe(true);
+  });
+
+  it('keeps existing gear menu actions working when feedback is present', async () => {
+    const menu = new AccountMenu(container, sendMessage);
+    await menu.mount();
+
+    const trigger = container.querySelector('#account-menu-btn') as HTMLButtonElement;
+    trigger.click();
+
+    const privateToggle = container.querySelector('#account-private-toggle') as HTMLInputElement;
+    privateToggle.checked = true;
+    privateToggle.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(chrome.storage.sync.set).toHaveBeenCalledWith({
+      settings: {
+        privateMode: true,
+        autoAddToCollection: false,
+        defaultCollectionId: null,
+        firstRunNoticeShown: false,
+      },
+    });
+
+    (container.querySelector('#account-open-settings') as HTMLButtonElement).click();
+    expect(sendMessage).toHaveBeenCalledWith({ type: MessageType.OPEN_OPTIONS_PAGE });
+
+    trigger.click();
+    const authButton = container.querySelector('#account-auth-action') as HTMLButtonElement;
+    jest.useFakeTimers();
+    authButton.click();
+    await flushPromises();
+    jest.advanceTimersByTime(450);
+    await flushPromises();
+    expect(sendMessage).toHaveBeenCalledWith({ type: MessageType.OAUTH_LOGOUT });
+  });
+
+  it('shows a recoverable gear menu status when feedback cannot open', async () => {
+    sendMessage = jest.fn().mockImplementation(async message => {
+      if (message.type === MessageType.AUTH_STATE_GET) {
+        return {
+          success: true,
+          data: {
+            state: AuthState.AUTHENTICATED,
+            username: 'chris',
+          },
+        };
+      }
+      if (message.type === MessageType.OPEN_FEEDBACK_PAGE) {
+        return { success: false, error: 'Tabs unavailable' };
+      }
+      return { success: true };
+    });
+
+    const menu = new AccountMenu(container, sendMessage);
+    await menu.mount();
+
+    const trigger = container.querySelector('#account-menu-btn') as HTMLButtonElement;
+    trigger.click();
+
+    const feedbackButton = container.querySelector('#account-send-feedback') as HTMLButtonElement;
+    feedbackButton.click();
+    await flushPromises();
+
+    expect(container.textContent).toContain('Tabs unavailable');
+    expect((container.querySelector('#account-menu') as HTMLElement).hidden).toBe(false);
+    expect((container.querySelector('#account-send-feedback') as HTMLButtonElement).disabled).toBe(false);
+    expect(container.querySelector('#account-open-settings')).not.toBeNull();
   });
 
   it('recovers the auth action button when logout fails', async () => {
