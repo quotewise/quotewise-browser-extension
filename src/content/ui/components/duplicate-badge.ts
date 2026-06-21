@@ -8,11 +8,18 @@ import {
 import { buildSimilarMatchView, renderSimilarDiff, type ResolutionDecision } from './similar-diff';
 import { safeHref, safeHttpsUrl } from './dom-utils';
 
-interface SubmitDirective {
+interface DefaultSubmitDirective {
+  type: 'submit';
+  enabled: boolean;
+  text?: string;
+  style?: 'success';
+}
+
+interface WarningSubmitDirective {
   type: 'submit';
   enabled: boolean;
   text: string;
-  style?: 'success' | 'warning';
+  style: 'warning';
 }
 
 interface ViewQuoteDirective {
@@ -21,7 +28,7 @@ interface ViewQuoteDirective {
   text: string;
 }
 
-export type SubmitStateDirective = SubmitDirective | ViewQuoteDirective;
+export type SubmitStateDirective = DefaultSubmitDirective | WarningSubmitDirective | ViewQuoteDirective;
 
 export interface DuplicateBadgeCallbacks {
   onSubmitStateChange: (directive: SubmitStateDirective) => void;
@@ -147,6 +154,8 @@ export class DuplicateBadge {
       if (quotePageUrl) {
         this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
       }
+    } else if (result.recommendation === 'new_quote') {
+      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: true });
     }
     // No badge for new_quote — that's the expected case
   }

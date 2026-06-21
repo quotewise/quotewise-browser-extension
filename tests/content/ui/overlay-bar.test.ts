@@ -6,6 +6,7 @@ import {
   conflictDuplicateResult,
   couldntVerifyDuplicateResult,
   duplicateMatch,
+  duplicateResult,
   similarDuplicateResult,
 } from '../../helpers/duplicate-fixtures';
 
@@ -229,6 +230,21 @@ describe('OverlayBar', () => {
       .find(button => button.textContent === 'Retry') as HTMLButtonElement;
     retryButton.click();
     expect(checkDuplicate).toHaveBeenCalledWith('author');
+  });
+
+  it('re-enables submit when a retry returns a clean new quote result', () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).updateDuplicateInfo({ result: couldntVerifyDuplicateResult() });
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.textContent).toBe("Couldn't Verify");
+
+    (overlay as any).updateDuplicateInfo({ result: duplicateResult() });
+
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.textContent).toBe('Submit Quote');
   });
 
   it('blocks submit for attribution conflicts and shows a resolve link without decision buttons', async () => {
