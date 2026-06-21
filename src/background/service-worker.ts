@@ -6,12 +6,12 @@
  * All services are lazily initialized on demand via ensureServicesInitialized().
  */
 
-import { MessageType, ExtensionMessage, TwitterData } from '../types/index';
+import { MessageType, type ExtensionMessage, type CapturedPostData, type CapturePlatform } from '../types/index';
 import { DEFAULT_SETTINGS, type Settings } from '../types/chrome';
 import { initializeApiHandler } from './api-handler';
 import { AuthenticationMonitor } from './auth-monitor';
 import { initializeStorageCleanup } from './storage-cleanup';
-import { validateTwitterData, ValidationError } from '../utils/validators';
+import { validateCapturedPostData, ValidationError } from '../utils/validators';
 import { DEBUG_MODE, debugLog, getWebBaseUrl, isProduction } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
 import { initiateOAuthFlow } from '../auth/auth-flow';
@@ -29,6 +29,19 @@ import type { CollectionBadgeInfo } from '../types/chrome';
 import { clearUserDataCaches, logoutAndClearUserData } from './privacy-cleanup';
 import { getSettings, onSettingsChanged } from '../settings/settings-store';
 import { buildFeedbackUrl } from '../utils/feedback-url';
+import {
+  captureAuthorHandle,
+  captureIdentityFromData,
+  captureIdentityFromUrl,
+  capturePlatform,
+  capturePlatformData,
+  captureSourceId,
+  captureSourceUrl,
+  isSameCaptureUrl,
+  isSupportedPermalinkUrl,
+  isSupportedPlatformUrl as isSupportedCapturePlatformUrl,
+  PLATFORM_DEFINITIONS,
+} from '../platforms/capture';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -56,8 +69,9 @@ let unsubscribeSettingsChanged: (() => void) | null = null;
 
 const CONTENT_SCRIPT_FILE = 'content/index.js';
 const MISSING_CONTENT_SCRIPT_MESSAGE = 'Receiving end does not exist';
-const TWEET_PAGE_REGEX = /^https:\/\/(twitter\.com|x\.com)\/.*\/status\/\d+/;
-const SUPPORTED_PLATFORM_REGEX = /^https:\/\/(twitter\.com|x\.com)(?:\/|$)/;
+const WEB_NAVIGATION_PLATFORM_FILTERS = Object.values(PLATFORM_DEFINITIONS)
+  .flatMap(definition => definition.hostSuffixes)
+  .map(hostSuffix => ({ hostSuffix }));
 const PRELOADED_DUPLICATE_MAX_AGE_MS = 60_000;
 const TWEET_EXTRACTION_RETRY_DELAYS_MS = [1_000, 2_500, 5_000] as const;
 const AUTOMATIC_PREFLIGHT_TIMEOUT_MS = 8_000;
@@ -116,6 +130,7 @@ type DiagnosticTrigger =
 interface InFlightIconOperation {
   tabId: number;
   url: string;
+  platform?: CapturePlatform;
   statusId: string;
   operationId: string;
   trigger: DiagnosticTrigger;
@@ -271,11 +286,11 @@ const automaticTweetExtractionRequests = new Map<string, Promise<void>>();
 const automaticOriginatorProbeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function isTweetPageUrl(url?: string): boolean {
-  return !!url && TWEET_PAGE_REGEX.test(url);
+  return isSupportedPermalinkUrl(url);
 }
 
 function isSupportedPlatformUrl(url?: string): boolean {
-  return !!url && SUPPORTED_PLATFORM_REGEX.test(url);
+  return isSupportedCapturePlatformUrl(url);
 }
 
 function markUserDataWipe(): void {
@@ -299,49 +314,29 @@ function isPrivateModeEnabled(): boolean {
 }
 
 function tweetStatusId(url?: string): string | null {
-  return url?.match(/\/status\/(\d+)/)?.[1] ?? null;
+  return captureIdentityFromUrl(url)?.sourceId ?? null;
 }
 
 function automaticTweetOperationKey(tabId: number | undefined, url?: string): string | null {
-  const statusId = tweetStatusId(url);
-  return tabId !== undefined && statusId ? `${tabId}:${statusId}` : null;
+  const identity = captureIdentityFromUrl(url);
+  return tabId !== undefined && identity ? `${tabId}:${identity.platform}:${identity.sourceId}` : null;
 }
 
 function automaticPreflightCacheKey(tabId: number | undefined, url: string): string {
   return automaticTweetOperationKey(tabId, url) ?? url;
 }
 
-function tweetStatusIdFromExtractedData(data: unknown): string | null {
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
-
-  const value = data as {
-    url?: unknown;
-    platform_data?: {
-      tweet_id?: unknown;
-    };
-  };
-
-  if (typeof value.platform_data?.tweet_id === 'string') {
-    return value.platform_data.tweet_id;
-  }
-
-  return typeof value.url === 'string' ? tweetStatusId(value.url) : null;
-}
-
 function isSameTweetPageUrl(expectedUrl?: string, currentUrl?: string): boolean {
-  const expectedStatusId = tweetStatusId(expectedUrl);
-  const currentStatusId = tweetStatusId(currentUrl);
-
-  return expectedStatusId !== null && expectedStatusId === currentStatusId;
+  return isSameCaptureUrl(expectedUrl, currentUrl);
 }
 
 function isExtractedTweetDataForUrl(data: unknown, url?: string): boolean {
-  const expectedStatusId = tweetStatusId(url);
-  const actualStatusId = tweetStatusIdFromExtractedData(data);
+  const expected = captureIdentityFromUrl(url);
+  const actual = captureIdentityFromData(data);
 
-  return expectedStatusId === null || actualStatusId === null || expectedStatusId === actualStatusId;
+  return expected === null ||
+    actual === null ||
+    (expected.platform === actual.platform && expected.sourceId === actual.sourceId);
 }
 
 function createOperationId(): string {
@@ -510,6 +505,7 @@ async function startInFlightOperation(
   const operation: InFlightIconOperation = {
     tabId,
     url,
+    platform: captureIdentityFromUrl(url)?.platform,
     statusId,
     operationId: createOperationId(),
     trigger,
@@ -665,13 +661,17 @@ function summarizeOriginatorResult(originator: PreflightOriginatorResult | undef
   };
 }
 
-function resolveOriginatorCreateUrl(handle: string, createUrl?: unknown): string {
+function resolveOriginatorCreateUrl(
+  handle: string,
+  platform: CapturePlatform = 'twitter',
+  createUrl?: unknown,
+): string {
   if (typeof createUrl === 'string' && createUrl) {
     return createUrl;
   }
 
   const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
-  return `${baseUrl}/originators/add/?suggested_handle=${encodeURIComponent(handle)}&platform=twitter`;
+  return `${baseUrl}/originators/add/?suggested_handle=${encodeURIComponent(handle)}&platform=${encodeURIComponent(platform)}`;
 }
 
 function originatorSlugFromPreflight(originator: PreflightOriginatorResult | undefined): string | undefined {
@@ -863,12 +863,13 @@ function getCachedDuplicateResultForTab(
 async function getStorageDiagnostics(): Promise<RuntimeDiagnostics['storage']> {
   try {
     const storage = await chrome.storage.local.get([
+      'currentPost',
       'currentTweet',
       'preloadedDuplicateCheck',
       'preloadedOriginator',
     ]);
-    const currentTweet = storage.currentTweet as {
-      data?: Partial<TwitterData>;
+    const currentTweet = (storage.currentPost ?? storage.currentTweet) as {
+      data?: Partial<CapturedPostData>;
       timestamp?: unknown;
       url?: unknown;
     } | undefined;
@@ -892,14 +893,18 @@ async function getStorageDiagnostics(): Promise<RuntimeDiagnostics['storage']> {
         ? {
           url: typeof currentTweet.url === 'string' ? currentTweet.url : undefined,
           timestamp: typeof currentTweet.timestamp === 'number' ? currentTweet.timestamp : undefined,
-          authorUsername: currentTweet.data?.author?.username,
-          tweetId: currentTweet.data?.platform_data?.tweet_id,
+          authorUsername: currentTweet.data ? captureAuthorHandle(currentTweet.data as CapturedPostData) : undefined,
+          tweetId: currentTweet.data ? captureSourceId(currentTweet.data as CapturedPostData) : undefined,
           metrics: {
-            replies: currentTweet.data?.replies,
-            retweets: currentTweet.data?.retweets,
-            likes: currentTweet.data?.likes,
-            views: currentTweet.data?.views,
-            bookmarks: currentTweet.data?.bookmarks,
+            replies: Number(capturePlatformData(currentTweet.data as CapturedPostData).reply_count) || undefined,
+            retweets: Number(capturePlatformData(currentTweet.data as CapturedPostData).retweet_count) || undefined,
+            likes: typeof currentTweet.data?.likes === 'number'
+              ? currentTweet.data.likes
+              : typeof currentTweet.data?.likesCount === 'number'
+                ? currentTweet.data.likesCount
+                : undefined,
+            views: Number(capturePlatformData(currentTweet.data as CapturedPostData).view_count) || undefined,
+            bookmarks: Number(capturePlatformData(currentTweet.data as CapturedPostData).bookmark_count) || undefined,
           },
         }
         : null,
@@ -1674,12 +1679,14 @@ chrome.runtime.onMessage.addListener((
   ensureServicesInitialized().then(() => {
     switch (message.type) {
       case MessageType.TWEET_DATA_EXTRACTED:
+      case MessageType.POST_DATA_EXTRACTED:
         handleTweetDataExtracted(message.data, sender.tab?.id, sendResponse, {
           keepAliveUntilIconApplied: true,
         });
         break;
 
       case MessageType.GET_TWEET_DATA:
+      case MessageType.GET_POST_DATA:
         handleGetTweetData(sender.tab?.id, sendResponse);
         break;
 
@@ -1820,10 +1827,11 @@ chrome.runtime.onMessage.addListener((
 
           // Re-check collection status for current tweet now that we're authenticated
           // Without this, the badge stays green/empty after login instead of ★/✓/+
-          const stored = await chrome.storage.local.get('currentTweet');
-          if (stored.currentTweet?.data) {
+          const stored = await chrome.storage.local.get(['currentPost', 'currentTweet']);
+          const storedCapture = stored.currentPost?.data ?? stored.currentTweet?.data;
+          if (storedCapture) {
             const tabId = sender.tab?.id;
-            checkQuoteCollectionStatus(stored.currentTweet.data as TwitterData, tabId).catch(error => {
+            checkQuoteCollectionStatus(storedCapture as CapturedPostData, tabId).catch(error => {
               console.error('Error re-checking collection status after login:', error);
             });
           }
@@ -2279,27 +2287,30 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
     await ensureServicesInitialized();
     await clearTweetPageIcon(details.tabId, details.url);
   }
-}, { url: [{ hostSuffix: 'twitter.com' }, { hostSuffix: 'x.com' }] });
+}, { url: WEB_NAVIGATION_PLATFORM_FILTERS });
 
 /**
  * Handle tweet data extracted from content script
  * Validates incoming data before storage for security
  */
 async function runAutomaticPreflightForExtractedTweet(
-  validatedData: TwitterData,
+  validatedData: CapturedPostData,
   tabId: number | undefined,
 ): Promise<void> {
+  const sourceUrl = captureSourceUrl(validatedData);
+  const handle = captureAuthorHandle(validatedData);
+
   if (isPrivateModeEnabled()) {
     recordPreflightDiagnostic({
       status: 'skipped',
       trigger: 'automatic-preflight',
       tabId,
-      url: validatedData.url,
-      handle: validatedData.author?.username,
+      url: sourceUrl,
+      handle,
       reason: 'private_mode',
     });
     if (tabId) {
-      await applyResolvedIconForTab(tabId, validatedData.url);
+      await applyResolvedIconForTab(tabId, sourceUrl);
     }
     return;
   }
@@ -2310,8 +2321,8 @@ async function runAutomaticPreflightForExtractedTweet(
       status: 'skipped',
       trigger: 'automatic-preflight',
       tabId,
-      url: validatedData.url,
-      handle: validatedData.author?.username,
+      url: sourceUrl,
+      handle,
       reason: 'user_data_writes_blocked',
     });
     return;
@@ -2319,14 +2330,19 @@ async function runAutomaticPreflightForExtractedTweet(
 
   // Store the extracted data for popup access
   await chrome.storage.local.set({
+    currentPost: {
+      data: validatedData,
+      timestamp: Date.now(),
+      url: sourceUrl
+    },
     currentTweet: {
       data: validatedData,
       timestamp: Date.now(),
-      url: validatedData.url
+      url: sourceUrl
     }
   });
 
-  debugLog('Tweet data stored:', validatedData.text.substring(0, 50) + '...');
+  debugLog('Post data stored:', validatedData.text.substring(0, 50) + '...');
 
   // Clear stale preloaded caches to prevent race conditions.
   // Do this only when starting a new preflight; forced extraction can race with
@@ -2337,12 +2353,12 @@ async function runAutomaticPreflightForExtractedTweet(
   if (tabId) {
     preflightOperation = await startInFlightOperation(
       tabId,
-      validatedData.url,
+      sourceUrl,
       'automatic-preflight',
-      validatedData.author?.username,
+      handle,
     );
     tabScopedPresentationTabIds.add(tabId);
-    await applyResolvedIconForTab(tabId, validatedData.url);
+    await applyResolvedIconForTab(tabId, sourceUrl);
   }
 
   await checkQuoteCollectionStatus(validatedData, tabId, preflightOperation, cacheWriteEpoch);
@@ -2360,18 +2376,18 @@ async function handleTweetDataExtracted(
   try {
     // Validate incoming data before processing (security hardening)
     try {
-      validateTwitterData(tweetData);
+      validateCapturedPostData(tweetData);
     } catch (validationError) {
       if (validationError instanceof ValidationError) {
-        console.error('Tweet data validation failed:', validationError.message, validationError.field);
+        console.error('Post data validation failed:', validationError.message, validationError.field);
         recordExtractionDiagnostic({
           status: 'failed',
           tabId,
-          error: `Invalid tweet data: ${validationError.message}`,
+          error: `Invalid post data: ${validationError.message}`,
         });
         sendResponse({
           success: false,
-          error: `Invalid tweet data: ${validationError.message}`
+          error: `Invalid post data: ${validationError.message}`
         });
         return;
       }
@@ -2379,19 +2395,22 @@ async function handleTweetDataExtracted(
     }
 
     // Type assertion safe after validation
-    const validatedData = tweetData as TwitterData;
+    const validatedData = tweetData as CapturedPostData;
+    const sourceUrl = captureSourceUrl(validatedData);
+    const sourceId = captureSourceId(validatedData);
+    const handle = captureAuthorHandle(validatedData);
     recordExtractionDiagnostic({
       status: 'succeeded',
       tabId,
-      url: validatedData.url,
-      reason: 'tweet_data_received',
+      url: sourceUrl,
+      reason: 'post_data_received',
     });
     recordDiagnosticTimingEvent({
       event: 'valid_tweet_data_accepted',
       tabId,
-      sourceUrl: validatedData.url,
-      statusId: validatedData.platform_data?.tweet_id ?? tweetStatusId(validatedData.url) ?? undefined,
-      handle: validatedData.author?.username,
+      sourceUrl,
+      statusId: sourceId ?? undefined,
+      handle,
       trigger: 'automatic-preflight',
       reason: 'tweet_data_received',
     });
@@ -2400,7 +2419,7 @@ async function handleTweetDataExtracted(
       tabMissingOriginators.delete(tabId);
     }
 
-    const cacheKey = automaticPreflightCacheKey(tabId, validatedData.url);
+    const cacheKey = automaticPreflightCacheKey(tabId, sourceUrl);
 
     // Check if there's already a pending request for this URL (prevent race conditions)
     const pending = pendingDuplicateChecks.get(cacheKey);
@@ -2409,9 +2428,9 @@ async function handleTweetDataExtracted(
       recordDiagnosticTimingEvent({
         event: 'automatic_preflight_deduped',
         tabId,
-        sourceUrl: validatedData.url,
-        statusId: validatedData.platform_data?.tweet_id ?? tweetStatusId(validatedData.url) ?? undefined,
-        handle: validatedData.author?.username,
+        sourceUrl,
+        statusId: sourceId ?? undefined,
+        handle,
         trigger: 'automatic-preflight',
         reason: 'same_tweet_preflight_in_flight',
       });
@@ -2651,7 +2670,10 @@ async function applyOriginatorLookupResponse(
   await clearOriginatorLookupOperation(context);
 
   if (lookup.found === false) {
-    const createUrl = resolveOriginatorCreateUrl(handle, lookup.create_url);
+    const lookupPlatform = typeof lookup.platform === 'string' && lookup.platform in PLATFORM_DEFINITIONS
+      ? lookup.platform as CapturePlatform
+      : captureIdentityFromUrl(sourceUrl)?.platform ?? 'twitter';
+    const createUrl = resolveOriginatorCreateUrl(handle, lookupPlatform, lookup.create_url);
     const normalizedHandle = handle.toLowerCase();
     const existingDuplicate = getCachedDuplicateResultForTab(tabId, sourceUrl);
 
@@ -2859,7 +2881,7 @@ async function requestOriginatorLookupForOperation(
         type: MessageType.LOOKUP_ORIGINATOR_BY_HANDLE,
         data: {
           handle: operation.handle,
-          platform: 'twitter',
+          platform: operation.platform ?? captureIdentityFromUrl(operation.url)?.platform ?? 'twitter',
           source_url: operation.url,
         },
       },
@@ -3026,7 +3048,7 @@ async function applyAutomaticOriginatorProbeResponse(
       return;
     }
 
-    const createUrl = resolveOriginatorCreateUrl(handle, lookup.create_url);
+    const createUrl = resolveOriginatorCreateUrl(handle, operation.platform ?? 'twitter', lookup.create_url);
 
     tabMissingOriginators.set(operation.tabId, {
       handle: normalizedHandle,
@@ -3306,14 +3328,17 @@ async function handleCheckNow(
       : sender.tab?.url;
   const handle = typeof data?.handle === 'string' ? data.handle : undefined;
   const text = typeof data?.text === 'string' ? data.text : undefined;
+  const platform = typeof data?.platform === 'string' && data.platform in PLATFORM_DEFINITIONS
+    ? data.platform as CapturePlatform
+    : captureIdentityFromUrl(sourceUrl)?.platform ?? 'twitter';
 
   if (!sourceUrl || !isTweetPageUrl(sourceUrl)) {
-    sendResponse({ success: false, skipped: true, error: 'No current tweet' });
+    sendResponse({ success: false, skipped: true, error: 'No current post' });
     return;
   }
 
   if (tabId && !await isSenderTabStillOnSourceUrl(tabId, sourceUrl)) {
-    sendResponse({ success: false, skipped: true, error: 'Tweet changed before check completed' });
+    sendResponse({ success: false, skipped: true, error: 'Post changed before check completed' });
     return;
   }
 
@@ -3335,7 +3360,7 @@ async function handleCheckNow(
       type: MessageType.PREFLIGHT_CHECK,
       data: {
         handle,
-        platform: 'twitter',
+        platform,
         text,
         source_url: sourceUrl,
       },
@@ -3390,13 +3415,15 @@ async function handleCheckNow(
  * (Reduces round-trips from 2 API calls to 1)
  */
 async function checkQuoteCollectionStatus(
-  tweetData: TwitterData,
+  postData: CapturedPostData,
   tabId?: number,
   operation: InFlightIconOperation | null = null,
   cacheWriteEpoch: number | undefined = operation?.cacheWriteEpoch,
 ): Promise<void> {
   const targetTabId = await resolveTargetTabId(tabId);
-  const handle = tweetData.author?.username;
+  const sourceUrl = captureSourceUrl(postData);
+  const handle = captureAuthorHandle(postData);
+  const platform = capturePlatform(postData);
   let preflightOperation = operation;
   let shouldApplyFinalIcon = true;
 
@@ -3405,17 +3432,17 @@ async function checkQuoteCollectionStatus(
       status: 'skipped',
       trigger: 'automatic-preflight',
       tabId: targetTabId,
-      url: tweetData.url,
+      url: sourceUrl,
       handle,
       operationId: preflightOperation?.operationId,
       reason: 'private_mode',
     });
     if (targetTabId) {
       await clearInFlightOperation(targetTabId, {
-        url: tweetData.url,
+        url: sourceUrl,
         triggers: ['automatic-preflight'],
       });
-      await applyResolvedIconForTab(targetTabId, tweetData.url);
+      await applyResolvedIconForTab(targetTabId, sourceUrl);
     }
     return;
   }
@@ -3423,13 +3450,13 @@ async function checkQuoteCollectionStatus(
   if (targetTabId && !preflightOperation) {
     preflightOperation = await startInFlightOperation(
       targetTabId,
-      tweetData.url,
+      sourceUrl,
       'automatic-preflight',
       handle,
     );
     if (preflightOperation) {
       tabScopedPresentationTabIds.add(targetTabId);
-      await applyResolvedIconForTab(targetTabId, tweetData.url);
+      await applyResolvedIconForTab(targetTabId, sourceUrl);
     }
   }
 
@@ -3437,7 +3464,7 @@ async function checkQuoteCollectionStatus(
     status: 'loading',
     trigger: 'automatic-preflight',
     tabId: targetTabId,
-    url: tweetData.url,
+    url: sourceUrl,
     handle,
     operationId: preflightOperation?.operationId,
     durationMs: durationSince(preflightOperation?.startedAt),
@@ -3452,7 +3479,7 @@ async function checkQuoteCollectionStatus(
         status: 'skipped',
         trigger: 'automatic-preflight',
         tabId: targetTabId,
-        url: tweetData.url,
+        url: sourceUrl,
         handle,
         operationId: preflightOperation?.operationId,
         durationMs: durationSince(preflightOperation?.startedAt),
@@ -3470,7 +3497,7 @@ async function checkQuoteCollectionStatus(
         status: 'skipped',
         trigger: 'automatic-preflight',
         tabId: targetTabId,
-        url: tweetData.url,
+        url: sourceUrl,
         handle,
         operationId: preflightOperation?.operationId,
         durationMs: durationSince(preflightOperation?.startedAt),
@@ -3478,7 +3505,7 @@ async function checkQuoteCollectionStatus(
       });
       debugLog('User not authenticated, skipping collection check');
       if (targetTabId) {
-        setTabDuplicateResult(targetTabId, null, tweetData.url);
+        setTabDuplicateResult(targetTabId, null, sourceUrl);
         tabMissingOriginators.delete(targetTabId);
       }
       return;
@@ -3489,14 +3516,14 @@ async function checkQuoteCollectionStatus(
         status: 'skipped',
         trigger: 'automatic-preflight',
         tabId: targetTabId,
-        url: tweetData.url,
+        url: sourceUrl,
         operationId: preflightOperation?.operationId,
         durationMs: durationSince(preflightOperation?.startedAt),
         reason: 'missing_handle',
       });
       debugLog('No handle available for preflight check');
       if (targetTabId) {
-        setTabDuplicateResult(targetTabId, null, tweetData.url);
+        setTabDuplicateResult(targetTabId, null, sourceUrl);
         tabMissingOriginators.delete(targetTabId);
       }
       return;
@@ -3518,9 +3545,9 @@ async function checkQuoteCollectionStatus(
           type: MessageType.PREFLIGHT_CHECK,
           data: {
             handle,
-            platform: 'twitter',
-            text: tweetData.text,
-            source_url: tweetData.url
+            platform,
+            text: postData.text,
+            source_url: sourceUrl
           }
         },
         {} as chrome.runtime.MessageSender,
@@ -3533,7 +3560,7 @@ async function checkQuoteCollectionStatus(
         ? operationTimingFields(preflightOperation)
         : {
           ...(targetTabId ? { tabId: targetTabId } : {}),
-          sourceUrl: tweetData.url,
+          sourceUrl,
           handle,
           trigger: 'automatic-preflight' as const,
         }),
@@ -3541,13 +3568,13 @@ async function checkQuoteCollectionStatus(
       durationMs: Date.now() - preflightRequestStartedAt,
     });
 
-    if (!await shouldApplyPreflightOperationResult(targetTabId, tweetData.url, preflightOperation)) {
+    if (!await shouldApplyPreflightOperationResult(targetTabId, sourceUrl, preflightOperation)) {
       shouldApplyFinalIcon = false;
       recordPreflightDiagnostic({
         status: 'skipped',
         trigger: 'automatic-preflight',
         tabId: targetTabId,
-        url: tweetData.url,
+        url: sourceUrl,
         handle,
         operationId: preflightOperation?.operationId,
         durationMs: durationSince(preflightOperation?.startedAt),
@@ -3573,7 +3600,7 @@ async function checkQuoteCollectionStatus(
           status: 'failed',
           trigger: 'automatic-preflight',
           tabId: targetTabId,
-          url: tweetData.url,
+          url: sourceUrl,
           handle,
           operationId: preflightOperation?.operationId,
           durationMs: durationSince(preflightOperation?.startedAt),
@@ -3583,7 +3610,7 @@ async function checkQuoteCollectionStatus(
         debugLog('Preflight failed: authentication required');
         await applyAuthRequiredApiResponse(preflightResponse, {
           tabId: targetTabId,
-          url: tweetData.url,
+          url: sourceUrl,
           trigger: 'automatic-preflight',
           handle,
         });
@@ -3594,7 +3621,7 @@ async function checkQuoteCollectionStatus(
         status: 'failed',
         trigger: 'automatic-preflight',
         tabId: targetTabId,
-        url: tweetData.url,
+        url: sourceUrl,
         handle,
         operationId: preflightOperation?.operationId,
         durationMs: durationSince(preflightOperation?.startedAt),
@@ -3602,7 +3629,7 @@ async function checkQuoteCollectionStatus(
       });
       debugLog('Preflight check failed, falling back to ambient icon state');
       if (targetTabId) {
-        setTabDuplicateResult(targetTabId, null, tweetData.url);
+        setTabDuplicateResult(targetTabId, null, sourceUrl);
         tabMissingOriginators.delete(targetTabId);
       }
       return;
@@ -3616,7 +3643,7 @@ async function checkQuoteCollectionStatus(
         status: 'skipped',
         trigger: 'automatic-preflight',
         tabId: targetTabId,
-        url: tweetData.url,
+        url: sourceUrl,
         handle,
         operationId: preflightOperation?.operationId,
         durationMs: durationSince(preflightOperation?.startedAt),
@@ -3643,8 +3670,8 @@ async function checkQuoteCollectionStatus(
           if (isMissingOriginator) {
             tabMissingOriginators.set(targetTabId, {
               handle: handle.toLowerCase(),
-              url: tweetData.url,
-              createUrl: resolveOriginatorCreateUrl(handle, originatorResult.create_url),
+              url: sourceUrl,
+              createUrl: resolveOriginatorCreateUrl(handle, platform, originatorResult.create_url),
               timestamp: Date.now(),
             });
           } else {
@@ -3656,6 +3683,7 @@ async function checkQuoteCollectionStatus(
           await chrome.storage.local.set({
             preloadedOriginator: {
               handle: handle.toLowerCase(),
+              ...(platform !== 'twitter' ? { platform } : {}),
               originator: {
                 id: originatorResult.originator.id,
                 full_name: originatorResult.originator.full_name,
@@ -3668,11 +3696,12 @@ async function checkQuoteCollectionStatus(
           });
           debugLog('Originator found:', originatorResult.originator.full_name);
         } else {
-          const createUrl = resolveOriginatorCreateUrl(handle, originatorResult.create_url);
+          const createUrl = resolveOriginatorCreateUrl(handle, platform, originatorResult.create_url);
           debugLog('Preflight originator found without slug:', originatorResult.originator.full_name);
           await chrome.storage.local.set({
             preloadedOriginator: {
               handle: handle.toLowerCase(),
+              ...(platform !== 'twitter' ? { platform } : {}),
               originator: null,
               create_url: createUrl,
               timestamp: Date.now()
@@ -3680,9 +3709,10 @@ async function checkQuoteCollectionStatus(
           });
         }
       } else {
-        const createUrl = resolveOriginatorCreateUrl(handle, originatorResult.create_url);
+        const createUrl = resolveOriginatorCreateUrl(handle, platform, originatorResult.create_url);
         const preloadedOriginator = {
           handle: handle.toLowerCase(),
+          ...(platform !== 'twitter' ? { platform } : {}),
           originator: null,
           create_url: createUrl,
           timestamp: Date.now()
@@ -3693,7 +3723,7 @@ async function checkQuoteCollectionStatus(
         if (targetTabId && isMissingOriginator) {
           tabMissingOriginators.set(targetTabId, {
             handle: handle.toLowerCase(),
-            url: tweetData.url,
+            url: sourceUrl,
             createUrl,
             timestamp: Date.now(),
           });
@@ -3708,13 +3738,13 @@ async function checkQuoteCollectionStatus(
 
     // Cache duplicate check result for overlay to use
     if (targetTabId) {
-      setTabDuplicateResult(targetTabId, duplicateResult ?? null, tweetData.url);
+      setTabDuplicateResult(targetTabId, duplicateResult ?? null, sourceUrl);
     }
 
     if (duplicateResult) {
       await chrome.storage.local.set({
         preloadedDuplicateCheck: {
-          url: tweetData.url,
+          url: sourceUrl,
           result: duplicateResult,
           timestamp: Date.now()
         }
@@ -3725,7 +3755,7 @@ async function checkQuoteCollectionStatus(
       status: 'succeeded',
       trigger: 'automatic-preflight',
       tabId: targetTabId,
-      url: tweetData.url,
+      url: sourceUrl,
       handle,
       operationId: preflightOperation?.operationId,
       durationMs: durationSince(preflightOperation?.startedAt),
@@ -3738,33 +3768,33 @@ async function checkQuoteCollectionStatus(
       status: 'failed',
       trigger: 'automatic-preflight',
       tabId: targetTabId,
-      url: tweetData.url,
+      url: sourceUrl,
       handle,
       operationId: preflightOperation?.operationId,
       durationMs: durationSince(preflightOperation?.startedAt),
       error: errorMessage(error),
     });
     if (targetTabId) {
-      setTabDuplicateResult(targetTabId, null, tweetData.url);
+      setTabDuplicateResult(targetTabId, null, sourceUrl);
       tabMissingOriginators.delete(targetTabId);
     }
   } finally {
     if (targetTabId) {
       const clearedOriginalOperation = await clearInFlightOperation(targetTabId, {
-        url: tweetData.url,
+        url: sourceUrl,
         ...(preflightOperation ? { operationId: preflightOperation.operationId } : {}),
       });
       if (!clearedOriginalOperation && shouldApplyFinalIcon) {
         await clearInFlightOperation(targetTabId, {
-          url: tweetData.url,
+          url: sourceUrl,
           triggers: ['automatic-originator-fallback'],
         });
       }
       if (shouldApplyFinalIcon) {
         await applyResolvedIconForTab(
           targetTabId,
-          tweetData.url,
-          getCachedDuplicateResultForTab(targetTabId, tweetData.url).result,
+          sourceUrl,
+          getCachedDuplicateResultForTab(targetTabId, sourceUrl).result,
         );
       }
     }
@@ -3780,9 +3810,9 @@ async function handleGetTweetData(
   sendResponse: (response: any) => void
 ) {
   try {
-    // Get stored tweet data
-    const result = await chrome.storage.local.get(['currentTweet']);
-    const currentTweet = result.currentTweet;
+    // Get stored post data, with a legacy currentTweet fallback.
+    const result = await chrome.storage.local.get(['currentPost', 'currentTweet']);
+    const currentPost = result.currentPost ?? result.currentTweet;
     
     // If no tabId (popup request), get the active tab
     let activeTabId = tabId;
@@ -3801,15 +3831,14 @@ async function handleGetTweetData(
       }
     }
     
-    if (currentTweet && activeTabId) {
+    if (currentPost && activeTabId) {
       // Verify the data is from the current tab
       const tab = await chrome.tabs.get(activeTabId);
       
-      if (tab.url && currentTweet.url && 
-          tab.url.includes(currentTweet.url.split('?')[0])) {
+      if (tab.url && currentPost.url && isSameCaptureUrl(currentPost.url, tab.url)) {
         sendResponse({ 
           success: true, 
-          data: currentTweet.data 
+          data: currentPost.data 
         });
         return;
       }
@@ -3818,30 +3847,30 @@ async function handleGetTweetData(
     // If no stored data or URL mismatch, request from content script
     if (activeTabId) {
       chrome.tabs.sendMessage(activeTabId, { 
-        type: MessageType.EXTRACT_TWEET_DATA 
+        type: MessageType.EXTRACT_POST_DATA 
       }, (response) => {
         if (chrome.runtime.lastError) {
           sendResponse({ 
-            error: 'No tweet data available. Make sure you are on a tweet page.' 
+            error: 'No post data available. Make sure you are on a supported permalink page.' 
           });
         } else {
           sendResponse(response);
         }
       });
     } else {
-      // If we have stored tweet data but no active tab, try to send the stored data
-      if (currentTweet && currentTweet.data) {
+      // If we have stored post data but no active tab, try to send the stored data
+      if (currentPost && currentPost.data) {
         sendResponse({ 
           success: true, 
-          data: currentTweet.data 
+          data: currentPost.data 
         });
       } else {
         sendResponse({ error: 'No active tab found' });
       }
     }
   } catch (error) {
-    console.error('Error getting tweet data:', error);
-    sendResponse({ error: 'Failed to get tweet data' });
+    console.error('Error getting post data:', error);
+    sendResponse({ error: 'Failed to get post data' });
   }
 }
 

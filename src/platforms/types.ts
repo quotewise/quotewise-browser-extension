@@ -1,7 +1,7 @@
-import type { ExtensionMessage, Platform } from '../types';
+import type { CapturePlatform, ExtensionMessage } from '../types';
 
 export interface PlatformAdapter<TData = unknown> {
-  id: Platform;
+  id: CapturePlatform;
   matches(location: Location): boolean;
   bootstrap(): Promise<void>;
   teardown(): Promise<void>;
