@@ -53,7 +53,7 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 - [ ] T009 [US1] Rework `buildSimilarMatchView` + `renderSimilarDiff` in `src/content/ui/components/similar-diff.ts` — two equal-weight `type="button"` controls (no disabled placeholder), date-gated sighting, keyboard-operable + `aria-label`s (Article VII), `href` set via property with `https:` validation (qw-0psq.6); pass T006
 - [ ] T010 [US1] Wire the `similar` branch of `DuplicateBadge` → `renderSimilarDiff(...)` and forward `onResolveDecision` in `src/content/ui/components/duplicate-badge.ts`
-- [ ] T011 [US1] Thread `link_to_quote_id` + `user_intent` into the POST body and return `action` in `src/api/quotewise-api.ts`; forward both fields through `SUBMIT_QUOTE` in `src/background/api-handler.ts`; pass T007
+- [ ] T011 [US1] Thread `link_to_quote_id` + `user_intent` into the POST body and return `action` in `src/api/quotewise-api.ts`; forward both fields through `SUBMIT_QUOTE` in `src/background/api-handler.ts` (`handleSubmitQuote` — pass `message.data` through **without a field whitelist**; `service-worker.ts:1683` already delegates the message wholesale, verified); pass T007
 - [ ] T012 [US1] In `src/content/ui/overlay-bar.ts`: add `submitQuote(opts?: {linkToQuoteId?, userIntent?})` threading the pair; wire `onResolveDecision` → submit; set confirmation copy from `action`; add the `isSubmitting` re-entrancy guard (qw-0psq.1); pass T008
 
 **Checkpoint**: US1 fully functional — the MVP for `qw-hsly`.
@@ -74,7 +74,7 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 ### Implementation for User Story 2
 
 - [ ] T015 [US2] Update `checkQuoteDuplicate` error handling in `src/api/quotewise-api.ts` to return `search_metadata.error: true` on failure; pass T013
-- [ ] T016 [US2] Implement the `couldnt_verify` branch of `DuplicateBadge` (warning glyph+text, Retry button → `onRetry`) in `src/content/ui/components/duplicate-badge.ts`
+- [ ] T016 [US2] Implement the `couldnt_verify` branch of `DuplicateBadge` (warning glyph+text; keyboard-operable Retry `button` with an `aria-label`; status announced via `aria-live` and conveyed by glyph+text not color alone — FR-010/SC-006) wired to `onRetry`, in `src/content/ui/components/duplicate-badge.ts`
 - [ ] T017 [US2] In `src/content/ui/overlay-bar.ts`: `couldnt_verify` disables Submit and wires Retry → re-run `checkDuplicate`; pass T014
 
 **Checkpoint**: US1 + US2 both work independently.
@@ -93,7 +93,7 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] Implement the `conflict` branch of `DuplicateBadge` (attribution notice + resolve-in-Quotewise link via `onResolveConflict`, `https:`-validated) in `src/content/ui/components/duplicate-badge.ts`
+- [ ] T019 [US3] Implement the `conflict` branch of `DuplicateBadge` (attribution notice naming the other originator from `match.originator.full_name`, with a generic fallback when that field is absent; keyboard-operable resolve-in-Quotewise link with an `aria-label`, `https:`-validated, via `onResolveConflict`; status by glyph+text not color — FR-010/SC-006) in `src/content/ui/components/duplicate-badge.ts`
 - [ ] T020 [US3] In `src/content/ui/overlay-bar.ts`: guard `submitQuote` to block when the current resolution is `conflict`; pass T018
 
 **Checkpoint**: All three stories independently functional.
@@ -102,16 +102,17 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T021 [P] FR-013 degradation integration test (response lacking `match_class`/`match_source` → legacy recommendation rendering, no error) in `tests/content/ui/components/duplicate-badge.test.ts`
+- [ ] T021 [P] FR-013 degradation + FR-006/SC-007 regression tests in `tests/content/ui/components/duplicate-badge.test.ts`: (a) response lacking `match_class`/`match_source` → legacy recommendation rendering, no error; (b) an `exact`/URL match still renders the single-action "Already captured" behavior unchanged (FR-006); and confirm the existing spec-002 sighting-badge suite stays green (SC-007 regression guard)
 - [ ] T022 [P] Consolidate the duplicate `escapeHtml` helpers and assert no `javascript:` URI survives `href` validation across the touched components (qw-0psq.6) in `src/content/ui/components/` + a focused test
-- [ ] T023 Run `bun run test` + `bun run type-check` + `bun run lint` (all green) and execute `quickstart.md` manual verification (US1–US3 + accessibility SC-006)
+- [ ] T023 Run `bun run test` + `bun run type-check` + `bun run lint` (all green) and execute `quickstart.md` manual verification (US1–US3 + accessibility SC-006 + SC-002: confirmation appears within ~1s of the submit response — manual UX check, not auto-asserted)
 - [ ] T024 [P] Add a cross-reference note linking spec `002-sighting-status-ui` → this feature in `specs/002-sighting-status-ui/spec.md`
+- [ ] T025 [P] FR-012 invariant guard test: assert the overlay exposes **no editable quote-text input** (only excerpt selection) in `tests/content/ui/overlay-bar.test.ts`
 
 ---
 
 ## Dependencies & Execution Order
 
-- **Setup (T001)** → **Foundational (T002–T005)** → **Stories** → **Polish (T021–T024)**.
+- **Setup (T001)** → **Foundational (T002–T005)** → **Stories** → **Polish (T021–T025)**.
 - **Foundational blocks everything.** T002 (types) blocks T003+; T003 before T004 (TDD); T004 before T005 (badge dispatch uses the classifier).
 - **US1 (P1)**: T006–T008 (tests, parallel) before T009–T012 (impl). T011 (api/handler) is independent of T009/T010 (components) — parallelizable; T012 (overlay) depends on T009–T011.
 - **US2 (P2)** and **US3 (P3)**: depend only on Foundational; independent of US1 in behavior, but T016/T017/T019/T020 touch the same `duplicate-badge.ts` / `overlay-bar.ts` as US1 → run after US1's edits to those files (sequential, not [P]).
@@ -122,7 +123,7 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 - T003 [P] alongside T002's downstream (after types land).
 - US1 tests T006 / T007 / T008 [P] together (different files).
 - T011 (api + handler) [P] with T009/T010 (components) inside US1.
-- Polish T021 / T022 / T024 [P].
+- Polish T021 / T022 / T024 / T025 [P].
 
 ## Implementation Strategy
 
