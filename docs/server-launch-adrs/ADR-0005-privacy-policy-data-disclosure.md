@@ -1,7 +1,7 @@
 # ADR-0005 — Privacy policy + data-handling disclosure update
 
-- **Status:** Proposed
-- **Date:** 2026-06-19
+- **Status:** ✅ Implemented & deployed 2026-06-20 (PR #177) · Remaining: CWS dashboard Privacy-practices tab (`qw-0psq.16`) + permission justifications (`qw-0psq.17`) — dashboard tasks, not code. "Quotosaurus LLC" confirmed as the intended legal entity.
+- **Date:** 2026-06-19 (proposed) · 2026-06-20 (deployed & verified)
 - **Priority:** P1 — **LAUNCH-GATING** (Chrome Web Store requirement)
 - **Related beads:** `qw-0psq.15` (update hosted privacy policy), `qw-0psq.16` (CWS Privacy practices tab)
 
@@ -32,7 +32,7 @@ Update the hosted `/privacy/` (and `/terms/` as needed) to:
 4. State **retention** (how long captured data and tokens are kept; that logout/clear-data removes local caches/tokens).
 5. Be reachable at a **permanent public URL** (not behind login) — this URL goes into the CWS "Privacy policy URL" field (`qw-0psq.16`).
 
-The wording must match the CWS Privacy-practices tab disclosures (user activity, website content, authentication information) so the two are consistent.
+The wording must match the CWS Privacy-practices tab disclosures so the two are consistent. The applicable data types are **website content** and **authentication information** (OAuth tokens); do **not** declare **user activity**, which CWS defines as behavioral monitoring (clicks, scroll, keystroke logging) that this extension does not perform.
 
 ## What we need from the backend
 
