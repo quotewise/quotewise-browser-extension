@@ -1,9 +1,10 @@
 # ADR-0003 — Extension feedback intake (Turnstile-gated)
 
-- **Status:** Proposed
-- **Date:** 2026-06-19
+- **Status:** Accepted — backend delivered (merged to `main` 2026-06-21, deploying). Extension-side link still pending.
+- **Date:** 2026-06-19 (proposed) · 2026-06-21 (backend delivered)
 - **Priority:** P2 (recommended for launch)
-- **Related beads:** `qw-0psq.21` (extension "Send feedback" link). Supersedes stale stubs `qw-4wy`, `qw-vzq`.
+- **Related beads:** `qw-0psq.21` (extension "Send feedback" link — still open). Supersedes stale stubs `qw-4wy`, `qw-vzq`.
+- **Delivered by:** quotewise PR #178 ("[codex] Add Turnstile feedback intake").
 
 ## Context
 
@@ -38,7 +39,20 @@ For a public v1 we want a low-friction channel for bug reports / feature request
 - **Positive:** Spam-resistant feedback from day one; decoupled from auth; trivial extension change.
 - **Cost:** One server page + model + Turnstile keys. Turnstile site/secret keys must be provisioned.
 
+## Delivered (2026-06-21)
+
+Shipped in quotewise **PR #178**, merged to `main` and deploying. Implemented as the proposed hosted, Turnstile-gated web form, with two naming deviations from this proposal:
+
+- **Final URL is `/feedback/`** (Django route name `feedback`), not `/extension-feedback`. It is a general public feedback page; the extension is one entry point (distinguished by `src=chrome-ext`). **The extension should hardcode `https://quotewise.io/feedback/`** — this answers requirement 4 / `qw-0psq.21`.
+- **Model is `Feedback`** (table `quotewise_feedback`), not `ExtensionFeedback` — one intake model serving web + extension.
+
+Confirmed behavior:
+- Cloudflare Turnstile verified server-side before persisting, plus a honeypot field and a 5/min per-IP rate limit (`CF-Connecting-IP`).
+- Accepts and records the whitelisted `v` / `src` / `platform` query params alongside category (bug / feature / other), free-text message, and optional follow-up email.
+- Persists the submission and fires best-effort triage email (`hello@quotewise.io`) + a PostHog event.
+- `/privacy/` updated to disclose extension feedback data practices (see ADR-0005).
+
 ## Acceptance
 
-- A public, Turnstile-gated feedback page exists at an agreed URL and records submissions with extension context.
-- The extension's "Send feedback" link opens it with `v`, `src`, `platform` params.
+- [x] A public, Turnstile-gated feedback page exists at an agreed URL (`https://quotewise.io/feedback/`) and records submissions with extension context.
+- [ ] The extension's "Send feedback" link opens it with `v`, `src`, `platform` params. *(Extension-side change — point the link at `https://quotewise.io/feedback/`; tracked by `qw-0psq.21`.)*
