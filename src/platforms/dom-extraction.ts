@@ -46,8 +46,27 @@ export function visibleLikesFrom(root: ParentNode): number | undefined {
   for (const candidate of candidates) {
     const raw = candidate.getAttribute('aria-label') || candidate.textContent || '';
     if (/\d/.test(raw) && /likes?/i.test(raw)) {
-      return parseNumber(raw);
+      const likeCount = parseLikeCount(raw);
+      if (likeCount !== undefined) {
+        return likeCount;
+      }
     }
+  }
+
+  return undefined;
+}
+
+function parseLikeCount(value: string): number | undefined {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  const countPattern = String.raw`\d[\d,.]*\s*[KMB]?`;
+  const beforeLike = normalized.match(new RegExp(`(${countPattern})(?=\\s+likes?\\b)`, 'i'));
+  if (beforeLike) {
+    return parseNumber(beforeLike[1]);
+  }
+
+  const afterLike = normalized.match(new RegExp(`\\blikes?\\b[^\\d]{0,20}(${countPattern})`, 'i'));
+  if (afterLike) {
+    return parseNumber(afterLike[1]);
   }
 
   return undefined;

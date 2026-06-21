@@ -1,0 +1,84 @@
+{
+  "feature": "008-multi-platform-capture",
+  "status": "pending-live-urls",
+  "notes": [
+    "Fill url fields with public, logged-in-accessible permalinks before running probes.",
+    "Do not add credentials, cookies, private session data, or private account-only content.",
+    "Keep non-X platform flags disabled until all promotion criteria pass."
+  ],
+  "fixtureClasses": [
+    "original",
+    "reply_or_comment",
+    "repost_quote_or_reshare",
+    "media",
+    "long_or_collapsed",
+    "unavailable_private_login_gated_or_paywalled",
+    "non_english",
+    "low_or_zero_likes",
+    "abbreviated_or_high_likes"
+  ],
+  "platforms": {
+    "twitter": {
+      "phase": 1,
+      "enabledByDefault": true,
+      "urls": {
+        "original": null,
+        "reply_or_comment": null,
+        "repost_quote_or_reshare": null,
+        "media": null,
+        "long_or_collapsed": null,
+        "unavailable_private_login_gated_or_paywalled": null,
+        "non_english": null,
+        "low_or_zero_likes": null,
+        "abbreviated_or_high_likes": null
+      }
+    },
+    "threads": {
+      "phase": 2,
+      "enabledByDefault": false,
+      "urls": {
+        "original": null,
+        "reply_or_comment": null,
+        "repost_quote_or_reshare": null,
+        "media": null,
+        "long_or_collapsed": null,
+        "unavailable_private_login_gated_or_paywalled": null,
+        "non_english": null,
+        "low_or_zero_likes": null,
+        "abbreviated_or_high_likes": null
+      }
+    },
+    "bluesky": {
+      "phase": 3,
+      "enabledByDefault": false,
+      "urls": {
+        "original": null,
+        "reply_or_comment": null,
+        "repost_quote_or_reshare": null,
+        "media": null,
+        "long_or_collapsed": null,
+        "unavailable_private_login_gated_or_paywalled": null,
+        "non_english": null,
+        "low_or_zero_likes": null,
+        "abbreviated_or_high_likes": null
+      }
+    },
+    "substack_notes": {
+      "phase": 4,
+      "enabledByDefault": false,
+      "urls": {
+        "original": null,
+        "reply_or_comment": null,
+        "repost_quote_or_reshare": null,
+        "media": null,
+        "long_or_collapsed": null,
+        "unavailable_private_login_gated_or_paywalled": null,
+        "non_english": null,
+        "low_or_zero_likes": null,
+        "abbreviated_or_high_likes": null,
+        "custom_domain_evidence_only": null
+      }
+    }
+  }
+}
+
