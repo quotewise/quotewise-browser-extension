@@ -206,10 +206,24 @@ describe('DuplicateBadge', () => {
     ]);
   });
 
-  it('shows nothing for new_quote recommendation', () => {
+  it('shows nothing and enables submit for new_quote recommendation', () => {
     badge.update({ result: makeResult() });
     // new_quote with in_quotewise=false => no badge rendered
     expect(container.innerHTML).toBe('');
+    expect(directives).toEqual([
+      { type: 'submit', enabled: true },
+    ]);
+  });
+
+  it('can restore submit after a previous disabled duplicate state', () => {
+    badge.update({ result: couldntVerifyDuplicateResult() });
+    badge.update({ result: makeResult() });
+
+    expect(container.innerHTML).toBe('');
+    expect(directives).toEqual([
+      { type: 'submit', enabled: false, text: "Couldn't Verify" },
+      { type: 'submit', enabled: true },
+    ]);
   });
 
   it('renders a couldnt-verify warning with retry and disables submit', () => {
