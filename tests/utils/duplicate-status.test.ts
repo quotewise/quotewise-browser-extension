@@ -1,9 +1,19 @@
 import {
+  classifyMatchResolution,
   classifyDuplicateSighting,
   getMatchForDuplicateSightingState,
   mapRecommendationToQuoteStatus,
 } from '../../src/utils/duplicate-status';
 import type { DuplicateCheckResult } from '../../src/types/api';
+import {
+  conflictDuplicateResult,
+  couldntVerifyDuplicateResult,
+  duplicateMatch,
+  duplicateResult,
+  exactDuplicateResult,
+  legacyNearMatchDuplicateResult,
+  similarDuplicateResult,
+} from '../helpers/duplicate-fixtures';
 
 function duplicate(
   recommendation: string,
@@ -143,5 +153,67 @@ describe('quote-status recommendation mapping', () => {
   it('maps attribution conflict recommendations', () => {
     expect(mapRecommendationToQuoteStatus(duplicate('attribution_conflict'))).toBe('Conflict');
     expect(mapRecommendationToQuoteStatus(duplicate('attribution_conflict_resolved'))).toBe('Conflict');
+  });
+});
+
+describe('match resolution classifier', () => {
+  it('uses precedence: couldnt_verify before exact/conflict/similar', () => {
+    expect(classifyMatchResolution(couldntVerifyDuplicateResult({
+      matches: [duplicateMatch({
+        match_source: 'url',
+        match_class: 'exact',
+        existing_sighting_for_this_url: true,
+      })],
+    }))).toBe('couldnt_verify');
+
+    expect(classifyMatchResolution(exactDuplicateResult({
+      matches: [duplicateMatch({
+        match_source: 'url',
+        match_class: 'conflict',
+        existing_sighting_for_this_url: true,
+      })],
+    }))).toBe('exact');
+
+    expect(classifyMatchResolution(conflictDuplicateResult())).toBe('conflict');
+    expect(classifyMatchResolution(similarDuplicateResult())).toBe('similar');
+    expect(classifyMatchResolution(duplicateResult())).toBe('none');
+  });
+
+  it('treats URL and exact sighting signals as exact', () => {
+    expect(classifyMatchResolution(duplicateResult({
+      matches: [duplicateMatch({ match_source: 'url' })],
+    }))).toBe('exact');
+    expect(classifyMatchResolution(duplicateResult({
+      matches: [duplicateMatch({ match_class: 'exact' })],
+    }))).toBe('exact');
+    expect(classifyMatchResolution(duplicateResult({
+      matches: [duplicateMatch({ sighting_status: 'exact_url' })],
+    }))).toBe('exact');
+    expect(classifyMatchResolution(duplicateResult({
+      matches: [duplicateMatch({ existing_sighting_for_this_url: true })],
+    }))).toBe('exact');
+  });
+
+  it('maps legacy near-match recommendations to similar when match_class is absent', () => {
+    expect(classifyMatchResolution(legacyNearMatchDuplicateResult())).toBe('similar');
+    expect(classifyMatchResolution(legacyNearMatchDuplicateResult({
+      recommendation: 'new_version_known_author',
+    }))).toBe('similar');
+  });
+
+  it('is total for absent fields and malformed inputs', () => {
+    expect(() => classifyMatchResolution(null)).not.toThrow();
+    expect(() => classifyMatchResolution(undefined)).not.toThrow();
+    expect(() => classifyMatchResolution({
+      recommendation: 'banana',
+      search_metadata: null,
+    } as unknown as DuplicateCheckResult)).not.toThrow();
+
+    expect(classifyMatchResolution(null)).toBe('none');
+    expect(classifyMatchResolution(undefined)).toBe('none');
+    expect(classifyMatchResolution({
+      recommendation: 'banana',
+      search_metadata: null,
+    } as unknown as DuplicateCheckResult)).toBe('none');
   });
 });

@@ -7,7 +7,7 @@ function result(matchOverrides: Partial<DuplicateCheckResult['matches'][number]>
     confidence: 0.9,
     in_quotewise: true,
     matches: [{
-      quote_id: 'q1',
+      quote_id: '1',
       version_id: 1,
       text: 'hello world',
       similarity: 0.9,
@@ -31,8 +31,7 @@ describe('add earlier sighting date gate', () => {
       '2025-01-01T00:00:00Z',
     );
 
-    expect(view?.addSighting.available).toBe(false);
-    expect(view?.addSighting.eligible).toBe(false);
+    expect(view?.sightingAvailable).toBe(false);
   });
 
   it('is eligible only when the tweet is strictly older than quote_date', () => {
@@ -47,14 +46,12 @@ describe('add earlier sighting date gate', () => {
       '2026-01-01T00:00:00Z',
     );
 
-    expect(older?.addSighting.available).toBe(true);
-    expect(older?.addSighting.eligible).toBe(true);
-    expect(older?.addSighting.hint).toBe('This tweet is older than our records');
-    expect(newer?.addSighting.available).toBe(true);
-    expect(newer?.addSighting.eligible).toBe(false);
+    expect(older?.sightingAvailable).toBe(true);
+    expect(older?.sightingHint).toBe('This tweet is older than our records');
+    expect(newer?.sightingAvailable).toBe(false);
   });
 
-  it('renders the honest sighting label, never variant wording', () => {
+  it('renders the honest sighting and variant labels', () => {
     const container = document.createElement('span');
     const view = buildSimilarMatchView(
       result({ quote_date: '2026-01-01T00:00:00Z' }),
@@ -62,9 +59,9 @@ describe('add earlier sighting date gate', () => {
       '2025-01-01T00:00:00Z',
     );
 
-    renderSimilarDiff(container, view!);
+    renderSimilarDiff(container, view!, { onResolve: jest.fn() });
 
-    expect(container.textContent).toContain('Add as earlier sighting of this similar quote');
-    expect(container.textContent).not.toContain('variant');
+    expect(container.textContent).toContain('Add another sighting');
+    expect(container.textContent).toContain('Add as variant');
   });
 });

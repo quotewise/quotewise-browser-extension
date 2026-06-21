@@ -370,7 +370,7 @@ describe('QuotewiseApiClient', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    test('gracefully handles duplicate check errors', async () => {
+    test('returns a couldnt-verify result for duplicate check non-2xx failures', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500
@@ -378,14 +378,21 @@ describe('QuotewiseApiClient', () => {
 
       const result = await client.checkQuoteDuplicate('test');
 
-      expect(result).toEqual({
-        recommendation: 'new_quote',
-        confidence: 0.5,
-        in_quotewise: false,
-        matches: [],
-        reasoning: 'Error occurred during duplicate check, proceeding as new quote',
-        search_metadata: { error: true }
-      });
+      expect(result.search_metadata.error).toBe(true);
+      expect(result.reasoning).toBe("Couldn't verify duplicates");
+      expect(result.confidence).toBe(0);
+      expect(result.matches).toEqual([]);
+    });
+
+    test('returns a couldnt-verify result for duplicate check network failures', async () => {
+      mockFetch.mockRejectedValue(new Error('offline'));
+
+      const result = await client.checkQuoteDuplicate('test');
+
+      expect(result.search_metadata.error).toBe(true);
+      expect(result.reasoning).toBe("Couldn't verify duplicates");
+      expect(result.confidence).toBe(0);
+      expect(result.matches).toEqual([]);
     });
   });
 
@@ -468,6 +475,45 @@ describe('QuotewiseApiClient', () => {
           })
         })
       );
+    });
+
+    test('threads sighting/variant decision fields and surfaces response action', async () => {
+      const mockResponse = {
+        id: 'quote-123',
+        message: 'Sighting added',
+        action: 'sighting_added'
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      const result = await client.submitQuote({
+        ...validQuoteData,
+        link_to_quote_id: 101,
+        user_intent: 'sighting'
+      });
+
+      const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.link_to_quote_id).toBe(101);
+      expect(body.user_intent).toBe('sighting');
+      expect(result.action).toBe('sighting_added');
+    });
+
+    test('omits sighting/variant decision fields when not provided', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ id: 'quote-123', message: 'Quote created successfully' }),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      await client.submitQuote(validQuoteData);
+
+      const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+      expect(body).not.toHaveProperty('link_to_quote_id');
+      expect(body).not.toHaveProperty('user_intent');
     });
 
     test('validates required fields', async () => {
