@@ -1,7 +1,7 @@
 # ADR-0002 — Quote submission: explicit sighting-vs-variant linkage
 
-- **Status:** Proposed
-- **Date:** 2026-06-19
+- **Status:** ✅ Backend implemented & deployed 2026-06-20 (see "Backend response — actual implementation" below) · Chrome client integration in progress (spec 006)
+- **Date:** 2026-06-19 (proposed) · 2026-06-20 (backend deployed & verified)
 - **Priority:** P1 (first post-launch feature; not launch-gating)
 - **Related beads:** `qw-hsly`
 - **Endpoint:** `POST /v1/quotes/` (submission)
@@ -65,3 +65,39 @@ Response should tell the client what happened so the overlay can confirm correct
 - A submission with `link_to_quote_id` + `user_intent: sighting` records a sighting and returns `outcome: sighting_added` without creating a new quote.
 - A submission with `user_intent: new_variant` creates a new quote and logs the rejected candidate for analytics.
 - Omitting both behaves exactly as today.
+
+---
+
+## Backend response — actual implementation (2026-06-20)
+
+**Status:** Implemented (quotewise repo, branch `api-enhancements`; beads qw-hsly / qw-0psq.22). API stays **v1**; additive/back-compat. **The backend drives the contract.** The auto-collapse this ADR worried about was real: `create_quote()` silently turned every ≥0.8 near-match into a sighting, erasing distinct variant text. The variant path now stops that.
+
+`POST /v1/quotes/` accepts two **co-required** optional inputs (both or neither). Field-name mapping (ADR sketch → **actual**):
+
+| ADR sketch | Actual | Notes |
+|---|---|---|
+| `link_to_quote_id` (`"qt_01HX…"`) | `link_to_quote_id` (**integer**) | = check_duplicate `quote_id` (numeric id; send the integer, or its string form — both accepted). |
+| `user_intent: "sighting" \| "new_variant"` | `user_intent: "sighting" \| "variant"` | **Two outcomes only.** We kept the `variant` label (nudges curatorial thinking); `new_variant` → `variant`. No third "new quote" button — data shows genuinely-new quotes don't reach the near-match tier. |
+| `outcome: "sighting_added" \| "quote_created"` | existing **`action`**: `"sighting_added" \| "created"` | No new `outcome` field; bind to the existing `action` discriminator. |
+| `quote_id` / `quote_url` (in response) | existing **`quote`** object | Carries `id` + web URL already. |
+
+### Behavior
+
+- `user_intent: "sighting"` (+ `link_to_quote_id`) → idempotently attach a `QuoteSighting` for `source_url` to the existing quote; `action == "sighting_added"`; **no** new quote. `200`.
+- `user_intent: "variant"` (+ `link_to_quote_id`) → **force-create** a distinct quote (preserving the text, bypassing the near-match→sighting auto-collapse) **and** register a `needs_review` `variant` `QuoteRelation` new_quote → candidate; `action == "created"`. `201`. Curators re-type/sever downstream (specs 117/119).
+- Neither field → **unchanged** (back-compat): near-matches still auto-collapse to a sighting as before.
+- **Routing guard:** the variant path is **same-originator** only. A different-originator near-match (`match_class == "conflict"` from ADR-0001) routes to the existing attribution-dispute flow, **not** the variant button.
+
+### Authorization & errors (RFC 9457)
+
+- The caller may only link to a quote they can see (public, or one they revised) → otherwise **403** `application/problem+json`.
+- An unknown / unresolved `link_to_quote_id` → **400**.
+- Sending only one of the pair → **400** (`DUPLICATE_RESOLUTION_INCOMPLETE`).
+
+### Persisting the choice (threshold tuning)
+
+Both choices record one append-only **`DUPLICATE_RESOLUTION` Assertion** (the single queryable place spanning sighting+variant decisions) with payload `{candidate_quote_id, similarity_score, similarity_method, user_decision, source_url}`. The variant path *also* yields the `QuoteRelation` + `QuoteRelationEvent`. The similarity score is recovered server-side via `DuplicateChecker` (the client need not send it).
+
+### What the extension binds to
+
+`link_to_quote_id` (integer) + `user_intent` (`"sighting"`/`"variant"`) on the request; the `action` discriminator (`"sighting_added"`/`"created"`) and the `quote` object on the response; RFC 9457 `403`/`400` for the error cases.
