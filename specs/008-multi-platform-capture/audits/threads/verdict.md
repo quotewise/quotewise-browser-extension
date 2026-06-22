@@ -28,6 +28,9 @@
   - `raw/contract-discovery/media-huyquocc11-dz1dyikejeh-authenticated.json`
   - `raw/contract-discovery/repost-quote-9six7-dz3u2dnexyk-authenticated.json`
   - `raw/contract-discovery/reply-emoji-gompf79-dz3qlokjyco-authenticated.json`
+- Text-structure artifacts:
+  - `raw/text-structure/original-die-workwear-dz3u4c5j30i-authenticated.json`
+  - `raw/text-structure/repost-quote-9six7-dz3u2dnexyk-authenticated.json`
 - Raw Probe B artifacts: pending in `raw/probe-b/`
 
 ## Contract Criteria
@@ -42,6 +45,7 @@
 | Duplicate/preflight and submit succeed on live pages | Pending | No live submit result committed yet |
 | Deterministic fixture tests match the audited selector contract | Pending update | Existing local tests cover article/testid-root assumptions; they should be updated after the Threads contract is validated across scenario fixtures |
 | Chrome Web Store host permission rationale matches enabled hosts | Pending | Host permissions exist, but runtime flag remains disabled |
+| Visible body newlines are preserved | Pending | Text-structure probes on existing original and reshare fixtures found single-block text only; need a direct multiline Threads URL |
 
 ## Notes
 
@@ -61,7 +65,7 @@ Current evidence supports this contract for an authenticated original Threads pe
 | Text | `meta[property="og:description"]` | High for original permalink |
 | Posted date | `time[datetime]` whose nearest permalink link contains `sourceId` | Medium; needs more scenarios |
 | Likes | Candidate: number between Like and Reply action icons | Medium for authenticated original, reply, and media fixtures; validate low/zero cases before promotion |
-| Rendered body | `[dir="auto"]` text candidate | Supporting only; browser extraction can normalize/degrade text |
+| Rendered body | `[dir="auto"]` text candidate; preserve raw newlines when a multiline fixture proves the DOM contract | Supporting only; browser extraction can normalize/degrade text and multiline live evidence is still pending |
 
 The prior generic Probe A is useful as negative evidence for X-like selectors, but it is not the proposed Threads adapter contract.
 
@@ -83,6 +87,7 @@ For reply/comment permalinks where `location.href` and canonical metadata disagr
 | reply/comment | Candidate contract found | Authenticated `arturoztalin`, `njr354151`, and `gompf79` replies show canonical/OG parent-context mismatch; `njr354151` validates embedded linked-content exclusion and `gompf79` validates emoji-heavy body text |
 | repost/quote/reshare | Candidate contract found | Authenticated `9six7` fixture validates wrapper context text, embedded repost text, and embedded media separation; canonical metadata is not usable |
 | media | Candidate contract found | Authenticated `huyquocc11` media permalink confirms canonical metadata and source-linked text remain focal while media nodes are present |
+| multiline text | Pending | Need direct URL with visible paragraph/newline text |
 | long/collapsed | Pending | Need direct URL |
 | unavailable/private/login-gated | Pending | Need direct URL |
 | non-English | Pending | Need direct URL |
@@ -106,6 +111,7 @@ For reply/comment permalinks where `location.href` and canonical metadata disagr
 - The same probe found an action-row count candidate: Like icon -> `2.3K` -> Reply icon, parsed as `2300` likes.
 - Supporting metadata exposed the correct `og:title`, `og:description`, `og:url`, and `time[datetime]`; the rendered DOM still did not expose `article`, `role="article"`, or `data-testid` hooks.
 - This confirms the blocker is not only a logged-out/public rendering issue; it also establishes metadata as the current primary candidate for original Threads permalinks.
+- Text-structure probe found this fixture was a single text block with no newline or paragraph-boundary evidence.
 
 2026-06-21 authenticated reply fixture notes:
 
@@ -151,3 +157,4 @@ For reply/comment permalinks where `location.href` and canonical metadata disagr
 - The embedded repost text was separately detected under `aaron.rupar` / `DZ0G2o5ic-m`, beginning `Trump on the new plane...`; this must be excluded from focal capture unless the user opens that embedded permalink directly.
 - The sanitized media summary found one visible video element and image/video-player wrapper nodes below the embedded repost text. Hidden feed DOM also contained media nodes, so the other-features probe now reports visible media counts separately from document-wide counts.
 - Generic Probe A found no configured Threads root and captured feed/navigation text, reinforcing that Probe A is negative evidence for Threads.
+- Text-structure probe found the wrapper context text was a single text block with no newline or paragraph-boundary evidence; this fixture is not multiline coverage.

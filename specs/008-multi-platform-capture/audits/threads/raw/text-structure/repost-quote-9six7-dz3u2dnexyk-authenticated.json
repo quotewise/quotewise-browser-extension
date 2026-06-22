@@ -1,0 +1,205 @@
+{
+  "focalRoot": {
+    "attrs": {
+      "class": "_ammd system-fonts--body sf"
+    },
+    "rect": {
+      "height": 986,
+      "width": 1280,
+      "x": 0,
+      "y": -93
+    },
+    "tag": "body",
+    "textLength": 485726
+  },
+  "identity": {
+    "handle": "9six7",
+    "sourceId": "DZ3u2dNEXYK",
+    "url": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK"
+  },
+  "meta": {
+    "probe": "text-structure",
+    "uiLang": "en",
+    "url": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK",
+    "version": "2026-06-22"
+  },
+  "metadata": {
+    "canonical": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK",
+    "documentTitle": "(9+) The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+    "ogDescription": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+    "ogDescriptionNewlineCount": 0,
+    "ogTitle": "Brian Brown (@9six7) on Threads",
+    "ogUrl": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK"
+  },
+  "observations": [
+    "Primary text container has no explicit paragraph/newline evidence."
+  ],
+  "platform": "threads",
+  "primaryTextContainer": {
+    "attrs": {
+      "class": "x1lliihq x1plvlek xryxfnj x1n2onr6 xyejjpt x15dsfln xi7mnp6 x193iq5w xeuugli x1fj9vlw x13faqbe x1vvkbs x1s928wv xhkezso x1gmr53x x1cpjm7i x1fgarty x1943h6x x1i0vuye xjohtrz xo1l8bm xw2npq5 x1yc453h",
+      "dir": "auto"
+    },
+    "innerTextRaw": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+    "leafBlocks": [
+      {
+        "attrs": {},
+        "index": 0,
+        "innerTextRaw": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+        "normalizedText": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+        "rect": {
+          "height": 39,
+          "width": 574,
+          "x": 345,
+          "y": 53
+        },
+        "tag": "span",
+        "textContentRaw": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch."
+      }
+    ],
+    "newlineEvidence": {
+      "brCount": 0,
+      "hasParagraphBreaks": false,
+      "innerTextNewlineCount": 0,
+      "leafBlockCount": 1,
+      "textContentNewlineCount": 0
+    },
+    "normalizedInlineText": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+    "recommendedText": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+    "rect": {
+      "height": 42,
+      "width": 591,
+      "x": 345,
+      "y": 52
+    },
+    "tag": "span",
+    "textContentRaw": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch."
+  },
+  "sourceLinks": [
+    {
+      "attrs": {
+        "aria-label": "Column title",
+        "class": "x1i10hfl x1qjc9v5 xjbqb8w xjqpnuy xc5r6h4 xqeqjp1 x1phubyo x13fuv20 x18b5jzi x1q0q8m5 x1t7ytsu x972fbf x10w94by x1qhh985 x14e42zd x9f619 x1ypdohk xdl72j9 x2lah0s x3ct3a4 xdj266r x14z9mp xat24cr x1lziwak x2lwn1j xeuugli xexx8yu xyri2b x18d9i69 x1c1uobl x1n2onr6 x16tdsg8 x1hl2dhg xggy1nq x1ja2u2z x1t137rt x1fmog5m xu25z0z x140muxe xo1y3bh x87ps6o x1lku1pv x1a2a7pz x78zum5 xdt5ytf x193iq5w x13dflua x12w9bfk x11xpdln xgwqcfx",
+        "href": "/@9six7/post/DZ3u2dNEXYK",
+        "role": "link"
+      },
+      "href": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK",
+      "rect": {
+        "height": 25,
+        "width": 65,
+        "x": 392,
+        "y": 16
+      },
+      "source": {
+        "handle": "9six7",
+        "sourceId": "DZ3u2dNEXYK",
+        "url": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK"
+      },
+      "text": "Thread",
+      "visible": true
+    },
+    {
+      "attrs": {
+        "class": "x1i10hfl xjbqb8w x1ejq31n x18oe1m7 x1sy0etr xstzfhl x972fbf x10w94by x1qhh985 x14e42zd x9f619 x1ypdohk xt0psk2 x3ct3a4 xdj266r x14z9mp xat24cr x1lziwak xexx8yu xyri2b x18d9i69 x1c1uobl x16tdsg8 x1hl2dhg xggy1nq x1a2a7pz x1lku1pv xhgddhk xj2mjn9 x1citr7e x1rq5sj",
+        "href": "/@9six7/post/DZ3u2dNEXYK",
+        "role": "link"
+      },
+      "href": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK",
+      "rect": {
+        "height": 18,
+        "width": 24,
+        "x": 437,
+        "y": 12
+      },
+      "source": {
+        "handle": "9six7",
+        "sourceId": "DZ3u2dNEXYK",
+        "url": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK"
+      },
+      "text": "1h",
+      "visible": true
+    }
+  ],
+  "textContainers": [
+    {
+      "attrs": {
+        "class": "x1lliihq x1plvlek xryxfnj x1n2onr6 xyejjpt x15dsfln xi7mnp6 x193iq5w xeuugli x1fj9vlw x13faqbe x1vvkbs x1s928wv xhkezso x1gmr53x x1cpjm7i x1fgarty x1943h6x x1i0vuye xjohtrz xo1l8bm xw2npq5 x1yc453h",
+        "dir": "auto"
+      },
+      "innerTextRaw": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+      "leafBlocks": [
+        {
+          "attrs": {},
+          "index": 0,
+          "innerTextRaw": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+          "normalizedText": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+          "rect": {
+            "height": 39,
+            "width": 574,
+            "x": 345,
+            "y": 53
+          },
+          "tag": "span",
+          "textContentRaw": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch."
+        }
+      ],
+      "newlineEvidence": {
+        "brCount": 0,
+        "hasParagraphBreaks": false,
+        "innerTextNewlineCount": 0,
+        "leafBlockCount": 1,
+        "textContentNewlineCount": 0
+      },
+      "normalizedInlineText": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+      "recommendedText": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch.",
+      "rect": {
+        "height": 42,
+        "width": 591,
+        "x": 345,
+        "y": 52
+      },
+      "tag": "span",
+      "textContentRaw": "The President of the United States should not travel in “a level of luxury that nobody has ever seen before.” They’re not a monarch."
+    },
+    {
+      "attrs": {
+        "class": "x1lliihq x1plvlek xryxfnj x1n2onr6 xyejjpt x15dsfln xi7mnp6 x193iq5w xeuugli x1fj9vlw x13faqbe x1vvkbs x1s928wv xhkezso x1gmr53x x1cpjm7i x1fgarty x1943h6x x1i0vuye xjohtrz xo1l8bm xw2npq5 x1yc453h",
+        "dir": "auto"
+      },
+      "innerTextRaw": "Trump on the new plane he's been gifted from Qatar: \"This plane was transformed into a White House at a level of luxury that nobody has ever seen before\"",
+      "leafBlocks": [
+        {
+          "attrs": {},
+          "index": 0,
+          "innerTextRaw": "Trump on the new plane he's been gifted from Qatar: \"This plane was transformed into a White House at a level of luxury that nobody has ever seen before\"",
+          "normalizedText": "Trump on the new plane he's been gifted from Qatar: \"This plane was transformed into a White House at a level of luxury that nobody has ever seen before\"",
+          "rect": {
+            "height": 60,
+            "width": 494,
+            "x": 362,
+            "y": 150
+          },
+          "tag": "span",
+          "textContentRaw": "Trump on the new plane he's been gifted from Qatar: \"This plane was transformed into a White House at a level of luxury that nobody has ever seen before\""
+        }
+      ],
+      "newlineEvidence": {
+        "brCount": 0,
+        "hasParagraphBreaks": false,
+        "innerTextNewlineCount": 0,
+        "leafBlockCount": 1,
+        "textContentNewlineCount": 0
+      },
+      "normalizedInlineText": "Trump on the new plane he's been gifted from Qatar: \"This plane was transformed into a White House at a level of luxury that nobody has ever seen before\"",
+      "recommendedText": "Trump on the new plane he's been gifted from Qatar: \"This plane was transformed into a White House at a level of luxury that nobody has ever seen before\"",
+      "rect": {
+        "height": 63,
+        "width": 557,
+        "x": 362,
+        "y": 149
+      },
+      "tag": "span",
+      "textContentRaw": "Trump on the new plane he's been gifted from Qatar: \"This plane was transformed into a White House at a level of luxury that nobody has ever seen before\""
+    }
+  ]
+}

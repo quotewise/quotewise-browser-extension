@@ -68,7 +68,8 @@
           "url": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i",
           "probeA": "threads/raw/probe-a/original-die-workwear-dz3u4c5j30i-authenticated.json",
           "otherFeatures": "threads/raw/other-features/original-die-workwear-dz3u4c5j30i-authenticated.json",
-          "contractDiscovery": "threads/raw/contract-discovery/original-die-workwear-dz3u4c5j30i-authenticated.json"
+          "contractDiscovery": "threads/raw/contract-discovery/original-die-workwear-dz3u4c5j30i-authenticated.json",
+          "textStructure": "threads/raw/text-structure/original-die-workwear-dz3u4c5j30i-authenticated.json"
         },
         {
           "fixtureClass": "reply_or_comment",
@@ -105,7 +106,8 @@
           "notes": "Reshare/quote-style permalink with wrapper context text, embedded repost text, and media below the embedded text.",
           "probeA": "threads/raw/probe-a/repost-quote-9six7-dz3u2dnexyk-authenticated.json",
           "otherFeatures": "threads/raw/other-features/repost-quote-9six7-dz3u2dnexyk-authenticated.json",
-          "contractDiscovery": "threads/raw/contract-discovery/repost-quote-9six7-dz3u2dnexyk-authenticated.json"
+          "contractDiscovery": "threads/raw/contract-discovery/repost-quote-9six7-dz3u2dnexyk-authenticated.json",
+          "textStructure": "threads/raw/text-structure/repost-quote-9six7-dz3u2dnexyk-authenticated.json"
         },
         {
           "fixtureClass": "reply_or_comment",
@@ -127,6 +129,7 @@
         "reply_or_comment": null,
         "repost_quote_or_reshare": null,
         "media": "https://bsky.app/profile/vulture.com/post/3motti7lzfi2q",
+        "multiline_text": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f",
         "long_or_collapsed": null,
         "unavailable_private_login_gated_or_paywalled": null,
         "non_english": null,
@@ -141,7 +144,8 @@
           "notes": "Plain Bluesky skeet by Matt Singer; generic Probe A/current adapter selectors select hidden feed content, while contract discovery finds the visible focal post.",
           "probeA": "bluesky/raw/probe-a/original-mattsinger-3motounu5ys2w-public-rendered.json",
           "otherFeatures": "bluesky/raw/other-features/original-mattsinger-3motounu5ys2w-public-rendered.json",
-          "contractDiscovery": "bluesky/raw/contract-discovery/original-mattsinger-3motounu5ys2w-public-rendered.json"
+          "contractDiscovery": "bluesky/raw/contract-discovery/original-mattsinger-3motounu5ys2w-public-rendered.json",
+          "textStructure": "bluesky/raw/text-structure/original-mattsinger-3motounu5ys2w-public-rendered.json"
         },
         {
           "fixtureClass": "media",
@@ -150,7 +154,15 @@
           "notes": "Bluesky post with an external link card and visible card media; validates focal text exclusion from link-card text.",
           "probeA": "bluesky/raw/probe-a/media-link-vulture-3motti7lzfi2q-public-rendered.json",
           "otherFeatures": "bluesky/raw/other-features/media-link-vulture-3motti7lzfi2q-public-rendered.json",
-          "contractDiscovery": "bluesky/raw/contract-discovery/media-link-vulture-3motti7lzfi2q-public-rendered.json"
+          "contractDiscovery": "bluesky/raw/contract-discovery/media-link-vulture-3motti7lzfi2q-public-rendered.json",
+          "textStructure": "bluesky/raw/text-structure/media-link-vulture-3motti7lzfi2q-public-rendered.json"
+        },
+        {
+          "fixtureClass": "multiline_text",
+          "authState": "public-rendered",
+          "url": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f",
+          "notes": "Bluesky post with a visible paragraph break; direct permalink load preserves the blank line as two newline characters inside data-testid=postText textContent/innerText.",
+          "textStructure": "bluesky/raw/text-structure/original-dearlstephens-3motjjgwmz22f-public-rendered.json"
         }
       ]
     },

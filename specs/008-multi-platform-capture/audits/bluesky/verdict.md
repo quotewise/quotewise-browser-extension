@@ -4,7 +4,7 @@
 
 - Audit phase: Phase 3
 - Promotion decision: do not promote
-- Live URL set: original and media/link-card fixtures captured on 2026-06-22
+- Live URL set: original, media/link-card, and multiline text fixtures captured on 2026-06-22
 - Raw Probe A artifacts:
   - `raw/probe-a/original-mattsinger-3motounu5ys2w-public-rendered.json`
   - `raw/probe-a/media-link-vulture-3motti7lzfi2q-public-rendered.json`
@@ -14,6 +14,10 @@
 - Contract-discovery artifacts:
   - `raw/contract-discovery/original-mattsinger-3motounu5ys2w-public-rendered.json`
   - `raw/contract-discovery/media-link-vulture-3motti7lzfi2q-public-rendered.json`
+- Text-structure artifacts:
+  - `raw/text-structure/original-mattsinger-3motounu5ys2w-public-rendered.json`
+  - `raw/text-structure/media-link-vulture-3motti7lzfi2q-public-rendered.json`
+  - `raw/text-structure/original-dearlstephens-3motjjgwmz22f-public-rendered.json`
 - Raw Probe B artifacts: pending in `raw/probe-b/`
 
 ## Contract Criteria
@@ -28,6 +32,7 @@
 | Duplicate/preflight and submit succeed on live pages | Pending | No live submit result committed yet |
 | Deterministic fixture tests match the audited selector contract | Pending update | Existing local tests assume exact `postThreadItem`, `postAuthorDisplayName`, and focal `postText` hooks; this live fixture uses `postThreadItem-by-{handle}` and hidden feed `postText` hooks |
 | Chrome Web Store host permission rationale matches enabled hosts | Pending | Host permission exists, but runtime flag remains disabled |
+| Visible body newlines are preserved | Candidate pass | `dearlstephens.bsky.social` fixture preserved a blank line as two newline characters in the visible `postText` node's `textContent` and `innerText` |
 
 ## Notes
 
@@ -44,12 +49,12 @@ Current evidence supports this contract for a public-rendered original Bluesky p
 | `sourceId` | `/profile/{handle}/post/{rkey}` URL rkey | High for first original fixture |
 | Author handle | URL path handle | High for first original fixture |
 | Display name | Visible profile link with href `/profile/{handle}` and non-avatar aria-label | Medium; one fixture |
-| Text | Smallest visible non-link/non-button text block inside visible `[data-testid="postThreadItem-by-{handle}"]`, excluding action/date/metric text | Medium; one fixture |
+| Text | Visible `postText` or body-like non-link/non-button text block inside visible `[data-testid="postThreadItem-by-{handle}"]`, excluding action/date/metric text; preserve raw newlines when present | Medium; multiline fixture validates `\n\n` preservation |
 | Posted date | Human timestamp text and hidden permalink aria-label | Supporting only; omit `postedAt` until an ISO/stable timezone source is found |
 | Likes | Visible `likeCount-expanded` or `likeBtn` inside the focal root | Medium; two fixtures |
 | Attachments | Off-origin link-card anchors and visible media elements inside the focal root | Low; one media/link-card fixture, supporting evidence only |
 
-Metadata is not a candidate primary source for this fixture: canonical and OG metadata point to `https://bsky.app/` and generic Bluesky copy, not the permalink.
+Metadata is not a candidate primary source for this fixture: canonical and OG metadata can point to `https://bsky.app/`, generic Bluesky copy, or stale prior-post values after SPA navigation. A fresh direct permalink load for the multiline fixture did expose correct OG metadata, including the same two newline characters as the visible `postText`, but runtime extraction should still prefer the visible focal root.
 
 Generic Probe A is useful as negative evidence for global selectors. On this page it selected hidden feed text and a hidden feed like count because `postText` hooks from the home feed remain in the document.
 
@@ -61,6 +66,7 @@ Generic Probe A is useful as negative evidence for global selectors. On this pag
 | reply/comment | Pending | Need direct URL to validate focal rkey selection in a thread |
 | repost/quote/reshare | Pending | Need direct URL |
 | media | Candidate contract found | `vulture.com` fixture validates focal body text plus off-origin link-card and visible card image evidence |
+| multiline text | Candidate contract found | `dearlstephens.bsky.social` fixture validates blank-line preservation in the visible `postText` node |
 | long/collapsed | Pending | Need direct URL |
 | unavailable/private/login-gated | Pending | Need direct URL |
 | non-English | Pending | Need direct URL |
@@ -84,3 +90,20 @@ Generic Probe A is useful as negative evidence for global selectors. On this pag
 - Date evidence existed as visible text `7:25 PM · Jun 21, 2026`; no ISO timestamp source was found, so `postedAt` remains omitted.
 - Attachment evidence found one off-origin link-card href, `https://www.vulture.com/article/the-vampire-lestat-recap-episode-3-toronto-amc.html`, plus one visible image in the focal root.
 - The link-card text includes title/body/domain content, so adapter text extraction must keep focal post text distinct from attachment card text.
+- Text-structure probe showed the visible skeet body has no newline; the newline in `og:description` is metadata-only because Bluesky appends the external URL after the visible text.
+
+2026-06-22 public-rendered multiline text fixture notes:
+
+- `https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f` rendered as a Bluesky post by D. Earl Stephens / `@dearlstephens.bsky.social`.
+- Browser URL identity was `dearlstephens.bsky.social` / `3motjjgwmz22f`.
+- The visible focal text container used `[data-testid="postText"]` and contained the body:
+
+  ```text
+  🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet!
+
+  Happy Father’s Day, good man. You were one for the books.
+  ```
+
+- The text container had no `<br>` elements and no child paragraph elements; both `textContent` and `innerText` preserved the blank line as two newline characters.
+- A direct fresh permalink load exposed matching canonical/OG metadata and `og:description` also contained two newline characters.
+- The active SPA tab initially retained stale canonical/OG metadata from the prior Vulture post while the visible post and URL were correct; this is negative evidence against relying on page metadata after in-app navigation.
