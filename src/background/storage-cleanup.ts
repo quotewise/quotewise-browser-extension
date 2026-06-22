@@ -5,6 +5,13 @@
 
 import { debugLog } from '../config/environment';
 
+/**
+ * chrome.alarms name for the recurring storage-cleanup pass. Used here to
+ * schedule the alarm and by the service worker's top-level onAlarm listener
+ * to dispatch it (MV3-safe; see startPeriodicCleanup).
+ */
+export const STORAGE_CLEANUP_ALARM = 'storage-cleanup';
+
 export const USER_IDENTIFYING_CACHE_KEYS = [
   'currentPost',
   'currentTweet',
@@ -40,7 +47,6 @@ interface StorageCleanupConfig {
  * Storage cleanup service
  */
 export class StorageCleanupService {
-  private cleanupInterval: NodeJS.Timeout | null = null;
   private config: StorageCleanupConfig;
   
   constructor(config?: Partial<StorageCleanupConfig>) {
@@ -63,32 +69,36 @@ export class StorageCleanupService {
   }
   
   /**
-   * Start periodic cleanup
+   * Start periodic cleanup.
+   *
+   * Schedules recurring cleanup via chrome.alarms rather than setInterval: MV3
+   * service workers are ephemeral and a setInterval timer is canceled when the
+   * worker terminates, so periodic cleanup would silently stop. The alarm
+   * survives worker restarts. Creation is idempotent by name — only (re)create
+   * the alarm when it is missing so we don't reset the schedule on every wake.
+   * The alarm fires StorageCleanupService.runCleanup() via the service worker's
+   * top-level onAlarm listener.
+   *
    * @param quiet - If true, suppress startup logs (used during service worker init)
    */
-  public startPeriodicCleanup(quiet = false): void {
-    if (this.cleanupInterval) {
-      return;
-    }
-
+  public async startPeriodicCleanup(quiet = false): Promise<void> {
     // Run cleanup immediately (quiet on startup)
-    this.runCleanup(quiet);
+    await this.runCleanup(quiet);
 
-    // Set up periodic cleanup
-    this.cleanupInterval = setInterval(() => {
-      this.runCleanup();
-    }, this.config.cleanupInterval);
+    const existing = await chrome.alarms.get(STORAGE_CLEANUP_ALARM);
+    if (!existing) {
+      chrome.alarms.create(STORAGE_CLEANUP_ALARM, {
+        periodInMinutes: this.config.cleanupInterval / 60_000,
+      });
+    }
   }
-  
+
   /**
-   * Stop periodic cleanup
+   * Stop periodic cleanup by clearing the recurring alarm.
    */
   public stopPeriodicCleanup(): void {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-      debugLog('Periodic storage cleanup stopped');
-    }
+    void chrome.alarms.clear(STORAGE_CLEANUP_ALARM);
+    debugLog('Periodic storage cleanup alarm cleared');
   }
   
   /**
