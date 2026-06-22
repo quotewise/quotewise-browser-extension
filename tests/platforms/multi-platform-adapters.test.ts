@@ -140,6 +140,47 @@ describe('multi-platform adapters', () => {
     expect(data?.author.handle).toBe('readswithravi');
   });
 
+  it('does not capture the Threads reply composer placeholder when metadata is stale', () => {
+    const url = 'https://www.threads.com/@readswithravi/post/DZ205qLnLO8';
+    document.head.innerHTML = `
+      <link rel="canonical" href="https://www.threads.com/">
+      <meta property="og:url" content="https://www.threads.com/">
+      <meta property="og:description" content="Join Threads to share ideas.">
+    `;
+    document.body.innerHTML = `
+      <div>
+        <a href="/@readswithravi"><span>readswithravi</span></a>
+        <a href="/@readswithravi/post/DZ205qLnLO8"><time datetime="2026-06-21T17:40:47.000Z">23h</time></a>
+        <div>
+          <span>Always trust in your ability to figure things out. You’re capable of learning, adapting and pushing through.</span>
+          <div>
+            <div role="button" aria-label="Like"><span>23</span></div>
+            <div role="button" aria-label="Reply"></div>
+            <div role="button" aria-label="Repost"><span>4</span></div>
+            <div role="button" aria-label="Share"></div>
+          </div>
+        </div>
+        <div>
+          <span>Reply to readswithravi...</span>
+          <button aria-label="Attach media"></button>
+          <button aria-label="Add a GIF"></button>
+          <button aria-label="Expand composer"></button>
+        </div>
+      </div>
+    `;
+
+    const data = new ThreadsAdapter().extractFromDom(url);
+
+    expect(data).toEqual(expect.objectContaining({
+      platform: 'threads',
+      sourceId: 'DZ205qLnLO8',
+      text: 'Always trust in your ability to figure things out. You’re capable of learning, adapting and pushing through.',
+      postedAt: '2026-06-21T17:40:47.000Z',
+      likesCount: 23,
+    }));
+    expect(data?.author.handle).toBe('readswithravi');
+  });
+
   it('matches Threads /t/ permalinks on threads.net redirects', () => {
     const url = 'https://www.threads.net/@alice/t/Credirect123';
     document.body.innerHTML = `
