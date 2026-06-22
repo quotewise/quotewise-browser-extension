@@ -14,6 +14,8 @@ export type DuplicateSightingState =
 
 export interface DuplicateSightingMatch {
   sighting_status?: SightingStatus;
+  existing_sighting_for_this_url?: boolean;
+  match_source?: 'url' | 'similarity';
 }
 
 export interface DuplicateSightingInput {
@@ -29,7 +31,11 @@ export function classifyDuplicateSighting(result?: DuplicateSightingInput | null
   }
 
   const matches = result.matches || [];
-  if (matches.some(match => match.sighting_status === 'exact_url')) {
+  if (matches.some(match => (
+    match.sighting_status === 'exact_url' ||
+    match.existing_sighting_for_this_url === true ||
+    match.match_source === 'url'
+  ))) {
     return 'exact_sighting';
   }
 
