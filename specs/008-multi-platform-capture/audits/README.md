@@ -22,6 +22,7 @@ Each platform directory contains:
 - `raw/probe-a/`: full JSON output from `probes/capture-contract-probe.js`
 - `raw/probe-b/`: full JSON output from `probes/selection-probe.js` when selection validation applies
 - `raw/other-features/`: optional supporting JSON output from `probes/other-features-probe.js`
+- `raw/contract-discovery/`: optional platform-specific contract discovery JSON
 - `verdict.md`: the platform promotion summary
 
 Do not commit credentials, private session data, cookies, storage dumps, or account-identifying details beyond public post URLs and handles already visible on the tested page. Keep non-X verdicts at `do not promote` until live duplicate/preflight and submit checks pass with a slug-bearing originator.
@@ -32,4 +33,5 @@ Do not commit credentials, private session data, cookies, storage dumps, or acco
 2. Paste `probes/capture-contract-probe.js` in the page console and save the full JSON as `raw/probe-a/<fixture-id>.json`.
 3. If the fixture checks text selection, highlight the requested text, paste `probes/selection-probe.js`, and save the full JSON as `raw/probe-b/<fixture-id>-<selection-class>.json`.
 4. Paste `probes/other-features-probe.js` when deciding whether metadata, hydration, accessible labels, or stable identifiers should inform selector updates, and save the full JSON under `raw/other-features/`.
-5. Update the platform `verdict.md` with pass/fail evidence and the promotion decision.
+5. For Threads, paste `probes/threads-contract-discovery-probe.js` when evaluating a new scenario class and save the full JSON under `raw/contract-discovery/`.
+6. Update the platform `verdict.md` with pass/fail evidence, candidate contract notes, and the promotion decision.

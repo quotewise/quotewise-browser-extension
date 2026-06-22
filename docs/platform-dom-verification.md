@@ -20,6 +20,7 @@ The reusable page-context probes and fixture manifest live in the same packet:
 - `specs/008-multi-platform-capture/audits/probes/capture-contract-probe.js`
 - `specs/008-multi-platform-capture/audits/probes/selection-probe.js`
 - `specs/008-multi-platform-capture/audits/probes/other-features-probe.js`
+- `specs/008-multi-platform-capture/audits/probes/threads-contract-discovery-probe.js`
 
 Each fixture should include:
 

@@ -63,7 +63,8 @@
           "authState": "authenticated",
           "url": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i",
           "probeA": "threads/raw/probe-a/original-die-workwear-dz3u4c5j30i-authenticated.json",
-          "otherFeatures": "threads/raw/other-features/original-die-workwear-dz3u4c5j30i-authenticated.json"
+          "otherFeatures": "threads/raw/other-features/original-die-workwear-dz3u4c5j30i-authenticated.json",
+          "contractDiscovery": "threads/raw/contract-discovery/original-die-workwear-dz3u4c5j30i-authenticated.json"
         }
       ]
     },
