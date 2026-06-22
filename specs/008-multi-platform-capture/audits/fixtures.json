@@ -43,14 +43,15 @@
         ],
         "reply_or_comment": [
           "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
-          "https://www.threads.com/@njr354151/post/DZ3XgPRiPmD"
+          "https://www.threads.com/@njr354151/post/DZ3XgPRiPmD",
+          "https://www.threads.com/@gompf79/post/DZ3QLokjYCo"
         ],
         "repost_quote_or_reshare": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK",
         "media": "https://www.threads.com/@huyquocc11/post/DZ1dYiKEjeH",
         "long_or_collapsed": null,
         "unavailable_private_login_gated_or_paywalled": null,
         "non_english": null,
-        "low_or_zero_likes": null,
+        "low_or_zero_likes": "https://www.threads.com/@gompf79/post/DZ3QLokjYCo",
         "abbreviated_or_high_likes": null
       },
       "auditRuns": [
@@ -105,6 +106,16 @@
           "probeA": "threads/raw/probe-a/repost-quote-9six7-dz3u2dnexyk-authenticated.json",
           "otherFeatures": "threads/raw/other-features/repost-quote-9six7-dz3u2dnexyk-authenticated.json",
           "contractDiscovery": "threads/raw/contract-discovery/repost-quote-9six7-dz3u2dnexyk-authenticated.json"
+        },
+        {
+          "fixtureClass": "reply_or_comment",
+          "authState": "authenticated",
+          "url": "https://www.threads.com/@gompf79/post/DZ3QLokjYCo",
+          "providedUrl": "https://www.threads.com/@gompf79/post/DZ3QLokjYCo?xmt=AQG04tHJ8s35Wf978hxBBDmYyFsiKCtz9mPijA83cfx9bQ",
+          "notes": "Emoji-heavy reply whose canonical metadata points to the parent media post.",
+          "probeA": "threads/raw/probe-a/reply-emoji-gompf79-dz3qlokjyco-authenticated.json",
+          "otherFeatures": "threads/raw/other-features/reply-emoji-gompf79-dz3qlokjyco-authenticated.json",
+          "contractDiscovery": "threads/raw/contract-discovery/reply-emoji-gompf79-dz3qlokjyco-authenticated.json"
         }
       ]
     },

@@ -19,6 +19,13 @@
       height: Math.round(rect.height)
     };
   };
+  const intersectsViewport = (rect) =>
+    rect.width > 0 &&
+    rect.height > 0 &&
+    rect.x + rect.width > 0 &&
+    rect.y + rect.height > 0 &&
+    rect.x < window.innerWidth &&
+    rect.y < window.innerHeight;
   const meta = Array.from(document.querySelectorAll('meta[property], meta[name]')).map((element) => ({
     key: element.getAttribute('property') || element.getAttribute('name'),
     content: text(element.getAttribute('content'), 300)
@@ -72,7 +79,7 @@
   }).filter((entry) =>
     !isViewerProfileNav({ attrs: { href: entry.nearestHref }, text: entry.text }) &&
     !/profile picture$/i.test(entry.attrs.alt || '') &&
-    (entry.rect.width > 0 || entry.rect.height > 0)
+    intersectsViewport(entry.rect)
   ).slice(0, 80);
   const out = {
     meta: {
