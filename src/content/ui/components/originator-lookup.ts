@@ -1,6 +1,7 @@
 import type { OriginatorSearchResult } from '../../../types/api';
 import type { DuplicateCheckResult } from '../../../types/api';
 import { getWebBaseUrl } from '../../../config/environment';
+import type { CapturePlatform } from '../../../types';
 
 type MessageSender = (message: { type: string; data?: unknown }) => Promise<Record<string, unknown>>;
 
@@ -28,13 +29,14 @@ export class OriginatorLookup {
     private sendMessage: MessageSender
   ) {}
 
-  async lookup(handle: string, currentUrl?: string): Promise<LookupOutcome> {
-    const cacheKey = handle.toLowerCase();
+  async lookup(handle: string, currentUrl?: string, platform: CapturePlatform = 'twitter'): Promise<LookupOutcome> {
+    const normalizedHandle = handle.toLowerCase();
+    const cacheKey = `${platform}:${normalizedHandle}`;
 
     // 1. Check in-memory cache (only successful lookups are cached)
     const cached = this.cache.get(cacheKey);
     if (cached) {
-      this.notifyLookupStatus(handle, currentUrl, true);
+      this.notifyLookupStatus(handle, currentUrl, platform, true);
       this.renderFound(cached, handle, true);
       // Try to get preloaded duplicate data for passthrough
       let preloadedDuplicateCheck: LookupOutcome['preloadedDuplicateCheck'];
@@ -54,7 +56,14 @@ export class OriginatorLookup {
       const storage = await chrome.storage.local.get(['preloadedOriginator', 'preloadedDuplicateCheck']);
       const preloaded = storage.preloadedOriginator;
 
-      if (preloaded && preloaded.handle === cacheKey && (Date.now() - preloaded.timestamp) < 60000) {
+      const preloadedHandleMatches = preloaded?.handle === normalizedHandle || preloaded?.handle === cacheKey;
+      const preloadedPlatformMatches = !preloaded?.platform || preloaded.platform === platform;
+      if (
+        preloaded &&
+        preloadedHandleMatches &&
+        preloadedPlatformMatches &&
+        (Date.now() - preloaded.timestamp) < 60000
+      ) {
         if (preloaded.originator) {
           const originator = this.normalizeOriginator(preloaded.originator);
           if (!originator) {
@@ -62,7 +71,7 @@ export class OriginatorLookup {
           }
 
           this.cache.set(cacheKey, originator);
-          this.notifyLookupStatus(handle, currentUrl, true);
+          this.notifyLookupStatus(handle, currentUrl, platform, true);
           this.renderFound(originator, handle, false);
           return {
             status: 'found',
@@ -71,8 +80,8 @@ export class OriginatorLookup {
           };
         }
         // Preloaded not-found
-        const createUrl = this.resolveCreateUrl(handle, preloaded.create_url);
-        this.notifyLookupStatus(handle, currentUrl, false, createUrl);
+        const createUrl = this.resolveCreateUrl(handle, platform, preloaded.create_url);
+        this.notifyLookupStatus(handle, currentUrl, platform, false, createUrl);
         this.renderNotFound(handle, createUrl);
         return { status: 'not_found', createUrl };
       }
@@ -86,7 +95,7 @@ export class OriginatorLookup {
     try {
       const response = await this.sendMessage({
         type: 'LOOKUP_ORIGINATOR_BY_HANDLE',
-        data: { handle, platform: 'twitter', source_url: currentUrl }
+        data: { handle, platform, source_url: currentUrl }
       });
 
       if (response.success && response.found && response.originator) {
@@ -101,7 +110,7 @@ export class OriginatorLookup {
       }
 
       if (response.success && !response.found) {
-        const createUrl = this.resolveCreateUrl(handle, response.create_url);
+        const createUrl = this.resolveCreateUrl(handle, platform, response.create_url);
         this.renderNotFound(handle, createUrl);
         return { status: 'not_found', createUrl };
       }
@@ -114,7 +123,13 @@ export class OriginatorLookup {
     }
   }
 
-  private notifyLookupStatus(handle: string, currentUrl: string | undefined, found: boolean, createUrl?: string): void {
+  private notifyLookupStatus(
+    handle: string,
+    currentUrl: string | undefined,
+    platform: CapturePlatform,
+    found: boolean,
+    createUrl?: string
+  ): void {
     if (!currentUrl) {
       return;
     }
@@ -123,7 +138,7 @@ export class OriginatorLookup {
       type: 'ORIGINATOR_LOOKUP_STATUS',
       data: {
         handle,
-        platform: 'twitter',
+        platform,
         source_url: currentUrl,
         found,
         ...(createUrl ? { create_url: createUrl } : {}),
@@ -210,13 +225,13 @@ export class OriginatorLookup {
     };
   }
 
-  private resolveCreateUrl(handle: string, createUrl: unknown): string {
+  private resolveCreateUrl(handle: string, platform: CapturePlatform, createUrl: unknown): string {
     if (typeof createUrl === 'string' && createUrl) {
       return createUrl;
     }
 
     const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
-    return `${baseUrl}/originators/add/?suggested_handle=${encodeURIComponent(handle)}&platform=twitter`;
+    return `${baseUrl}/originators/add/?suggested_handle=${encodeURIComponent(handle)}&platform=${encodeURIComponent(platform)}`;
   }
 
   private escapeHtml(text: string): string {

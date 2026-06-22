@@ -6,6 +6,10 @@
 export {
   MessageType,
   ExtensionMessage,
+  CapturedPostData,
+  CapturedAuthor,
+  CapturePlatform,
+  CapturePlatformCode,
   TwitterData,
   Settings,
   DEFAULT_SETTINGS,

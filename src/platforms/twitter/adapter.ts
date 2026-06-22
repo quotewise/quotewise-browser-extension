@@ -197,8 +197,13 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     }
 
     const twitterData: TwitterData = {
+      platform: 'twitter',
+      platformCode: 'TX',
+      sourceUrl: url,
+      sourceId: tweetId,
       text,
       author: {
+        handle: author.username,
         username: author.username,
         displayName: author.displayName,
         verified: author.verified,
@@ -207,7 +212,9 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       },
       url,
       date,
+      postedAt: date,
       likes: metrics.likes,
+      likesCount: metrics.likes,
       retweets: metrics.retweets,
       replies: metrics.replies,
       views: metrics.views,
@@ -216,7 +223,22 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       language: language || undefined,
       isProtected,
       isArticle,
+      requiresSelection: isArticle,
+      platformData: {
+        source_id: tweetId,
+        tweet_id: tweetId,
+        reply_count: metrics.replies,
+        retweet_count: metrics.retweets,
+        quote_count: metrics.quotes,
+        bookmark_count: metrics.bookmarks,
+        view_count: metrics.views,
+        is_protected: isProtected,
+        has_media: mediaPresent,
+        reply_to_tweet_id: undefined,
+        quoted_tweet_id: undefined
+      },
       platform_data: {
+        source_id: tweetId,
         tweet_id: tweetId,
         reply_count: metrics.replies,
         retweet_count: metrics.retweets,

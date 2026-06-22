@@ -4,6 +4,7 @@
 
 import { ExtensionMessage } from '../types/index';
 import { debugLog as envDebugLog } from '../config/environment';
+import { platformFromUrl } from '../platforms/capture';
 
 /**
  * Send message to service worker with error handling
@@ -162,14 +163,8 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
 /**
  * Check if current page is a supported platform
  */
-export function detectPlatform(): 'twitter' | 'unknown' {
-  const hostname = window.location.hostname;
-  
-  if (hostname === 'twitter.com' || hostname === 'x.com') {
-    return 'twitter';
-  }
-  
-  return 'unknown';
+export function detectPlatform(): 'twitter' | 'threads' | 'bluesky' | 'substack_notes' | 'unknown' {
+  return platformFromUrl(window.location.href) ?? 'unknown';
 }
 
 /**
