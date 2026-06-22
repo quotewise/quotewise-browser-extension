@@ -50,7 +50,7 @@
     label: text(element.getAttribute('aria-label'), 160)
   })).filter((entry) => /like|reply|repost|quote|bookmark|view|share|verified|protected|more|author|profile/i.test(entry.label)).slice(0, 80);
   const isViewerProfileNav = (entry) =>
-    /^\/@[^/]+$/.test(entry.attrs.href || '') && /^profile$/i.test(entry.text);
+    /^\/@[^/]+$/.test(entry.attrs.href || '') && (!entry.text || /^profile$/i.test(entry.text));
   const stableIdentifiers = Array.from(document.querySelectorAll('[data-testid], [role], time[datetime], a[href]')).map((element) => ({
     tag: element.tagName.toLowerCase(),
     attrs: attrs(element, ['data-testid', 'role', 'datetime', 'href', 'aria-label']),
@@ -72,7 +72,7 @@
   }).filter((entry) =>
     !isViewerProfileNav({ attrs: { href: entry.nearestHref }, text: entry.text }) &&
     !/profile picture$/i.test(entry.attrs.alt || '') &&
-    (entry.rect.width > 0 || entry.rect.height > 0 || entry.attrs['aria-label'])
+    (entry.rect.width > 0 || entry.rect.height > 0)
   ).slice(0, 80);
   const out = {
     meta: {
@@ -88,9 +88,12 @@
     accessibleLabels,
     stableIdentifiers,
     media: {
-      videoCount: document.querySelectorAll('video').length,
-      imageCount: document.querySelectorAll('img').length,
-      canvasCount: document.querySelectorAll('canvas').length,
+      videoCount: mediaElements.filter((entry) => entry.tag === 'video').length,
+      imageCount: mediaElements.filter((entry) => entry.tag === 'img').length,
+      canvasCount: mediaElements.filter((entry) => entry.tag === 'canvas').length,
+      documentVideoCount: document.querySelectorAll('video').length,
+      documentImageCount: document.querySelectorAll('img').length,
+      documentCanvasCount: document.querySelectorAll('canvas').length,
       elements: mediaElements
     }
   };

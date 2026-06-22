@@ -9,6 +9,7 @@
     }
   };
   const sourceFrom = (value) => {
+    if (!value) return null;
     const url = parseUrl(value);
     const match = url?.pathname.match(/\/@([^/]+)\/(?:post|t)\/([^/?#]+)/);
     return match ? { handle: match[1], sourceId: match[2], url: url.toString() } : null;
@@ -23,6 +24,7 @@
       height: Math.round(rect.height),
     };
   };
+  const hasVisibleRect = (rect) => rect.width > 0 || rect.height > 0;
   const parseCount = (value) => {
     const compact = String(value || '').replace(/,/g, '').trim();
     const magnitude = compact.match(/^(\d[\d.]*)([KMB])$/i);
@@ -33,6 +35,8 @@
     const numeric = compact.match(/^\d[\d.]*$/);
     return numeric ? Number(numeric[0]) : null;
   };
+  const isStaticChromeText = (value) =>
+    /^(© \d{4}|Threads Terms|Privacy Policy|Consumer Health Privacy Policy|Cookies Policy)$/i.test(value);
   const selectorForSourceId = (sourceId) => {
     if (!sourceId) return null;
     const escaped = sourceId.replace(/["\\]/g, '\\$&');
@@ -62,7 +66,8 @@
     rect: rectFor(link),
   }));
   const sourceLinks = links.filter(link => link.containsSourceId);
-  const primarySourceLink = sourceLinks[0] || null;
+  const visibleSourceLinks = sourceLinks.filter(link => hasVisibleRect(link.rect));
+  const primarySourceLink = visibleSourceLinks[0] || sourceLinks[0] || null;
 
   const times = Array.from(document.querySelectorAll('time[datetime]')).map((time, index) => ({
     index,
@@ -72,17 +77,26 @@
     rect: rectFor(time),
   }));
 
-  const renderedTextCandidates = Array.from(document.querySelectorAll('[dir="auto"]'))
-    .map((element, index) => ({
-      index,
-      tag: element.tagName.toLowerCase(),
-      text: clean(element.textContent, 700),
-      hrefAncestor: element.closest('a[href]')?.getAttribute('href') || null,
-      sourceLinkAncestor: sourceSelector ? !!element.closest(sourceSelector) : false,
-      rect: rectFor(element),
-    }))
-    .filter(candidate => candidate.text)
-    .slice(0, 80);
+  const allRenderedTextCandidates = Array.from(document.querySelectorAll('[dir="auto"]'))
+    .map((element, index) => {
+      const hrefAncestor = element.closest('a[href]')?.getAttribute('href') || null;
+      const rect = rectFor(element);
+      return {
+        index,
+        tag: element.tagName.toLowerCase(),
+        text: clean(element.textContent, 700),
+        hrefAncestor,
+        sourceAncestor: sourceFrom(hrefAncestor),
+        sourceLinkAncestor: sourceSelector ? !!element.closest(sourceSelector) : false,
+        visible: hasVisibleRect(rect),
+        rect,
+      };
+    })
+    .filter(candidate => candidate.text && !isStaticChromeText(candidate.text));
+  const renderedTextCandidates = [
+    ...allRenderedTextCandidates.filter(candidate => candidate.visible).slice(0, 80),
+    ...allRenderedTextCandidates.filter(candidate => !candidate.visible).slice(0, 40),
+  ];
 
   const actionLabels = Array.from(document.querySelectorAll('[aria-label]'))
     .map((element, index) => ({
@@ -99,10 +113,10 @@
     .filter(candidate => parseCount(candidate.text) !== null)
     .map(candidate => ({ ...candidate, parsedCount: parseCount(candidate.text) }));
   const focalActionLabels = primarySourceLink
-    ? actionLabels.filter(label => label.rect.y > primarySourceLink.rect.y && label.rect.y < primarySourceLink.rect.y + 500)
+    ? actionLabels.filter(label => label.rect.y > primarySourceLink.rect.y && label.rect.y < primarySourceLink.rect.y + 900)
     : actionLabels;
   const focalNumericTextCandidates = primarySourceLink
-    ? numericTextCandidates.filter(candidate => candidate.rect.y > primarySourceLink.rect.y && candidate.rect.y < primarySourceLink.rect.y + 500)
+    ? numericTextCandidates.filter(candidate => candidate.rect.y > primarySourceLink.rect.y && candidate.rect.y < primarySourceLink.rect.y + 900)
     : numericTextCandidates;
   const actionCountFor = (actionName, nextActionNames) => {
     const action = focalActionLabels.find(label => new RegExp(`^${actionName}$`, 'i').test(label.label));
@@ -161,6 +175,7 @@
     !/^reply to /i.test(candidate.text)
   ) || null;
   const renderedFocalBySourceLink = primarySourceLink ? renderedTextCandidates.find(candidate =>
+    candidate.visible &&
     candidate.hrefAncestor === null &&
     candidate.rect.y > primarySourceLink.rect.y &&
     candidate.rect.y < primarySourceLink.rect.y + 220 &&
@@ -173,6 +188,18 @@
     candidate.text !== 'More' &&
     candidate.text !== 'Follow'
   ) || null : null;
+  const embeddedSourceTextCandidates = renderedTextCandidates.filter(candidate =>
+    candidate.visible &&
+    candidate.sourceAncestor &&
+    identity?.sourceId &&
+    (candidate.sourceAncestor.sourceId !== identity.sourceId || candidate.sourceAncestor.handle !== identity.handle) &&
+    candidate.text !== candidate.sourceAncestor.handle &&
+    !/^\d+[hm]$/.test(candidate.text)
+  ).slice(0, 20).map(candidate => ({
+    ...candidate,
+    sourceAncestor: candidate.sourceAncestor ? { ...candidate.sourceAncestor } : null,
+    rect: { ...candidate.rect },
+  }));
   const canonicalMatchesLocation = !!identity?.sourceId &&
     canonicalIdentity?.sourceId === identity.sourceId &&
     canonicalIdentity?.handle === identity.handle;
@@ -184,6 +211,7 @@
     ogDescription && canonicalMatchesLocation ? 'og:description contains exact post body text for this permalink.' : null,
     ogDescription && !canonicalMatchesLocation ? 'Canonical/OG metadata points to a different post than the browser URL; treat it as parent context for this fixture.' : null,
     renderedFocalBySourceLink ? 'Focal rendered text candidate exists after the source-linked timestamp for the browser URL.' : null,
+    embeddedSourceTextCandidates.length > 0 ? 'Embedded linked-post text candidates exist under non-focal permalink links.' : null,
     renderedBodyCandidate ? 'Rendered body text exists as dir=auto text, but browser extraction may normalize/degrade characters.' : null,
     actionCountCandidates.likes ? 'Like count candidate exists between Like and Reply action icons; validate across low/zero and abbreviated/high-like fixtures before promotion.' : null,
   ].filter(Boolean);
@@ -237,6 +265,7 @@
           : 'incomplete',
       },
       renderedBodyCandidate,
+      embeddedSourceTextCandidates,
       likes: {
         disposition: actionCountCandidates.likes
           ? 'candidate_adjacent_action_count_needs_fixture_validation'
@@ -260,6 +289,7 @@
       regions,
     },
     sourceLinks,
+    visibleSourceLinks: visibleSourceLinks.map(link => ({ ...link, rect: { ...link.rect } })),
     times,
     renderedTextCandidates,
     actionLabels,

@@ -4,24 +4,27 @@
 
 - Audit phase: Phase 2
 - Promotion decision: do not promote
-- Live URL set: original, reply, and media fixtures captured on 2026-06-21
+- Live URL set: original, reply, media, and reshare fixtures captured on 2026-06-21/2026-06-22
 - Raw Probe A artifacts:
   - `raw/probe-a/original-hormozi-dz3ly0-larf.json`
   - `raw/probe-a/original-die-workwear-dz3u4c5j30i-authenticated.json`
   - `raw/probe-a/reply-arturoztalin-dz3e05qlnxc-authenticated.json`
   - `raw/probe-a/reply-njr354151-dz3xgpripmd-authenticated.json`
   - `raw/probe-a/media-huyquocc11-dz1dyikejeh-authenticated.json`
+  - `raw/probe-a/repost-quote-9six7-dz3u2dnexyk-authenticated.json`
 - Other-features artifacts:
   - `raw/other-features/original-hormozi-dz3ly0-larf.json`
   - `raw/other-features/original-die-workwear-dz3u4c5j30i-authenticated.json`
   - `raw/other-features/reply-arturoztalin-dz3e05qlnxc-authenticated.json`
   - `raw/other-features/reply-njr354151-dz3xgpripmd-authenticated.json`
   - `raw/other-features/media-huyquocc11-dz1dyikejeh-authenticated.json`
+  - `raw/other-features/repost-quote-9six7-dz3u2dnexyk-authenticated.json`
 - Contract-discovery artifacts:
   - `raw/contract-discovery/original-die-workwear-dz3u4c5j30i-authenticated.json`
   - `raw/contract-discovery/reply-arturoztalin-dz3e05qlnxc-authenticated.json`
   - `raw/contract-discovery/reply-njr354151-dz3xgpripmd-authenticated.json`
   - `raw/contract-discovery/media-huyquocc11-dz1dyikejeh-authenticated.json`
+  - `raw/contract-discovery/repost-quote-9six7-dz3u2dnexyk-authenticated.json`
 - Raw Probe B artifacts: pending in `raw/probe-b/`
 
 ## Contract Criteria
@@ -31,7 +34,7 @@
 | Permalink extraction returns `platform`, `platformCode`, `sourceUrl`, and `sourceId` | Candidate pass for original permalinks | Contract-discovery returned `threads`, `TH`, canonical URL, source ID `DZ3U4c5j30i`, and handle `die_workwear` |
 | `/post/` and `/t/` IDs are both reliable | Pending | Local fixtures cover both forms; live evidence pending |
 | `threads.net` redirects are covered by runtime and manifest scope | Pending | Local fixture covers matching; live redirect behavior pending |
-| Focal post selection excludes quoted/reposted/embedded/reply-context content | Candidate pass for original, reply, and media fixtures | Original and media fixtures support metadata-primary extraction; reply fixtures show canonical/OG can point to parent context, and the `njr354151` reply confirms source-linked rendered text excludes embedded linked content |
+| Focal post selection excludes quoted/reposted/embedded/reply-context content | Candidate pass for original, reply, media, and reshare fixtures | Original and media fixtures support metadata-primary extraction; reply fixtures show canonical/OG can point to parent context, and the reshare fixture separates wrapper context text from embedded repost text/media |
 | Author handle resolves through preflight to a slug-bearing originator | Pending | No live preflight result committed yet |
 | Duplicate/preflight and submit succeed on live pages | Pending | No live submit result committed yet |
 | Deterministic fixture tests match the audited selector contract | Pending update | Existing local tests cover article/testid-root assumptions; they should be updated after the Threads contract is validated across scenario fixtures |
@@ -75,7 +78,7 @@ For reply/comment permalinks where `location.href` and canonical metadata disagr
 |---------------|--------|-------|
 | original | Candidate contract found | Two original fixtures captured; authenticated `die_workwear` discovery supports metadata-primary extraction |
 | reply/comment | Candidate contract found | Authenticated `arturoztalin` and `njr354151` replies show canonical/OG parent-context mismatch; `njr354151` also validates embedded linked-content exclusion |
-| repost/quote/reshare | Pending | Need direct URL |
+| repost/quote/reshare | Candidate contract found | Authenticated `9six7` fixture validates wrapper context text, embedded repost text, and embedded media separation; canonical metadata is not usable |
 | media | Candidate contract found | Authenticated `huyquocc11` media permalink confirms canonical metadata and source-linked text remain focal while media nodes are present |
 | long/collapsed | Pending | Need direct URL |
 | unavailable/private/login-gated | Pending | Need direct URL |
@@ -127,3 +130,12 @@ For reply/comment permalinks where `location.href` and canonical metadata disagr
 - The other-features probe now records sanitized media counts and media element summaries without CDN URLs or profile-picture nodes. This fixture exposed one loaded `<video>` element in the visible DOM plus adjacent carousel media nodes; loaded `<video>` count should be treated as a visibility signal, not a total carousel-video count.
 - Likes adjacency held on the media fixture: Like icon -> `5.4K` -> Reply icon, parsed as `5400`.
 - Generic Probe A still found no configured Threads root and captured handle text (`huyquocc11`) instead of the post body.
+
+2026-06-22 authenticated reshare/quote fixture notes:
+
+- `https://www.threads.com/@9six7/post/DZ3u2dNEXYK` was audited as a reshare/quote-style permalink with wrapper context text, embedded repost text, and embedded media.
+- Browser URL identity was `9six7` / `DZ3u2dNEXYK`, but canonical metadata pointed to `https://www.threads.com/`; `metadataPrimary` was `incomplete` and must not be used as focal text for this fixture.
+- The visible source-linked rendered candidate found wrapper context text beginning `The President of the United States should not travel...`, posted date `2026-06-22T02:07:10.000Z`, and likes count `1000`.
+- The embedded repost text was separately detected under `aaron.rupar` / `DZ0G2o5ic-m`, beginning `Trump on the new plane...`; this must be excluded from focal capture unless the user opens that embedded permalink directly.
+- The sanitized media summary found one visible video element and image/video-player wrapper nodes below the embedded repost text. Hidden feed DOM also contained media nodes, so the other-features probe now reports visible media counts separately from document-wide counts.
+- Generic Probe A found no configured Threads root and captured feed/navigation text, reinforcing that Probe A is negative evidence for Threads.

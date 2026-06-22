@@ -1,0 +1,38 @@
+{
+  "contract": {
+    "author": {
+      "displayName": "9six7",
+      "handle": "9six7"
+    },
+    "likesCount": null,
+    "platform": "threads",
+    "platformCode": "TH",
+    "platformData": {
+      "source_id": "DZ3u2dNEXYK"
+    },
+    "postedAt": "2026-06-21T18:04:55.000Z",
+    "requiresSelection": false,
+    "sourceId": "DZ3u2dNEXYK",
+    "sourceUrl": "https://www.threads.com/",
+    "text": "For you"
+  },
+  "drift": [
+    "root: no configured root selector matched",
+    "root: no root contained a permalink for the URL sourceId"
+  ],
+  "meta": {
+    "probe": "capture-contract",
+    "uiLang": "en",
+    "url": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK",
+    "version": "2026-06-21"
+  },
+  "selectors": {
+    "authorSelector": "a[href*=\"/@\"]",
+    "displaySelector": null,
+    "focalRootFoundBySourceIdLink": false,
+    "likesRaw": null,
+    "likesSelector": null,
+    "rootSelectorCount": 0,
+    "textSelector": "[dir=\"auto\"]"
+  }
+}
