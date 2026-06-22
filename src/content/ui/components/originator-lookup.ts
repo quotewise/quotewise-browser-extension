@@ -2,6 +2,7 @@ import type { OriginatorSearchResult } from '../../../types/api';
 import type { DuplicateCheckResult } from '../../../types/api';
 import { getWebBaseUrl } from '../../../config/environment';
 import type { CapturePlatform } from '../../../types';
+import { safeHref } from './dom-utils';
 
 type MessageSender = (message: { type: string; data?: unknown }) => Promise<Record<string, unknown>>;
 
@@ -226,12 +227,17 @@ export class OriginatorLookup {
   }
 
   private resolveCreateUrl(handle: string, platform: CapturePlatform, createUrl: unknown): string {
+    const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
+    const fallback = `${baseUrl}/originators/add/?suggested_handle=${encodeURIComponent(handle)}&platform=${encodeURIComponent(platform)}`;
+
+    // Only trust an API-provided create URL if it is a real http(s) link;
+    // escapeHtml in renderNotFound stops attribute-breakout but not a
+    // javascript: scheme. Fall back to our own constructed URL otherwise.
     if (typeof createUrl === 'string' && createUrl) {
-      return createUrl;
+      return safeHref(createUrl) ?? fallback;
     }
 
-    const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
-    return `${baseUrl}/originators/add/?suggested_handle=${encodeURIComponent(handle)}&platform=${encodeURIComponent(platform)}`;
+    return fallback;
   }
 
   private escapeHtml(text: string): string {

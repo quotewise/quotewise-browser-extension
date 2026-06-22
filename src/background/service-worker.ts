@@ -10,7 +10,7 @@ import { MessageType, type ExtensionMessage, type CapturedPostData, type Capture
 import { DEFAULT_SETTINGS, type Settings } from '../types/chrome';
 import { initializeApiHandler } from './api-handler';
 import { AuthenticationMonitor } from './auth-monitor';
-import { initializeStorageCleanup } from './storage-cleanup';
+import { initializeStorageCleanup, STORAGE_CLEANUP_ALARM } from './storage-cleanup';
 import { validateCapturedPostData, ValidationError } from '../utils/validators';
 import { DEBUG_MODE, debugLog, getWebBaseUrl, isProduction } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
@@ -1583,8 +1583,9 @@ async function ensureServicesInitialized(): Promise<void> {
     console.warn('Failed to initialize token refresh:', error);
   }
 
-  // Start periodic cleanup (quiet mode - no startup logs)
-  storageCleanup.startPeriodicCleanup(true);
+  // Start periodic cleanup (quiet mode - no startup logs). Schedules a
+  // chrome.alarms alarm dispatched by the top-level onAlarm listener below.
+  await storageCleanup.startPeriodicCleanup(true);
 
   await reconcileAutomaticPreflightOperations();
 
@@ -1618,6 +1619,12 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     debugLog('Automatic preflight timeout alarm triggered');
     await ensureServicesInitialized();
     await handleAutomaticPreflightTimeoutAlarm(alarm.name);
+    return;
+  }
+
+  if (alarm.name === STORAGE_CLEANUP_ALARM) {
+    await ensureServicesInitialized();
+    await storageCleanup?.runCleanup();
     return;
   }
 

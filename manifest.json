@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Quotewise Quote Capture - Dev",
-  "version": "1.6.1",
-  "description": "Capture quotes from Twitter/X and add them to Quotewise with proper attribution",
+  "version": "1.6.2",
+  "description": "Save quotes from X, Threads, Bluesky & Substack Notes to your Quotewise library — attributed, sourced, duplicate-checked.",
   "permissions": [
     "storage",
     "identity",
@@ -17,7 +17,9 @@
     "https://twitter.com/*",
     "https://x.com/*",
     "https://threads.com/*",
+    "https://*.threads.com/*",
     "https://threads.net/*",
+    "https://*.threads.net/*",
     "https://bsky.app/*",
     "https://substack.com/*",
     "https://*.substack.com/*"
@@ -31,7 +33,9 @@
         "https://twitter.com/*",
         "https://x.com/*",
         "https://threads.com/*",
+        "https://*.threads.com/*",
         "https://threads.net/*",
+        "https://*.threads.net/*",
         "https://bsky.app/*",
         "https://substack.com/*",
         "https://*.substack.com/*"
@@ -60,30 +64,5 @@
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "content/*"
-      ],
-      "matches": [
-        "https://twitter.com/*",
-        "https://x.com/*",
-        "https://threads.com/*",
-        "https://threads.net/*",
-        "https://bsky.app/*",
-        "https://substack.com/*",
-        "https://*.substack.com/*"
-      ]
-    },
-    {
-      "resources": [
-        "popup.html",
-        "popup.css"
-      ],
-      "matches": [
-        "<all_urls>"
-      ]
-    }
-  ]
+  }
 }

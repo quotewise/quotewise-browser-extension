@@ -1127,7 +1127,7 @@ export class OverlayBar {
       return;
     }
     if (sightingState === 'same_platform_sighting') {
-      this.updateSubmitButton(false, 'Sighting Exists');
+      this.updateSubmitButton(false, 'Earlier Saved');
       return;
     }
 

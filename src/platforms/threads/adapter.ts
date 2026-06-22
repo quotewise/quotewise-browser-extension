@@ -2,11 +2,15 @@ import { debugLog, sendMessageToBackground } from '../../content/common';
 import type { CapturedPostData, ExtensionMessage } from '../../types';
 import { MessageType } from '../../types';
 import {
-  canonicalUrl,
-  datetimeFrom,
+  adjacentActionCountFrom,
+  bodyTextFromRoot,
+  cleanPermalinkUrl,
+  datetimeFromSourceLink,
   firstElementWithHrefContaining,
+  metadataUrl,
   metaContent,
   normalizeHandle,
+  sourceLinkedRoot,
   textFromSelectors,
   visibleLikesFrom,
 } from '../dom-extraction';
@@ -76,32 +80,43 @@ export class ThreadsAdapter implements PlatformAdapter<CapturedPostData> {
   }
 
   extractFromDom(urlOverride = window.location.href): CapturedPostData | null {
-    const sourceUrl = canonicalUrl(urlOverride);
+    const sourceUrl = cleanPermalinkUrl(urlOverride);
     const sourceId = sourceIdFromUrl(sourceUrl) || sourceIdFromUrl(urlOverride);
     if (!sourceId) return null;
 
-    const root = firstElementWithHrefContaining(document, sourceId) ||
-      document.querySelector<HTMLElement>('article, [role="article"], [data-testid*="post" i]') ||
+    const handleFromUrl = threadsHandleFromUrl(sourceUrl) || threadsHandleFromUrl(urlOverride);
+    const root = sourceLinkedRoot(
+      document,
+      sourceId,
+      'article, [role="article"], [data-testid*="post" i], [data-testid*="thread" i]',
+    ) ||
+      firstElementWithHrefContaining(document, sourceId) ||
       document.body;
 
-    const text = textFromSelectors(root, [
+    const metadataMatchesSource = threadsMetadataMatchesSource(sourceId, handleFromUrl);
+    const handleFromDom = root.querySelector<HTMLAnchorElement>('a[href*="/@"]')?.pathname.match(/\/@([^/]+)/)?.[1];
+    const handleFromMetadata = metadataMatchesSource ? threadsHandleFromTitle() : undefined;
+    const ignoredBodyTexts = [handleFromUrl, handleFromDom, handleFromMetadata]
+      .filter((value): value is string => !!value);
+    const metadataText = metadataMatchesSource
+      ? metaContent('meta[property="og:description"]', 'meta[name="description"]')
+      : null;
+    const visibleText = textFromSelectors(root, [
       '[data-testid="post-text"]',
       '[data-testid="thread-text"]',
       '[data-testid*="post-text" i]',
-      '[dir="auto"]',
-    ]) || metaContent('meta[property="og:description"]', 'meta[name="description"]') || '';
+    ]) || bodyTextFromRoot(root, sourceId, ignoredBodyTexts);
+    const text = metadataText || visibleText;
 
-    const handleFromUrl = new URL(urlOverride).pathname.match(/\/@([^/]+)\//)?.[1];
-    const handleFromDom = root.querySelector<HTMLAnchorElement>('a[href*="/@"]')?.pathname.match(/\/@([^/]+)/)?.[1];
-    const handle = normalizeHandle(handleFromDom || handleFromUrl);
+    const handle = normalizeHandle(handleFromUrl || handleFromDom || handleFromMetadata);
     if (!text || !handle) return null;
 
-    const displayName = textFromSelectors(root, [
+    const displayName = (metadataMatchesSource ? threadsDisplayNameFromTitle() : null) || textFromSelectors(root, [
       '[data-testid="post-author-name"]',
       '[data-testid*="author" i] [dir="auto"]',
       'h1',
     ]) || handle;
-    const likesCount = visibleLikesFrom(root);
+    const likesCount = visibleLikesFrom(root) ?? adjacentActionCountFrom(root, 'Like', 'Reply');
 
     return {
       platform: 'threads',
@@ -114,7 +129,7 @@ export class ThreadsAdapter implements PlatformAdapter<CapturedPostData> {
         displayName,
         profileUrl: `https://threads.com/@${handle}`,
       },
-      postedAt: datetimeFrom(root),
+      postedAt: datetimeFromSourceLink(document, sourceId),
       ...(likesCount !== undefined ? { likesCount } : {}),
       requiresSelection: false,
       platformData: {
@@ -124,4 +139,36 @@ export class ThreadsAdapter implements PlatformAdapter<CapturedPostData> {
       },
     };
   }
+}
+
+function threadsHandleFromUrl(url: string): string | undefined {
+  try {
+    return normalizeHandle(new URL(url).pathname.match(/\/@([^/]+)\//)?.[1]);
+  } catch {
+    return undefined;
+  }
+}
+
+function threadsMetadataMatchesSource(sourceId: string, handle?: string): boolean {
+  const candidates = [
+    document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href,
+    metadataUrl('meta[property="og:url"]'),
+  ].filter((value): value is string => !!value);
+
+  return candidates.some(url => {
+    const metadataHandle = threadsHandleFromUrl(url);
+    return sourceIdFromUrl(url) === sourceId &&
+      (!handle || !metadataHandle || metadataHandle === handle);
+  });
+}
+
+function threadsDisplayNameFromTitle(): string | null {
+  const title = metaContent('meta[property="og:title"]') || document.title;
+  const match = title.match(/^(.+?)\s+\(@[^)]+\)/);
+  return match?.[1]?.trim() || null;
+}
+
+function threadsHandleFromTitle(): string | undefined {
+  const title = metaContent('meta[property="og:title"]') || document.title;
+  return normalizeHandle(title.match(/\(@([^)]+)\)/)?.[1]);
 }
