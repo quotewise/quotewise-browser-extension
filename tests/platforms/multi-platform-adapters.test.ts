@@ -102,6 +102,44 @@ describe('multi-platform adapters', () => {
     expect(data?.author.handle).toBe('tobbigray');
   });
 
+  it('does not capture the Threads handle when generic text nodes precede the body', () => {
+    const url = 'https://www.threads.com/@readswithravi/post/DZ43RsYnNSS';
+    document.head.innerHTML = `
+      <link rel="canonical" href="https://www.threads.com/">
+      <meta property="og:url" content="https://www.threads.com/">
+      <meta property="og:description" content="Join Threads to share ideas.">
+    `;
+    document.body.innerHTML = `
+      <div>
+        <a href="/@readswithravi"><span dir="auto">readswithravi</span></a>
+        <a href="/@readswithravi/post/DZ43RsYnNSS"><time datetime="2026-06-22T12:40:02.000Z">3h</time></a>
+        <div>
+          <div data-pressable-container="true"><span dir="auto">readswithravi</span></div>
+          <div>
+            <span>Surround yourself with people who talk about books, podcasts, ideas, learning, curiosity and creating.</span>
+          </div>
+          <div>
+            <div role="button" aria-label="Like"><span>87</span></div>
+            <div role="button" aria-label="Reply"><span>3</span></div>
+            <div role="button" aria-label="Repost"><span>6</span></div>
+            <div role="button" aria-label="Share"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const data = new ThreadsAdapter().extractFromDom(url);
+
+    expect(data).toEqual(expect.objectContaining({
+      platform: 'threads',
+      sourceId: 'DZ43RsYnNSS',
+      text: 'Surround yourself with people who talk about books, podcasts, ideas, learning, curiosity and creating.',
+      postedAt: '2026-06-22T12:40:02.000Z',
+      likesCount: 87,
+    }));
+    expect(data?.author.handle).toBe('readswithravi');
+  });
+
   it('matches Threads /t/ permalinks on threads.net redirects', () => {
     const url = 'https://www.threads.net/@alice/t/Credirect123';
     document.body.innerHTML = `

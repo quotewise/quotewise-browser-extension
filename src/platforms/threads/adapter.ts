@@ -94,6 +94,10 @@ export class ThreadsAdapter implements PlatformAdapter<CapturedPostData> {
       document.body;
 
     const metadataMatchesSource = threadsMetadataMatchesSource(sourceId, handleFromUrl);
+    const handleFromDom = root.querySelector<HTMLAnchorElement>('a[href*="/@"]')?.pathname.match(/\/@([^/]+)/)?.[1];
+    const handleFromMetadata = metadataMatchesSource ? threadsHandleFromTitle() : undefined;
+    const ignoredBodyTexts = [handleFromUrl, handleFromDom, handleFromMetadata]
+      .filter((value): value is string => !!value);
     const metadataText = metadataMatchesSource
       ? metaContent('meta[property="og:description"]', 'meta[name="description"]')
       : null;
@@ -101,12 +105,9 @@ export class ThreadsAdapter implements PlatformAdapter<CapturedPostData> {
       '[data-testid="post-text"]',
       '[data-testid="thread-text"]',
       '[data-testid*="post-text" i]',
-      '[data-pressable-container="true"] [dir="auto"]',
-    ]) || bodyTextFromRoot(root, sourceId);
+    ]) || bodyTextFromRoot(root, sourceId, ignoredBodyTexts);
     const text = metadataText || visibleText;
 
-    const handleFromDom = root.querySelector<HTMLAnchorElement>('a[href*="/@"]')?.pathname.match(/\/@([^/]+)/)?.[1];
-    const handleFromMetadata = metadataMatchesSource ? threadsHandleFromTitle() : undefined;
     const handle = normalizeHandle(handleFromUrl || handleFromDom || handleFromMetadata);
     if (!text || !handle) return null;
 
