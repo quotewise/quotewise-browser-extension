@@ -1,6 +1,6 @@
 {
   "feature": "008-multi-platform-capture",
-  "status": "pending-live-urls",
+  "status": "threads-live-audit-in-progress",
   "notes": [
     "Fill url fields with public, logged-in-accessible permalinks before running probes.",
     "Do not add credentials, cookies, private session data, or private account-only content.",
@@ -37,7 +37,7 @@
       "phase": 2,
       "enabledByDefault": false,
       "urls": {
-        "original": null,
+        "original": "https://www.threads.com/@hormozi/post/DZ3Ly0-larF",
         "reply_or_comment": null,
         "repost_quote_or_reshare": null,
         "media": null,
@@ -81,4 +81,3 @@
     }
   }
 }
-
