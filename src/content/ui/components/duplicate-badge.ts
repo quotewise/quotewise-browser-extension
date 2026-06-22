@@ -75,12 +75,10 @@ export class DuplicateBadge {
       const match = getMatchForDuplicateSightingState(result, sightingState);
       const quotePageUrl = this.getQuotePageUrl(match);
 
-      this.renderBadge('success', '🟢', 'Already captured', quotePageUrl);
-      this.container.title = 'This exact URL is already in Quotewise';
-      if (quotePageUrl) {
-        this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
+      if (sightingState === 'exact_sighting') {
+        this.renderExactSighting(quotePageUrl);
       } else {
-        this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Already Captured' });
+        this.renderEarlierSighting(quotePageUrl);
       }
       return;
     }
@@ -117,21 +115,9 @@ export class DuplicateBadge {
     const quotePageUrl = this.getQuotePageUrl(match);
 
     if (sightingState === 'exact_sighting') {
-      this.renderBadge('success', '🟢', 'Already captured', quotePageUrl);
-      this.container.title = 'This exact URL is already in Quotewise';
-      if (quotePageUrl) {
-        this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
-      } else {
-        this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Already Captured' });
-      }
+      this.renderExactSighting(quotePageUrl);
     } else if (sightingState === 'same_platform_sighting') {
-      this.renderBadge('warning', '🟡', 'Platform sighting exists', quotePageUrl);
-      this.container.title = 'A Twitter sighting exists for this quote';
-      if (quotePageUrl) {
-        this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
-      } else {
-        this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Sighting Exists' });
-      }
+      this.renderEarlierSighting(quotePageUrl);
     } else if (sightingState === 'other_platform_sighting') {
       this.renderBadge('info', '🔵', 'Add Twitter sighting', quotePageUrl);
       this.container.title = 'Quote exists in Quotewise, but this Twitter sighting has not been captured';
@@ -179,6 +165,26 @@ export class DuplicateBadge {
     this.container.appendChild(retry);
 
     this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: "Couldn't Verify" });
+  }
+
+  private renderExactSighting(quotePageUrl?: string): void {
+    this.renderBadge('success', '🟢', 'Already captured', quotePageUrl);
+    this.container.title = 'This exact URL is already in Quotewise';
+    if (quotePageUrl) {
+      this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
+    } else {
+      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Already Captured' });
+    }
+  }
+
+  private renderEarlierSighting(quotePageUrl?: string): void {
+    this.renderBadge('success', '🟢', 'Earlier Sighting saved', quotePageUrl);
+    this.container.title = 'An earlier Sighting for this quote is already in Quotewise. We keep the earliest known source.';
+    if (quotePageUrl) {
+      this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Sighting' });
+    } else {
+      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Earlier Saved' });
+    }
   }
 
   private renderConflict(

@@ -44,6 +44,15 @@ describe('duplicate sighting status', () => {
     })).toBe('exact_sighting');
   });
 
+  it('classifies URL-source matches as exact sighting', () => {
+    expect(classifyDuplicateSighting({
+      matches: [{ match_source: 'url' }],
+    })).toBe('exact_sighting');
+    expect(classifyDuplicateSighting({
+      matches: [{ existing_sighting_for_this_url: true }],
+    })).toBe('exact_sighting');
+  });
+
   it('classifies has_platform_sighting matches as same-platform sighting', () => {
     expect(classifyDuplicateSighting({
       matches: [{ sighting_status: 'has_platform_sighting' }],
