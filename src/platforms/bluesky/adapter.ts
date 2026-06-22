@@ -2,11 +2,11 @@ import { debugLog, sendMessageToBackground } from '../../content/common';
 import type { CapturedPostData, ExtensionMessage } from '../../types';
 import { MessageType } from '../../types';
 import {
-  canonicalUrl,
-  datetimeFrom,
+  bodyTextFromRoot,
+  cleanPermalinkUrl,
   firstElementWithHrefContaining,
-  metaContent,
   normalizeHandle,
+  sourceLinkedRoot,
   textFromSelectors,
   visibleLikesFrom,
 } from '../dom-extraction';
@@ -74,25 +74,24 @@ export class BlueskyAdapter implements PlatformAdapter<CapturedPostData> {
   }
 
   extractFromDom(urlOverride = window.location.href): CapturedPostData | null {
-    const sourceUrl = canonicalUrl(urlOverride);
+    const sourceUrl = cleanPermalinkUrl(urlOverride);
     const sourceId = sourceIdFromUrl(sourceUrl) || sourceIdFromUrl(urlOverride);
-    const handleFromUrl = new URL(urlOverride).pathname.match(/^\/profile\/([^/]+)\/post\//)?.[1];
+    const handleFromUrl = blueskyHandleFromUrl(sourceUrl) || blueskyHandleFromUrl(urlOverride);
     const handle = normalizeHandle(handleFromUrl);
     if (!sourceId || !handle) return null;
 
-    const root = firstElementWithHrefContaining(document, sourceId) ||
-      document.querySelector<HTMLElement>('[data-testid="postThreadItem"], [data-testid="post"], article, [role="article"]') ||
+    const root = blueskyThreadItemForHandle(handle) ||
+      sourceLinkedRoot(document, sourceId, '[data-testid^="postThreadItem-by-"], [data-testid="postThreadItem"], [data-testid="post"], article, [role="article"]') ||
+      firstElementWithHrefContaining(document, sourceId) ||
       document.body;
 
     const text = textFromSelectors(root, [
       '[data-testid="postText"]',
-      '[data-testid*="post-text" i]',
       '[data-testid*="postContent" i]',
-      '[dir="auto"]',
-    ]) || metaContent('meta[property="og:description"]', 'meta[name="description"]') || '';
+    ]) || bodyTextFromRoot(root, sourceId);
     if (!text) return null;
 
-    const displayName = textFromSelectors(root, [
+    const displayName = blueskyDisplayName(root, handle) || textFromSelectors(root, [
       '[data-testid="postAuthorDisplayName"]',
       '[data-testid*="author" i] [dir="auto"]',
       'h1',
@@ -110,7 +109,6 @@ export class BlueskyAdapter implements PlatformAdapter<CapturedPostData> {
         displayName,
         profileUrl: `https://bsky.app/profile/${handle}`,
       },
-      postedAt: datetimeFrom(root),
       ...(likesCount !== undefined ? { likesCount } : {}),
       requiresSelection: false,
       platformData: {
@@ -120,4 +118,33 @@ export class BlueskyAdapter implements PlatformAdapter<CapturedPostData> {
       },
     };
   }
+}
+
+function blueskyHandleFromUrl(url: string): string | undefined {
+  try {
+    return new URL(url).pathname.match(/^\/profile\/([^/]+)\/post\//)?.[1];
+  } catch {
+    return undefined;
+  }
+}
+
+function blueskyThreadItemForHandle(handle: string): HTMLElement | null {
+  return Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="postThreadItem-by-"]'))
+    .find(element => element.getAttribute('data-testid') === `postThreadItem-by-${handle}`) ?? null;
+}
+
+function blueskyDisplayName(root: ParentNode, handle: string): string | null {
+  const profileLink = Array.from(root.querySelectorAll<HTMLAnchorElement>(`a[href*="/profile/${handle}"]`))
+    .find(link => {
+      const text = link.textContent?.trim() || '';
+      return text && !text.includes('/post/');
+    });
+  const profileText = profileLink?.textContent?.trim();
+  if (profileText) {
+    return profileText.replace(`@${handle}`, '').trim() || null;
+  }
+
+  const rootText = root.textContent || '';
+  const profileMatch = rootText.match(new RegExp(`^(.+?)@${handle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  return profileMatch?.[1]?.trim() || null;
 }
