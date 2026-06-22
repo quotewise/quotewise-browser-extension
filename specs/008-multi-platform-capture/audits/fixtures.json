@@ -41,7 +41,10 @@
           "https://www.threads.com/@hormozi/post/DZ3Ly0-larF",
           "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i"
         ],
-        "reply_or_comment": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
+        "reply_or_comment": [
+          "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
+          "https://www.threads.com/@njr354151/post/DZ3XgPRiPmD"
+        ],
         "repost_quote_or_reshare": null,
         "media": null,
         "long_or_collapsed": null,
@@ -74,6 +77,16 @@
           "probeA": "threads/raw/probe-a/reply-arturoztalin-dz3e05qlnxc-authenticated.json",
           "otherFeatures": "threads/raw/other-features/reply-arturoztalin-dz3e05qlnxc-authenticated.json",
           "contractDiscovery": "threads/raw/contract-discovery/reply-arturoztalin-dz3e05qlnxc-authenticated.json"
+        },
+        {
+          "fixtureClass": "reply_or_comment",
+          "authState": "authenticated",
+          "url": "https://www.threads.com/@njr354151/post/DZ3XgPRiPmD",
+          "providedUrl": "https://www.threads.com/@njr354151/post/DZ3XgPRiPmD?xmt=AQG0Wg5Fei3m6HdTfEhA8VlIkLzFk8HVvIsmysisbgpy0w",
+          "notes": "Reply contains an embedded/reposted linked post beginning with 'The reports coming out'.",
+          "probeA": "threads/raw/probe-a/reply-njr354151-dz3xgpripmd-authenticated.json",
+          "otherFeatures": "threads/raw/other-features/reply-njr354151-dz3xgpripmd-authenticated.json",
+          "contractDiscovery": "threads/raw/contract-discovery/reply-njr354151-dz3xgpripmd-authenticated.json"
         }
       ]
     },
