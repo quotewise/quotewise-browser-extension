@@ -23,6 +23,16 @@
       height: Math.round(rect.height),
     };
   };
+  const parseCount = (value) => {
+    const compact = String(value || '').replace(/,/g, '').trim();
+    const magnitude = compact.match(/^(\d[\d.]*)([KMB])$/i);
+    if (magnitude) {
+      const multiplier = magnitude[2].toUpperCase() === 'K' ? 1e3 : magnitude[2].toUpperCase() === 'M' ? 1e6 : 1e9;
+      return Math.round(Number(magnitude[1]) * multiplier);
+    }
+    const numeric = compact.match(/^\d[\d.]*$/);
+    return numeric ? Number(numeric[0]) : null;
+  };
   const selectorForSourceId = (sourceId) => {
     if (!sourceId) return null;
     const escaped = sourceId.replace(/["\\]/g, '\\$&');
@@ -82,6 +92,45 @@
     }))
     .filter(item => /like|reply|comment|repost|share|view|more|verified/i.test(item.label))
     .slice(0, 100);
+  const numericTextCandidates = renderedTextCandidates
+    .filter(candidate => parseCount(candidate.text) !== null)
+    .map(candidate => ({ ...candidate, parsedCount: parseCount(candidate.text) }));
+  const actionCountFor = (actionName, nextActionNames) => {
+    const action = actionLabels.find(label => new RegExp(`^${actionName}$`, 'i').test(label.label));
+    if (!action) return null;
+    const nextAction = actionLabels.find(label =>
+      nextActionNames.some(name => new RegExp(`^${name}$`, 'i').test(label.label)) &&
+      Math.abs(label.rect.y - action.rect.y) <= 8 &&
+      label.rect.x > action.rect.x
+    );
+    const candidates = numericTextCandidates.filter(candidate =>
+      Math.abs(candidate.rect.y - action.rect.y) <= 8 &&
+      candidate.rect.x > action.rect.x &&
+      (!nextAction || candidate.rect.x < nextAction.rect.x)
+    );
+    const count = candidates[0] || null;
+    return count ? {
+      actionLabel: action.label,
+      actionRect: { ...action.rect },
+      nextActionLabel: nextAction?.label || null,
+      nextActionRect: nextAction ? { ...nextAction.rect } : null,
+      raw: count.text,
+      value: count.parsedCount,
+      countRect: { ...count.rect },
+      confidence: nextAction ? 'candidate_adjacent_between_actions' : 'candidate_adjacent_after_action',
+    } : null;
+  };
+  const cloneActionCount = (candidate) => candidate ? {
+    ...candidate,
+    actionRect: candidate.actionRect ? { ...candidate.actionRect } : null,
+    nextActionRect: candidate.nextActionRect ? { ...candidate.nextActionRect } : null,
+    countRect: candidate.countRect ? { ...candidate.countRect } : null,
+  } : null;
+  const actionCountCandidates = {
+    likes: actionCountFor('Like', ['Reply', 'Comment']),
+    replies: actionCountFor('Reply', ['Repost', 'Share']),
+    reposts: actionCountFor('Repost', ['Share']),
+  };
 
   const regions = Array.from(document.querySelectorAll('[role="region"], [aria-label="Column body"], [aria-label="Column title"]'))
     .map((element, index) => ({
@@ -109,7 +158,7 @@
     document.querySelectorAll('[role="article"]').length === 0 ? 'No role=article hooks in rendered Threads permalink DOM.' : null,
     ogDescription ? 'og:description contains exact post body text for this original permalink.' : null,
     renderedBodyCandidate ? 'Rendered body text exists as dir=auto text, but browser extraction may normalize/degrade characters.' : null,
-    actionLabels.some(label => /like/i.test(label.label)) ? 'Like action label exists, but count appears as adjacent text; omit likes until adjacency is proven across fixtures.' : null,
+    actionCountCandidates.likes ? 'Like count candidate exists between Like and Reply action icons; validate across low/zero and abbreviated/high-like fixtures before promotion.' : null,
   ].filter(Boolean);
 
   const out = {
@@ -145,8 +194,19 @@
       },
       renderedBodyCandidate,
       likes: {
-        disposition: 'omit_until_adjacent_action_counts_are_proven',
-        actionLabels: actionLabels.filter(label => /like/i.test(label.label)).slice(0, 8),
+        disposition: actionCountCandidates.likes
+          ? 'candidate_adjacent_action_count_needs_fixture_validation'
+          : 'omit_until_adjacent_action_counts_are_proven',
+        candidate: cloneActionCount(actionCountCandidates.likes),
+        actionLabels: actionLabels
+          .filter(label => /like/i.test(label.label))
+          .slice(0, 8)
+          .map(label => ({ ...label, rect: { ...label.rect } })),
+      },
+      actionCounts: {
+        likes: cloneActionCount(actionCountCandidates.likes),
+        replies: cloneActionCount(actionCountCandidates.replies),
+        reposts: cloneActionCount(actionCountCandidates.reposts),
       },
     },
     roots: {
@@ -165,4 +225,3 @@
   console.log(JSON.stringify(out, null, 2));
   return out;
 })();
-

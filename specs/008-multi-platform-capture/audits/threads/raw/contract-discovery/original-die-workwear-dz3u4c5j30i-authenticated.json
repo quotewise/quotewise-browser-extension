@@ -34,12 +34,24 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 72
+        "y": -704
       },
       "role": "img",
       "tag": "svg"
     },
-    "[Circular]",
+    {
+      "index": 11,
+      "label": "Like",
+      "parentText": "Like2.3K",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 12,
+        "y": -565
+      },
+      "role": "img",
+      "tag": "svg"
+    },
     {
       "index": 12,
       "label": "Reply",
@@ -48,7 +60,7 @@
         "height": 18,
         "width": 18,
         "x": 87,
-        "y": 211
+        "y": -565
       },
       "role": "img",
       "tag": "svg"
@@ -61,7 +73,7 @@
         "height": 18,
         "width": 18,
         "x": 150,
-        "y": 211
+        "y": -565
       },
       "role": "img",
       "tag": "svg"
@@ -69,12 +81,12 @@
     {
       "index": 14,
       "label": "Share",
-      "parentText": "Share32",
+      "parentText": "Share33",
       "rect": {
         "height": 18,
         "width": 18,
         "x": 212,
-        "y": 211
+        "y": -565
       },
       "role": "img",
       "tag": "svg"
@@ -87,7 +99,7 @@
         "height": 12,
         "width": 12,
         "x": 62,
-        "y": 263
+        "y": -513
       },
       "role": "img",
       "tag": "svg"
@@ -100,7 +112,7 @@
         "height": 12,
         "width": 12,
         "x": 575,
-        "y": 264
+        "y": -512
       },
       "role": "img",
       "tag": "svg"
@@ -113,12 +125,24 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 309
+        "y": -467
       },
       "role": "img",
       "tag": "svg"
     },
-    "[Circular]",
+    {
+      "index": 25,
+      "label": "Like",
+      "parentText": "Like111",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": -408
+      },
+      "role": "img",
+      "tag": "svg"
+    },
     {
       "index": 26,
       "label": "Reply",
@@ -127,7 +151,7 @@
         "height": 18,
         "width": 18,
         "x": 131,
-        "y": 368
+        "y": -408
       },
       "role": "img",
       "tag": "svg"
@@ -140,7 +164,7 @@
         "height": 18,
         "width": 18,
         "x": 186,
-        "y": 368
+        "y": -408
       },
       "role": "img",
       "tag": "svg"
@@ -153,7 +177,7 @@
         "height": 18,
         "width": 18,
         "x": 229,
-        "y": 368
+        "y": -408
       },
       "role": "img",
       "tag": "svg"
@@ -166,12 +190,24 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 404
+        "y": -372
       },
       "role": "img",
       "tag": "svg"
     },
-    "[Circular]",
+    {
+      "index": 32,
+      "label": "Like",
+      "parentText": "Like1",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": -313
+      },
+      "role": "img",
+      "tag": "svg"
+    },
     {
       "index": 33,
       "label": "Reply",
@@ -180,7 +216,7 @@
         "height": 18,
         "width": 18,
         "x": 115,
-        "y": 463
+        "y": -313
       },
       "role": "img",
       "tag": "svg"
@@ -193,7 +229,7 @@
         "height": 18,
         "width": 18,
         "x": 157,
-        "y": 463
+        "y": -313
       },
       "role": "img",
       "tag": "svg"
@@ -206,7 +242,7 @@
         "height": 18,
         "width": 18,
         "x": 200,
-        "y": 463
+        "y": -313
       },
       "role": "img",
       "tag": "svg"
@@ -219,12 +255,24 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 512
+        "y": -264
       },
       "role": "img",
       "tag": "svg"
     },
-    "[Circular]",
+    {
+      "index": 39,
+      "label": "Like",
+      "parentText": "Like25",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": -206
+      },
+      "role": "img",
+      "tag": "svg"
+    },
     {
       "index": 40,
       "label": "Reply",
@@ -233,7 +281,7 @@
         "height": 18,
         "width": 18,
         "x": 123,
-        "y": 570
+        "y": -206
       },
       "role": "img",
       "tag": "svg"
@@ -246,7 +294,7 @@
         "height": 18,
         "width": 18,
         "x": 165,
-        "y": 570
+        "y": -206
       },
       "role": "img",
       "tag": "svg"
@@ -259,7 +307,7 @@
         "height": 18,
         "width": 18,
         "x": 208,
-        "y": 571
+        "y": -205
       },
       "role": "img",
       "tag": "svg"
@@ -272,12 +320,24 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 619
+        "y": -157
       },
       "role": "img",
       "tag": "svg"
     },
-    "[Circular]",
+    {
+      "index": 46,
+      "label": "Like",
+      "parentText": "Like28",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": 7
+      },
+      "role": "img",
+      "tag": "svg"
+    },
     {
       "index": 47,
       "label": "Reply",
@@ -286,7 +346,7 @@
         "height": 18,
         "width": 18,
         "x": 123,
-        "y": 783
+        "y": 7
       },
       "role": "img",
       "tag": "svg"
@@ -299,7 +359,7 @@
         "height": 18,
         "width": 18,
         "x": 165,
-        "y": 783
+        "y": 7
       },
       "role": "img",
       "tag": "svg"
@@ -312,7 +372,7 @@
         "height": 18,
         "width": 18,
         "x": 208,
-        "y": 783
+        "y": 7
       },
       "role": "img",
       "tag": "svg"
@@ -325,12 +385,24 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 832
+        "y": 56
       },
       "role": "img",
       "tag": "svg"
     },
-    "[Circular]",
+    {
+      "index": 54,
+      "label": "Like",
+      "parentText": "Like2",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 77,
+        "y": 272
+      },
+      "role": "img",
+      "tag": "svg"
+    },
     {
       "index": 55,
       "label": "Reply",
@@ -339,7 +411,7 @@
         "height": 18,
         "width": 18,
         "x": 132,
-        "y": 1048
+        "y": 272
       },
       "role": "img",
       "tag": "svg"
@@ -352,7 +424,7 @@
         "height": 18,
         "width": 18,
         "x": 186,
-        "y": 1048
+        "y": 272
       },
       "role": "img",
       "tag": "svg"
@@ -365,12 +437,24 @@
         "height": 18,
         "width": 18,
         "x": 241,
-        "y": 1049
+        "y": 273
       },
       "role": "img",
       "tag": "svg"
     },
-    "[Circular]",
+    {
+      "index": 58,
+      "label": "Like",
+      "parentText": "Like15",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": 319
+      },
+      "role": "img",
+      "tag": "svg"
+    },
     {
       "index": 59,
       "label": "Reply",
@@ -379,7 +463,7 @@
         "height": 18,
         "width": 18,
         "x": 123,
-        "y": 1095
+        "y": 319
       },
       "role": "img",
       "tag": "svg"
@@ -392,7 +476,7 @@
         "height": 18,
         "width": 18,
         "x": 165,
-        "y": 1095
+        "y": 319
       },
       "role": "img",
       "tag": "svg"
@@ -405,7 +489,7 @@
         "height": 18,
         "width": 18,
         "x": 208,
-        "y": 1096
+        "y": 320
       },
       "role": "img",
       "tag": "svg"
@@ -418,12 +502,24 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 1144
+        "y": 368
       },
       "role": "img",
       "tag": "svg"
     },
-    "[Circular]",
+    {
+      "index": 65,
+      "label": "Like",
+      "parentText": "Like13",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": 448
+      },
+      "role": "img",
+      "tag": "svg"
+    },
     {
       "index": 66,
       "label": "Reply",
@@ -432,7 +528,7 @@
         "height": 18,
         "width": 18,
         "x": 123,
-        "y": 1224
+        "y": 448
       },
       "role": "img",
       "tag": "svg"
@@ -445,7 +541,7 @@
         "height": 18,
         "width": 18,
         "x": 165,
-        "y": 1224
+        "y": 448
       },
       "role": "img",
       "tag": "svg"
@@ -458,7 +554,7 @@
         "height": 18,
         "width": 18,
         "x": 208,
-        "y": 1224
+        "y": 448
       },
       "role": "img",
       "tag": "svg"
@@ -471,7 +567,7 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 1273
+        "y": 497
       },
       "role": "img",
       "tag": "svg"
@@ -484,7 +580,7 @@
         "height": 19,
         "width": 19,
         "x": 60,
-        "y": 1331
+        "y": 555
       },
       "role": "img",
       "tag": "svg"
@@ -497,7 +593,7 @@
         "height": 18,
         "width": 18,
         "x": 115,
-        "y": 1331
+        "y": 555
       },
       "role": "img",
       "tag": "svg"
@@ -510,7 +606,7 @@
         "height": 18,
         "width": 18,
         "x": 157,
-        "y": 1331
+        "y": 555
       },
       "role": "img",
       "tag": "svg"
@@ -523,7 +619,7 @@
         "height": 18,
         "width": 18,
         "x": 200,
-        "y": 1332
+        "y": 556
       },
       "role": "img",
       "tag": "svg"
@@ -536,7 +632,7 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 1380
+        "y": 604
       },
       "role": "img",
       "tag": "svg"
@@ -549,7 +645,7 @@
         "height": 19,
         "width": 19,
         "x": 60,
-        "y": 1460
+        "y": 684
       },
       "role": "img",
       "tag": "svg"
@@ -562,7 +658,7 @@
         "height": 18,
         "width": 18,
         "x": 115,
-        "y": 1460
+        "y": 684
       },
       "role": "img",
       "tag": "svg"
@@ -575,7 +671,7 @@
         "height": 18,
         "width": 18,
         "x": 157,
-        "y": 1460
+        "y": 684
       },
       "role": "img",
       "tag": "svg"
@@ -588,7 +684,7 @@
         "height": 18,
         "width": 18,
         "x": 200,
-        "y": 1460
+        "y": 684
       },
       "role": "img",
       "tag": "svg"
@@ -601,7 +697,7 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 1509
+        "y": 733
       },
       "role": "img",
       "tag": "svg"
@@ -614,7 +710,7 @@
         "height": 19,
         "width": 19,
         "x": 60,
-        "y": 1567
+        "y": 791
       },
       "role": "img",
       "tag": "svg"
@@ -627,7 +723,7 @@
         "height": 18,
         "width": 18,
         "x": 115,
-        "y": 1567
+        "y": 791
       },
       "role": "img",
       "tag": "svg"
@@ -640,7 +736,7 @@
         "height": 18,
         "width": 18,
         "x": 157,
-        "y": 1567
+        "y": 791
       },
       "role": "img",
       "tag": "svg"
@@ -653,7 +749,7 @@
         "height": 18,
         "width": 18,
         "x": 200,
-        "y": 1568
+        "y": 792
       },
       "role": "img",
       "tag": "svg"
@@ -666,7 +762,7 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 1616
+        "y": 840
       },
       "role": "img",
       "tag": "svg"
@@ -679,7 +775,7 @@
         "height": 19,
         "width": 19,
         "x": 60,
-        "y": 1675
+        "y": 899
       },
       "role": "img",
       "tag": "svg"
@@ -692,7 +788,7 @@
         "height": 18,
         "width": 18,
         "x": 115,
-        "y": 1675
+        "y": 899
       },
       "role": "img",
       "tag": "svg"
@@ -705,7 +801,7 @@
         "height": 18,
         "width": 18,
         "x": 157,
-        "y": 1675
+        "y": 899
       },
       "role": "img",
       "tag": "svg"
@@ -718,7 +814,7 @@
         "height": 18,
         "width": 18,
         "x": 200,
-        "y": 1675
+        "y": 899
       },
       "role": "img",
       "tag": "svg"
@@ -731,7 +827,7 @@
         "height": 20,
         "width": 20,
         "x": 567,
-        "y": 1724
+        "y": 948
       },
       "role": "img",
       "tag": "svg"
@@ -744,7 +840,7 @@
         "height": 19,
         "width": 19,
         "x": 60,
-        "y": 1782
+        "y": 1006
       },
       "role": "img",
       "tag": "svg"
@@ -757,7 +853,7 @@
         "height": 18,
         "width": 18,
         "x": 115,
-        "y": 1782
+        "y": 1006
       },
       "role": "img",
       "tag": "svg"
@@ -770,7 +866,7 @@
         "height": 18,
         "width": 18,
         "x": 157,
-        "y": 1782
+        "y": 1006
       },
       "role": "img",
       "tag": "svg"
@@ -783,13 +879,220 @@
         "height": 18,
         "width": 18,
         "x": 200,
-        "y": 1783
+        "y": 1007
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 106,
+      "label": "More",
+      "parentText": "More",
+      "rect": {
+        "height": 20,
+        "width": 20,
+        "x": 567,
+        "y": 1055
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 107,
+      "label": "Like",
+      "parentText": "Like1",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": 1114
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 108,
+      "label": "Reply",
+      "parentText": "Reply",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 115,
+        "y": 1114
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 109,
+      "label": "Repost",
+      "parentText": "Repost",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 157,
+        "y": 1114
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 110,
+      "label": "Share",
+      "parentText": "Share",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 200,
+        "y": 1114
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 113,
+      "label": "More",
+      "parentText": "More",
+      "rect": {
+        "height": 20,
+        "width": 20,
+        "x": 567,
+        "y": 1163
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 114,
+      "label": "Like",
+      "parentText": "Like",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": 1221
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 115,
+      "label": "Reply",
+      "parentText": "Reply",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 103,
+        "y": 1221
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 116,
+      "label": "Repost",
+      "parentText": "Repost",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 145,
+        "y": 1221
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 117,
+      "label": "Share",
+      "parentText": "Share",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 188,
+        "y": 1222
       },
       "role": "img",
       "tag": "svg"
     }
   ],
   "contractCandidates": {
+    "actionCounts": {
+      "likes": {
+        "actionLabel": "Like",
+        "actionRect": {
+          "height": 19,
+          "width": 19,
+          "x": 12,
+          "y": -565
+        },
+        "confidence": "candidate_adjacent_between_actions",
+        "countRect": {
+          "height": 18,
+          "width": 29,
+          "x": 35,
+          "y": -565
+        },
+        "nextActionLabel": "Reply",
+        "nextActionRect": {
+          "height": 18,
+          "width": 18,
+          "x": 87,
+          "y": -565
+        },
+        "raw": "2.3K",
+        "value": 2300
+      },
+      "replies": {
+        "actionLabel": "Reply",
+        "actionRect": {
+          "height": 18,
+          "width": 18,
+          "x": 87,
+          "y": -565
+        },
+        "confidence": "candidate_adjacent_between_actions",
+        "countRect": {
+          "height": 18,
+          "width": 16,
+          "x": 109,
+          "y": -565
+        },
+        "nextActionLabel": "Repost",
+        "nextActionRect": {
+          "height": 18,
+          "width": 18,
+          "x": 150,
+          "y": -565
+        },
+        "raw": "14",
+        "value": 14
+      },
+      "reposts": {
+        "actionLabel": "Repost",
+        "actionRect": {
+          "height": 18,
+          "width": 18,
+          "x": 150,
+          "y": -565
+        },
+        "confidence": "candidate_adjacent_between_actions",
+        "countRect": {
+          "height": 18,
+          "width": 16,
+          "x": 172,
+          "y": -565
+        },
+        "nextActionLabel": "Share",
+        "nextActionRect": {
+          "height": 18,
+          "width": 18,
+          "x": 212,
+          "y": -565
+        },
+        "raw": "36",
+        "value": 36
+      }
+    },
     "likes": {
       "actionLabels": [
         {
@@ -800,7 +1103,7 @@
             "height": 19,
             "width": 19,
             "x": 12,
-            "y": 211
+            "y": -565
           },
           "role": "img",
           "tag": "svg"
@@ -808,12 +1111,12 @@
         {
           "index": 25,
           "label": "Like",
-          "parentText": "Like110",
+          "parentText": "Like111",
           "rect": {
             "height": 19,
             "width": 19,
             "x": 60,
-            "y": 368
+            "y": -408
           },
           "role": "img",
           "tag": "svg"
@@ -826,7 +1129,7 @@
             "height": 19,
             "width": 19,
             "x": 60,
-            "y": 463
+            "y": -313
           },
           "role": "img",
           "tag": "svg"
@@ -839,7 +1142,7 @@
             "height": 19,
             "width": 19,
             "x": 60,
-            "y": 570
+            "y": -206
           },
           "role": "img",
           "tag": "svg"
@@ -847,12 +1150,12 @@
         {
           "index": 46,
           "label": "Like",
-          "parentText": "Like26",
+          "parentText": "Like28",
           "rect": {
             "height": 19,
             "width": 19,
             "x": 60,
-            "y": 783
+            "y": 7
           },
           "role": "img",
           "tag": "svg"
@@ -865,7 +1168,7 @@
             "height": 19,
             "width": 19,
             "x": 77,
-            "y": 1048
+            "y": 272
           },
           "role": "img",
           "tag": "svg"
@@ -878,7 +1181,7 @@
             "height": 19,
             "width": 19,
             "x": 60,
-            "y": 1095
+            "y": 319
           },
           "role": "img",
           "tag": "svg"
@@ -886,18 +1189,43 @@
         {
           "index": 65,
           "label": "Like",
-          "parentText": "Like12",
+          "parentText": "Like13",
           "rect": {
             "height": 19,
             "width": 19,
             "x": 60,
-            "y": 1224
+            "y": 448
           },
           "role": "img",
           "tag": "svg"
         }
       ],
-      "disposition": "omit_until_adjacent_action_counts_are_proven"
+      "candidate": {
+        "actionLabel": "Like",
+        "actionRect": {
+          "height": 19,
+          "width": 19,
+          "x": 12,
+          "y": -565
+        },
+        "confidence": "candidate_adjacent_between_actions",
+        "countRect": {
+          "height": 18,
+          "width": 29,
+          "x": 35,
+          "y": -565
+        },
+        "nextActionLabel": "Reply",
+        "nextActionRect": {
+          "height": 18,
+          "width": 18,
+          "x": 87,
+          "y": -565
+        },
+        "raw": "2.3K",
+        "value": 2300
+      },
+      "disposition": "candidate_adjacent_action_count_needs_fixture_validation"
     },
     "metadataPrimary": {
       "authorHandle": "die_workwear",
@@ -919,7 +1247,7 @@
         "height": 84,
         "width": 575,
         "x": 12,
-        "y": 112
+        "y": -664
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -950,7 +1278,7 @@
     "No role=article hooks in rendered Threads permalink DOM.",
     "og:description contains exact post body text for this original permalink.",
     "Rendered body text exists as dir=auto text, but browser extraction may normalize/degrade characters.",
-    "Like action label exists, but count appears as adjacent text; omit likes until adjacency is proven across fixtures."
+    "Like count candidate exists between Like and Reply action icons; validate across low/zero and abbreviated/high-like fixtures before promotion."
   ],
   "renderedTextCandidates": [
     {
@@ -960,7 +1288,7 @@
         "height": 21,
         "width": 99,
         "x": 60,
-        "y": 71
+        "y": -705
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -973,7 +1301,7 @@
         "height": 14,
         "width": 24,
         "x": 165,
-        "y": 74
+        "y": -702
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -987,7 +1315,7 @@
         "height": 18,
         "width": 29,
         "x": 35,
-        "y": 211
+        "y": -565
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1000,7 +1328,7 @@
         "height": 18,
         "width": 16,
         "x": 109,
-        "y": 211
+        "y": -565
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1013,7 +1341,7 @@
         "height": 18,
         "width": 16,
         "x": 172,
-        "y": 211
+        "y": -565
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1026,11 +1354,11 @@
         "height": 18,
         "width": 16,
         "x": 234,
-        "y": 211
+        "y": -565
       },
       "sourceLinkAncestor": false,
       "tag": "span",
-      "text": "32"
+      "text": "33"
     },
     {
       "hrefAncestor": null,
@@ -1039,7 +1367,7 @@
         "height": 21,
         "width": 26,
         "x": 32,
-        "y": 259
+        "y": -517
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1052,7 +1380,7 @@
         "height": 15,
         "width": 103,
         "x": 484,
-        "y": 262
+        "y": -514
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1078,7 +1406,7 @@
         "height": 21,
         "width": 92,
         "x": 60,
-        "y": 308
+        "y": -468
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1091,11 +1419,11 @@
         "height": 14,
         "width": 24,
         "x": 158,
-        "y": 312
+        "y": -464
       },
       "sourceLinkAncestor": false,
       "tag": "span",
-      "text": "2h"
+      "text": "3h"
     },
     {
       "hrefAncestor": null,
@@ -1104,7 +1432,7 @@
         "height": 21,
         "width": 527,
         "x": 60,
-        "y": 332
+        "y": -444
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1117,11 +1445,11 @@
         "height": 18,
         "width": 25,
         "x": 83,
-        "y": 368
+        "y": -408
       },
       "sourceLinkAncestor": false,
       "tag": "span",
-      "text": "110"
+      "text": "111"
     },
     {
       "hrefAncestor": null,
@@ -1130,7 +1458,7 @@
         "height": 18,
         "width": 8,
         "x": 153,
-        "y": 368
+        "y": -408
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1143,7 +1471,7 @@
         "height": 21,
         "width": 83,
         "x": 60,
-        "y": 403
+        "y": -373
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1156,7 +1484,7 @@
         "height": 14,
         "width": 24,
         "x": 149,
-        "y": 407
+        "y": -369
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1169,7 +1497,7 @@
         "height": 21,
         "width": 527,
         "x": 60,
-        "y": 427
+        "y": -349
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1182,7 +1510,7 @@
         "height": 18,
         "width": 8,
         "x": 83,
-        "y": 463
+        "y": -313
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1195,7 +1523,7 @@
         "height": 21,
         "width": 83,
         "x": 60,
-        "y": 511
+        "y": -265
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1208,11 +1536,11 @@
         "height": 14,
         "width": 24,
         "x": 149,
-        "y": 514
+        "y": -262
       },
       "sourceLinkAncestor": false,
       "tag": "span",
-      "text": "2h"
+      "text": "3h"
     },
     {
       "hrefAncestor": null,
@@ -1221,7 +1549,7 @@
         "height": 21,
         "width": 527,
         "x": 60,
-        "y": 535
+        "y": -241
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1234,7 +1562,7 @@
         "height": 18,
         "width": 16,
         "x": 83,
-        "y": 570
+        "y": -206
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1247,7 +1575,7 @@
         "height": 21,
         "width": 84,
         "x": 60,
-        "y": 618
+        "y": -158
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1260,7 +1588,7 @@
         "height": 14,
         "width": 24,
         "x": 150,
-        "y": 622
+        "y": -154
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1273,7 +1601,7 @@
         "height": 126,
         "width": 527,
         "x": 60,
-        "y": 642
+        "y": -134
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1286,11 +1614,11 @@
         "height": 18,
         "width": 16,
         "x": 83,
-        "y": 783
+        "y": 7
       },
       "sourceLinkAncestor": false,
       "tag": "span",
-      "text": "26"
+      "text": "28"
     },
     {
       "hrefAncestor": "/@njr354151",
@@ -1299,7 +1627,7 @@
         "height": 21,
         "width": 71,
         "x": 60,
-        "y": 831
+        "y": 55
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1312,7 +1640,7 @@
         "height": 14,
         "width": 24,
         "x": 137,
-        "y": 834
+        "y": 58
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1325,7 +1653,7 @@
         "height": 21,
         "width": 527,
         "x": 60,
-        "y": 855
+        "y": 79
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1338,7 +1666,7 @@
         "height": 21,
         "width": 178,
         "x": 107,
-        "y": 905
+        "y": 129
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1351,7 +1679,7 @@
         "height": 14,
         "width": 24,
         "x": 291,
-        "y": 908
+        "y": 132
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1364,7 +1692,7 @@
         "height": 105,
         "width": 493,
         "x": 77,
-        "y": 931
+        "y": 155
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1377,7 +1705,7 @@
         "height": 18,
         "width": 8,
         "x": 100,
-        "y": 1048
+        "y": 272
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1390,7 +1718,7 @@
         "height": 18,
         "width": 8,
         "x": 154,
-        "y": 1048
+        "y": 272
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1403,7 +1731,7 @@
         "height": 18,
         "width": 8,
         "x": 208,
-        "y": 1048
+        "y": 272
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1416,7 +1744,7 @@
         "height": 18,
         "width": 16,
         "x": 83,
-        "y": 1095
+        "y": 319
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1429,7 +1757,7 @@
         "height": 21,
         "width": 185,
         "x": 60,
-        "y": 1143
+        "y": 367
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1442,7 +1770,7 @@
         "height": 14,
         "width": 24,
         "x": 251,
-        "y": 1147
+        "y": 371
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1455,7 +1783,7 @@
         "height": 42,
         "width": 527,
         "x": 60,
-        "y": 1167
+        "y": 391
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1468,11 +1796,11 @@
         "height": 18,
         "width": 16,
         "x": 83,
-        "y": 1224
+        "y": 448
       },
       "sourceLinkAncestor": false,
       "tag": "span",
-      "text": "12"
+      "text": "13"
     },
     {
       "hrefAncestor": "/@foxglove_southerngardens",
@@ -1481,7 +1809,7 @@
         "height": 21,
         "width": 191,
         "x": 60,
-        "y": 1272
+        "y": 496
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1494,7 +1822,7 @@
         "height": 14,
         "width": 24,
         "x": 257,
-        "y": 1275
+        "y": 499
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1507,7 +1835,7 @@
         "height": 21,
         "width": 527,
         "x": 60,
-        "y": 1296
+        "y": 520
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1520,7 +1848,7 @@
         "height": 18,
         "width": 8,
         "x": 83,
-        "y": 1331
+        "y": 555
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1533,7 +1861,7 @@
         "height": 21,
         "width": 119,
         "x": 60,
-        "y": 1379
+        "y": 603
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1546,7 +1874,7 @@
         "height": 14,
         "width": 24,
         "x": 185,
-        "y": 1383
+        "y": 607
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1559,7 +1887,7 @@
         "height": 42,
         "width": 527,
         "x": 60,
-        "y": 1403
+        "y": 627
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1572,7 +1900,7 @@
         "height": 18,
         "width": 8,
         "x": 83,
-        "y": 1460
+        "y": 684
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1585,7 +1913,7 @@
         "height": 21,
         "width": 79,
         "x": 60,
-        "y": 1508
+        "y": 732
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1598,7 +1926,7 @@
         "height": 14,
         "width": 24,
         "x": 145,
-        "y": 1511
+        "y": 735
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1611,7 +1939,7 @@
         "height": 21,
         "width": 527,
         "x": 60,
-        "y": 1532
+        "y": 756
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1624,7 +1952,7 @@
         "height": 18,
         "width": 8,
         "x": 83,
-        "y": 1567
+        "y": 791
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1637,7 +1965,7 @@
         "height": 21,
         "width": 63,
         "x": 60,
-        "y": 1615
+        "y": 839
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1650,7 +1978,7 @@
         "height": 14,
         "width": 24,
         "x": 129,
-        "y": 1619
+        "y": 843
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1663,7 +1991,7 @@
         "height": 21,
         "width": 527,
         "x": 60,
-        "y": 1639
+        "y": 863
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1676,7 +2004,7 @@
         "height": 18,
         "width": 8,
         "x": 83,
-        "y": 1675
+        "y": 899
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1689,7 +2017,7 @@
         "height": 21,
         "width": 85,
         "x": 60,
-        "y": 1723
+        "y": 947
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1702,7 +2030,7 @@
         "height": 14,
         "width": 24,
         "x": 151,
-        "y": 1726
+        "y": 950
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1715,7 +2043,7 @@
         "height": 21,
         "width": 527,
         "x": 60,
-        "y": 1747
+        "y": 971
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1728,20 +2056,111 @@
         "height": 18,
         "width": 8,
         "x": 83,
-        "y": 1782
+        "y": 1006
       },
       "sourceLinkAncestor": false,
       "tag": "span",
       "text": "1"
     },
     {
-      "hrefAncestor": null,
+      "hrefAncestor": "/@regular_enrique",
       "index": 83,
+      "rect": {
+        "height": 21,
+        "width": 113,
+        "x": 60,
+        "y": 1054
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "regular_enrique"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 84,
+      "rect": {
+        "height": 14,
+        "width": 24,
+        "x": 179,
+        "y": 1058
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "3h"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 85,
+      "rect": {
+        "height": 21,
+        "width": 527,
+        "x": 60,
+        "y": 1078
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "was that their actual name"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 86,
+      "rect": {
+        "height": 18,
+        "width": 8,
+        "x": 83,
+        "y": 1114
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "1"
+    },
+    {
+      "hrefAncestor": "/@pixievalkyrie",
+      "index": 89,
+      "rect": {
+        "height": 21,
+        "width": 90,
+        "x": 60,
+        "y": 1162
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "pixievalkyrie"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 90,
+      "rect": {
+        "height": 14,
+        "width": 24,
+        "x": 156,
+        "y": 1165
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "1h"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 91,
+      "rect": {
+        "height": 21,
+        "width": 527,
+        "x": 60,
+        "y": 1186
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "You had to be that Guy"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 95,
       "rect": {
         "height": 17,
         "width": 44,
         "x": 41,
-        "y": 2125
+        "y": 1349
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1749,12 +2168,12 @@
     },
     {
       "hrefAncestor": null,
-      "index": 84,
+      "index": 96,
       "rect": {
         "height": 17,
         "width": 84,
         "x": 97,
-        "y": 2125
+        "y": 1349
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1762,12 +2181,12 @@
     },
     {
       "hrefAncestor": null,
-      "index": 85,
+      "index": 97,
       "rect": {
         "height": 17,
         "width": 78,
         "x": 193,
-        "y": 2125
+        "y": 1349
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1775,12 +2194,12 @@
     },
     {
       "hrefAncestor": null,
-      "index": 86,
+      "index": 98,
       "rect": {
         "height": 17,
         "width": 180,
         "x": 284,
-        "y": 2125
+        "y": 1349
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1788,12 +2207,12 @@
     },
     {
       "hrefAncestor": null,
-      "index": 87,
+      "index": 99,
       "rect": {
         "height": 17,
         "width": 83,
         "x": 475,
-        "y": 2125
+        "y": 1349
       },
       "sourceLinkAncestor": false,
       "tag": "span",
@@ -1801,7 +2220,7 @@
     },
     {
       "hrefAncestor": null,
-      "index": 88,
+      "index": 100,
       "rect": {
         "height": 0,
         "width": 0,
@@ -1830,7 +2249,7 @@
         "height": 18,
         "width": 24,
         "x": 165,
-        "y": 73
+        "y": -703
       },
       "role": "link",
       "text": "3h"
@@ -1845,7 +2264,7 @@
         "height": 21,
         "width": 24,
         "x": 165,
-        "y": 71
+        "y": -705
       },
       "text": "3h"
     },
@@ -1857,9 +2276,9 @@
         "height": 21,
         "width": 24,
         "x": 158,
-        "y": 309
+        "y": -467
       },
-      "text": "2h"
+      "text": "3h"
     },
     {
       "datetime": "2026-06-21T23:47:09.000Z",
@@ -1869,7 +2288,7 @@
         "height": 21,
         "width": 24,
         "x": 149,
-        "y": 404
+        "y": -372
       },
       "text": "1h"
     },
@@ -1881,9 +2300,9 @@
         "height": 21,
         "width": 24,
         "x": 149,
-        "y": 511
+        "y": -265
       },
-      "text": "2h"
+      "text": "3h"
     },
     {
       "datetime": "2026-06-21T23:21:13.000Z",
@@ -1893,7 +2312,7 @@
         "height": 21,
         "width": 24,
         "x": 150,
-        "y": 619
+        "y": -157
       },
       "text": "2h"
     },
@@ -1905,7 +2324,7 @@
         "height": 21,
         "width": 24,
         "x": 137,
-        "y": 831
+        "y": 55
       },
       "text": "2h"
     },
@@ -1917,7 +2336,7 @@
         "height": 21,
         "width": 24,
         "x": 291,
-        "y": 905
+        "y": 129
       },
       "text": "3h"
     },
@@ -1929,7 +2348,7 @@
         "height": 21,
         "width": 24,
         "x": 251,
-        "y": 1144
+        "y": 368
       },
       "text": "1h"
     },
@@ -1941,7 +2360,7 @@
         "height": 21,
         "width": 24,
         "x": 257,
-        "y": 1272
+        "y": 496
       },
       "text": "2h"
     },
@@ -1953,7 +2372,7 @@
         "height": 21,
         "width": 24,
         "x": 185,
-        "y": 1380
+        "y": 604
       },
       "text": "3h"
     },
@@ -1965,7 +2384,7 @@
         "height": 21,
         "width": 24,
         "x": 145,
-        "y": 1508
+        "y": 732
       },
       "text": "2h"
     },
@@ -1977,7 +2396,7 @@
         "height": 21,
         "width": 24,
         "x": 129,
-        "y": 1616
+        "y": 840
       },
       "text": "1h"
     },
@@ -1989,7 +2408,31 @@
         "height": 21,
         "width": 24,
         "x": 151,
-        "y": 1723
+        "y": 947
+      },
+      "text": "1h"
+    },
+    {
+      "datetime": "2026-06-21T22:29:57.000Z",
+      "index": 13,
+      "nearestSourceLinkHref": "https://www.threads.com/@regular_enrique/post/DZ3V_hAEUKY",
+      "rect": {
+        "height": 21,
+        "width": 24,
+        "x": 179,
+        "y": 1055
+      },
+      "text": "3h"
+    },
+    {
+      "datetime": "2026-06-21T23:35:46.000Z",
+      "index": 14,
+      "nearestSourceLinkHref": "https://www.threads.com/@pixievalkyrie/post/DZ3dhlFD0z_",
+      "rect": {
+        "height": 21,
+        "width": 24,
+        "x": 156,
+        "y": 1162
       },
       "text": "1h"
     }

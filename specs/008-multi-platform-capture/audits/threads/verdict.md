@@ -45,7 +45,7 @@ Current evidence supports this contract for an authenticated original Threads pe
 | Display name | `og:title` pattern `{displayName} (@handle) on Threads` | High for original permalink |
 | Text | `meta[property="og:description"]` | High for original permalink |
 | Posted date | `time[datetime]` whose nearest permalink link contains `sourceId` | Medium; needs more scenarios |
-| Likes | Omit | High until action-count adjacency is proven |
+| Likes | Candidate: number between Like and Reply action icons | Medium for authenticated original fixture; validate low/zero and abbreviated/high-like cases before promotion |
 | Rendered body | `[dir="auto"]` text candidate | Supporting only; browser extraction can normalize/degrade text |
 
 The prior generic Probe A is useful as negative evidence for X-like selectors, but it is not the proposed Threads adapter contract.
@@ -69,7 +69,7 @@ The prior generic Probe A is useful as negative evidence for X-like selectors, b
 - `https://www.threads.com/@hormozi/post/DZ3Ly0-larF` rendered without a login gate in the browser.
 - The current probe extracted URL identity correctly but did not find a focal post root through the adapter selectors.
 - Supporting metadata exposed canonical URL, `og:title`, `og:description`, and `time[datetime]`; the rendered DOM exposed a `role="region"` / `aria-label="Column body"` column, permalink/time links, and action labels.
-- Likes were visible as a Like icon plus adjacent count, not as a reliable `likes` label; keep likes omitted.
+- Likes were visible as a Like icon plus adjacent count. Treat the number between Like and Reply as a candidate likes selector, but keep likes omitted in the adapter until low/zero and abbreviated/high-like fixtures confirm the rule.
 - Do not promote or enable Threads from this evidence. A selector update needs another fixture pass before it can be trusted.
 
 2026-06-21 authenticated original fixture notes:
@@ -78,5 +78,6 @@ The prior generic Probe A is useful as negative evidence for X-like selectors, b
 - Direct reload of the permalink produced canonical metadata for the post and stable URL/time links for `die_workwear` and `DZ3U4c5j30i`.
 - Generic Probe A still found no configured post root and captured the handle text (`die_workwear`) instead of the post body, confirming those root selectors are not the Threads contract.
 - Threads contract-discovery probe found a high-confidence original-permalink candidate using canonical URL, URL identity, `og:title`, `og:description`, and source-linked `time[datetime]`.
+- The same probe found an action-row count candidate: Like icon -> `2.3K` -> Reply icon, parsed as `2300` likes.
 - Supporting metadata exposed the correct `og:title`, `og:description`, `og:url`, and `time[datetime]`; the rendered DOM still did not expose `article`, `role="article"`, or `data-testid` hooks.
 - This confirms the blocker is not only a logged-out/public rendering issue; it also establishes metadata as the current primary candidate for original Threads permalinks.
