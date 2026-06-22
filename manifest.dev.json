@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Quotewise Quote Capture - Dev",
   "version": "1.6.2",
-  "description": "Capture quotes from Twitter/X and add them to Quotewise with proper attribution",
+  "description": "Save quotes from X, Threads, Bluesky & Substack Notes to your Quotewise library — attributed, sourced, duplicate-checked.",
   "permissions": [
     "storage",
     "identity",
