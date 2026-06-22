@@ -15,9 +15,15 @@ Status: ✅ ready · ⚙️ needs an asset/decision · ⛔ blocked elsewhere
 **Summary** ✅ (132-char limit; this is 121) — from `manifest.prod.json` `description`:
 > Save quotes from X, Threads, Bluesky & Substack Notes to your Quotewise library — attributed, sourced, duplicate-checked.
 
-**Category** ⚙️ — recommend **Productivity** (primary). The core action is saving/organizing
-content into a library, which fits Productivity better than Social/Communication. Alternate:
-**Tools**. Pick from the Dashboard dropdown (it's authoritative); CWS allows one category.
+**Category** ✅ — **Workflow & Planning** (recommended), within the *Productivity* group.
+The dropdown groups categories under three headers; *Productivity* is a header, **not** a
+selectable option. A capture-into-a-curated-library tool is essentially a quote clipper — a
+collect/organize workflow — so Workflow & Planning fits best; **Tools** is an equally
+acceptable generalist alternate. Not *Social Networking* — it captures *from* social media,
+it isn't a social tool. Full dropdown for reference:
+- **Productivity:** Communication · Developer Tools · Education · Tools · Workflow & Planning
+- **Lifestyle:** Art & Design · Entertainment · Games · Household · Just for Fun · News & Weather · Shopping · Social Networking · Travel · Well-being
+- **Make Chrome Yours:** Accessibility · Functionality & UI · Privacy & Security
 
 **Language** ✅ — **English**. One listing covers everyone; you do NOT need a separate
 extension per supported platform or per language. The four supported *platforms*
@@ -88,14 +94,13 @@ Quotewise Quote Capture is a focused tool. It captures, attributes, and saves. I
 
 ## Graphic assets
 
-**Store icon** ⚙️ — 128×128 PNG. Per [guidelines](https://developer.chrome.com/docs/webstore/images#icons):
-the artwork must be **96×96 centered, with 16px transparent padding on every side**; alpha is
-expected (no-alpha images get auto-framed with 12px rounded corners).
-- Best source master: `../quotewise/static/logos/quotewise_2024px_square.png` (2024px square),
-  or `../quotewise/static/android-chrome-512x512.png`, or the SVG
-  `../quotewise/static/images/quotewise/SVG/Icon Lite.svg`.
-- Action: generate a store-specific 128×128 with the 96/16 padding. The in-product
-  `public/icons/icon128.png` is toolbar-tuned (likely full-bleed) — don't reuse it directly.
+**Store icon** ✅ (decided — revisit if it looks oversized) — use the existing
+`public/icons/icon128.png` (128×128, alpha). Measured art box ~92×114 (padding 18px L/R,
+7px T/B); it's vertically taller than the guideline's 96×96 + 16px-uniform, but the logo's
+center mass sits within the 96×96 safe area, so it reads cleanly. Guideline:
+[here](https://developer.chrome.com/docs/webstore/images#icons).
+- If we later want guideline-perfect, regenerate a 96-in-128 padded version from the master
+  `../quotewise/static/logos/quotewise_2024px_square.png` (or SVG `Icon Lite.svg`).
 
 **Screenshots** ⚙️ (≥1 required, up to 5) — **1280×800 or 640×400**, full-bleed (square corners,
 no padding), JPEG or 24-bit PNG, **no alpha**. Action: capture the overlay on a real post for
@@ -133,9 +138,9 @@ disclose public publication + AWS sub-processors + curation).
 | Title | ✅ |
 | Summary | ✅ |
 | Description | ✅ |
-| Category | ⚙️ pick Productivity |
+| Category | ✅ Workflow & Planning |
 | Language | ✅ English |
-| Store icon 128×128 (96+16 padding) | ⚙️ generate from square master |
+| Store icon 128×128 | ✅ existing icon128.png (revisit if oversized) |
 | Screenshots (≥1, 1280×800) | ⚙️ capture from real session |
 | Small promo tile 440×280 | ⚙️ design |
 | Marquee tile 1400×560 | ⚙️ design (optional) |
