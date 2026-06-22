@@ -88,7 +88,7 @@ export class ThreadsAdapter implements PlatformAdapter<CapturedPostData> {
     const root = sourceLinkedRoot(
       document,
       sourceId,
-      'article, [role="article"], [data-testid*="post" i], [data-testid*="thread" i], [aria-label="Column body" i]',
+      'article, [role="article"], [data-testid*="post" i], [data-testid*="thread" i]',
     ) ||
       firstElementWithHrefContaining(document, sourceId) ||
       document.body;

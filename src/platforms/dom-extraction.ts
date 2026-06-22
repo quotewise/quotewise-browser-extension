@@ -421,6 +421,7 @@ function actionOrMetricText(value: string): boolean {
   return !normalized ||
     /^\d[\d,.]*\s*[KMB]?$/i.test(normalized) ||
     /^(Like|Reply|Repost|Share|More|Follow|Following|View activity|Mark spoiler)$/i.test(normalized) ||
+    /^(?:@)?[a-z0-9._]{2,30}\s+(?:Verified\s+)?\d+[smhdw](?:\s+More)?$/i.test(normalized) ||
     /^Reply to .+\.\.\.$/i.test(normalized) ||
     /^\d{1,2}:\d{2}\s*(AM|PM)?\s*·\s*/i.test(normalized) ||
     /^\d+[smhdw]$/i.test(normalized) ||
