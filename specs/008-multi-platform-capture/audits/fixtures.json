@@ -46,7 +46,7 @@
           "https://www.threads.com/@njr354151/post/DZ3XgPRiPmD"
         ],
         "repost_quote_or_reshare": null,
-        "media": null,
+        "media": "https://www.threads.com/@huyquocc11/post/DZ1dYiKEjeH",
         "long_or_collapsed": null,
         "unavailable_private_login_gated_or_paywalled": null,
         "non_english": null,
@@ -87,6 +87,15 @@
           "probeA": "threads/raw/probe-a/reply-njr354151-dz3xgpripmd-authenticated.json",
           "otherFeatures": "threads/raw/other-features/reply-njr354151-dz3xgpripmd-authenticated.json",
           "contractDiscovery": "threads/raw/contract-discovery/reply-njr354151-dz3xgpripmd-authenticated.json"
+        },
+        {
+          "fixtureClass": "media",
+          "authState": "authenticated",
+          "url": "https://www.threads.com/@huyquocc11/post/DZ1dYiKEjeH",
+          "notes": "Original permalink with media carousel; user described two videos.",
+          "probeA": "threads/raw/probe-a/media-huyquocc11-dz1dyikejeh-authenticated.json",
+          "otherFeatures": "threads/raw/other-features/media-huyquocc11-dz1dyikejeh-authenticated.json",
+          "contractDiscovery": "threads/raw/contract-discovery/media-huyquocc11-dz1dyikejeh-authenticated.json"
         }
       ]
     },

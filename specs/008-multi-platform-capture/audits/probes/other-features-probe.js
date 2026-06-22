@@ -1,6 +1,24 @@
 (() => {
   const text = (value, limit = 200) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit);
   const attrs = (element, names) => Object.fromEntries(names.map((name) => [name, element.getAttribute(name)]).filter(([, value]) => value !== null));
+  const sanitizedHref = (value) => {
+    if (!value) return null;
+    try {
+      const url = new URL(value, location.href);
+      return url.origin === location.origin ? url.pathname : `${url.origin}${url.pathname}`;
+    } catch {
+      return value.split(/[?#]/)[0] || null;
+    }
+  };
+  const rectFor = (element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    };
+  };
   const meta = Array.from(document.querySelectorAll('meta[property], meta[name]')).map((element) => ({
     key: element.getAttribute('property') || element.getAttribute('name'),
     content: text(element.getAttribute('content'), 300)
@@ -41,6 +59,21 @@
     !isViewerProfileNav(entry) &&
     (entry.attrs['data-testid'] || entry.attrs.datetime || /\/(status|post|note|notes|p|profile|@)/.test(entry.attrs.href || ''))
   ).slice(0, 120);
+  const mediaElements = Array.from(document.querySelectorAll('video, img, canvas, [aria-label*="video" i], [aria-label*="play" i]')).map((element, index) => {
+    const entry = {
+      index,
+      tag: element.tagName.toLowerCase(),
+      attrs: attrs(element, ['alt', 'aria-label', 'role']),
+      nearestHref: sanitizedHref(element.closest('a[href]')?.getAttribute('href')),
+      text: text(element.textContent, 120),
+      rect: rectFor(element)
+    };
+    return entry;
+  }).filter((entry) =>
+    !isViewerProfileNav({ attrs: { href: entry.nearestHref }, text: entry.text }) &&
+    !/profile picture$/i.test(entry.attrs.alt || '') &&
+    (entry.rect.width > 0 || entry.rect.height > 0 || entry.attrs['aria-label'])
+  ).slice(0, 80);
   const out = {
     meta: {
       probe: 'other-features',
@@ -53,7 +86,13 @@
     jsonLd,
     hydration,
     accessibleLabels,
-    stableIdentifiers
+    stableIdentifiers,
+    media: {
+      videoCount: document.querySelectorAll('video').length,
+      imageCount: document.querySelectorAll('img').length,
+      canvasCount: document.querySelectorAll('canvas').length,
+      elements: mediaElements
+    }
   };
   console.log(JSON.stringify(out, null, 2));
   return out;
