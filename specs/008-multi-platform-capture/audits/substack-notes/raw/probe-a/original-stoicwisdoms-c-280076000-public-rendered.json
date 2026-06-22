@@ -1,0 +1,35 @@
+{
+  "contract": {
+    "author": {
+      "displayName": "stoicwisdoms",
+      "handle": "stoicwisdoms"
+    },
+    "likesCount": null,
+    "platform": "substack_notes",
+    "platformCode": "SS",
+    "platformData": {
+      "source_id": "c-280076000"
+    },
+    "postedAt": "2026-06-21T10:06:34.370Z",
+    "requiresSelection": false,
+    "sourceId": "c-280076000",
+    "sourceUrl": "https://substack.com/@stoicwisdoms/note/c-280076000",
+    "text": "You will ruin a lot of good things by needing them to last forever. The dinner. The friendship. The version of someone you loved. Some things arrive, give you exactly what they were meant to give, and"
+  },
+  "drift": [],
+  "meta": {
+    "probe": "capture-contract",
+    "uiLang": "en",
+    "url": "https://substack.com/@stoicwisdoms/note/c-280076000",
+    "version": "2026-06-21"
+  },
+  "selectors": {
+    "authorSelector": "a[href*=\"/@\"]",
+    "displaySelector": null,
+    "focalRootFoundBySourceIdLink": true,
+    "likesRaw": null,
+    "likesSelector": null,
+    "rootSelectorCount": 19,
+    "textSelector": "[dir=\"auto\"]"
+  }
+}

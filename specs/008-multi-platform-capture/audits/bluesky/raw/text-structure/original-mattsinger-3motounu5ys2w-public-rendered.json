@@ -1,0 +1,115 @@
+{
+  "focalRoot": {
+    "attrs": {
+      "class": "css-g5y9jx",
+      "data-testid": "postThreadItem-by-mattsinger.bsky.social"
+    },
+    "rect": {
+      "height": 273,
+      "width": 600,
+      "x": 235,
+      "y": 52
+    },
+    "tag": "div",
+    "textLength": 256
+  },
+  "identity": {
+    "handle": "mattsinger.bsky.social",
+    "sourceId": "3motounu5ys2w",
+    "url": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w"
+  },
+  "meta": {
+    "probe": "text-structure",
+    "uiLang": "en",
+    "url": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w",
+    "version": "2026-06-22"
+  },
+  "metadata": {
+    "canonical": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w",
+    "documentTitle": "Post by @mattsinger.bsky.social — Bluesky",
+    "ogDescription": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky.",
+    "ogDescriptionNewlineCount": 0,
+    "ogTitle": "Matt Singer (@mattsinger.bsky.social)",
+    "ogUrl": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w"
+  },
+  "observations": [
+    "Primary text container has no explicit paragraph/newline evidence."
+  ],
+  "platform": "bluesky",
+  "primaryTextContainer": {
+    "attrs": {
+      "class": "css-146c3p1 r-1xnzce8",
+      "dir": "auto"
+    },
+    "innerTextRaw": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky.",
+    "leafBlocks": [],
+    "newlineEvidence": {
+      "brCount": 0,
+      "hasParagraphBreaks": false,
+      "innerTextNewlineCount": 0,
+      "leafBlockCount": 0,
+      "textContentNewlineCount": 0
+    },
+    "normalizedInlineText": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky.",
+    "recommendedText": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky.",
+    "rect": {
+      "height": 66,
+      "width": 568,
+      "x": 251,
+      "y": 122
+    },
+    "tag": "div",
+    "textContentRaw": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky."
+  },
+  "sourceLinks": [
+    {
+      "attrs": {
+        "aria-label": "Likes on this post",
+        "class": "css-g5y9jx r-1loqt21 r-1otgn73",
+        "href": "/profile/mattsinger.bsky.social/post/3motounu5ys2w/liked-by",
+        "role": "link"
+      },
+      "href": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w/liked-by",
+      "rect": {
+        "height": 20,
+        "width": 52,
+        "x": 251,
+        "y": 242
+      },
+      "source": {
+        "handle": "mattsinger.bsky.social",
+        "sourceId": "3motounu5ys2w",
+        "url": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w/liked-by"
+      },
+      "text": "41 likes",
+      "visible": true
+    }
+  ],
+  "textContainers": [
+    {
+      "attrs": {
+        "class": "css-146c3p1 r-1xnzce8",
+        "dir": "auto"
+      },
+      "innerTextRaw": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky.",
+      "leafBlocks": [],
+      "newlineEvidence": {
+        "brCount": 0,
+        "hasParagraphBreaks": false,
+        "innerTextNewlineCount": 0,
+        "leafBlockCount": 0,
+        "textContentNewlineCount": 0
+      },
+      "normalizedInlineText": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky.",
+      "recommendedText": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky.",
+      "rect": {
+        "height": 66,
+        "width": 568,
+        "x": 251,
+        "y": 122
+      },
+      "tag": "div",
+      "textContentRaw": "Happy Father’s Day. I got to watch my kids perform their first duet at a recital and then we came home and watched Raiders of the Lost Ark. I am unbelievably lucky."
+    }
+  ]
+}

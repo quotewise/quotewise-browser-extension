@@ -105,6 +105,7 @@ const mockChrome = {
   alarms: {
     create: jest.fn(),
     clear: jest.fn().mockResolvedValue(true),
+    get: jest.fn().mockResolvedValue(undefined),
     onAlarm: {
       addListener: jest.fn()
     }

@@ -2,11 +2,15 @@ import { debugLog, sendMessageToBackground } from '../../content/common';
 import type { CapturedPostData, ExtensionMessage } from '../../types';
 import { MessageType } from '../../types';
 import {
-  canonicalUrl,
+  bodyTextFromRoot,
+  cleanPermalinkUrl,
   datetimeFrom,
   firstElementWithHrefContaining,
+  metadataCountByLabel,
+  metadataUrl,
   metaContent,
   normalizeHandle,
+  sourceLinkedRoot,
   textFromSelectors,
   visibleLikesFrom,
 } from '../dom-extraction';
@@ -75,34 +79,44 @@ export class SubstackNotesAdapter implements PlatformAdapter<CapturedPostData> {
   }
 
   extractFromDom(urlOverride = window.location.href): CapturedPostData | null {
-    const sourceUrl = canonicalUrl(urlOverride);
-    const sourceId = sourceIdFromUrl(sourceUrl) || sourceIdFromUrl(urlOverride);
+    const browserSourceId = sourceIdFromUrl(urlOverride);
+    const metadataSourceUrl = substackMetadataUrlForSource(browserSourceId);
+    const sourceUrl = metadataSourceUrl || cleanPermalinkUrl(urlOverride);
+    const sourceId = sourceIdFromUrl(sourceUrl) || browserSourceId;
     if (!sourceId) return null;
 
-    const root = firstElementWithHrefContaining(document, sourceId) ||
+    const root = sourceLinkedRoot(document, sourceId, 'article, [role="article"], [aria-label="Note" i], [data-testid*="note" i], [class*="feedItem" i], [class*="note" i]') ||
+      firstElementWithHrefContaining(document, sourceId, 'article, [role="article"], [aria-label="Note" i], [data-testid*="note" i], [class*="feedItem" i], [class*="note" i]') ||
       document.querySelector<HTMLElement>('article, [role="article"], [data-testid*="note" i], [class*="note" i]') ||
       document.body;
 
-    const text = textFromSelectors(root, [
+    const metadataText = metaContent('meta[property="og:description"]', 'meta[name="description"]');
+    const visibleText = textFromSelectors(root, [
       '[data-testid="note-content"]',
+      '.ProseMirror',
+      '.FeedProseMirror',
       '[data-testid*="note" i] [dir="auto"]',
       '.available-content',
       '[dir="auto"]',
       'article',
-    ]) || metaContent('meta[property="og:description"]', 'meta[name="description"]') || '';
+    ]) || bodyTextFromRoot(root, sourceId);
+    const text = metadataText || visibleText;
 
     const handleFromPath = new URL(urlOverride).pathname.match(/\/@([^/]+)/)?.[1];
-    const handleFromDom = root.querySelector<HTMLAnchorElement>('a[href*="/@"]')?.pathname.match(/\/@([^/]+)/)?.[1];
+    const handleFromDom = substackHandleFromSourceLink(sourceId, root);
+    const handleFromTitle = substackAuthorFromTitle().handle;
     const handleFromMeta = metaContent('meta[name="author"]', 'meta[property="article:author"]');
-    const handle = normalizeHandle(handleFromDom || handleFromPath || handleFromMeta);
+    const handle = normalizeHandle(handleFromPath || handleFromDom || handleFromTitle || handleFromMeta);
     if (!text || !handle) return null;
 
-    const displayName = textFromSelectors(root, [
+    const titleAuthor = substackAuthorFromTitle();
+    const displayName = titleAuthor.displayName || textFromSelectors(root, [
       '[data-testid*="author" i]',
       '.byline',
       'h1',
     ]) || handle;
-    const likesCount = visibleLikesFrom(root);
+    const likesCount = metadataCountByLabel('Likes') ?? visibleLikesFrom(root);
+    const repliesCount = metadataCountByLabel('Replies');
 
     return {
       platform: 'substack_notes',
@@ -113,6 +127,7 @@ export class SubstackNotesAdapter implements PlatformAdapter<CapturedPostData> {
       author: {
         handle,
         displayName,
+        profileUrl: `https://substack.com/@${handle}`,
       },
       postedAt: datetimeFrom(root),
       ...(likesCount !== undefined ? { likesCount } : {}),
@@ -120,8 +135,48 @@ export class SubstackNotesAdapter implements PlatformAdapter<CapturedPostData> {
       platformData: {
         source_id: sourceId,
         note_id: sourceId,
+        ...(repliesCount !== undefined ? { reply_count: repliesCount } : {}),
+        ...substackProfileSlug(urlOverride),
         has_media: !!root.querySelector('img, video, audio'),
       },
     };
+  }
+}
+
+function substackMetadataUrlForSource(sourceId: string | null): string | null {
+  const candidates = [
+    metadataUrl('meta[property="og:url"]'),
+    document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href,
+  ].filter((value): value is string => !!value);
+
+  if (!sourceId) {
+    return candidates[0] ? cleanPermalinkUrl(candidates[0]) : null;
+  }
+
+  const match = candidates.find(url => sourceIdFromUrl(url) === sourceId);
+  return match ? cleanPermalinkUrl(match) : null;
+}
+
+function substackHandleFromSourceLink(sourceId: string, root: ParentNode): string | undefined {
+  const sourceLink = Array.from(root.querySelectorAll<HTMLAnchorElement>(`a[href*="${sourceId.replace(/["\\]/g, '\\$&')}"]`))
+    .find(link => /\/@[^/]+\/note\//.test(link.pathname));
+  return normalizeHandle(sourceLink?.pathname.match(/\/@([^/]+)\/note\//)?.[1]);
+}
+
+function substackAuthorFromTitle(): { displayName: string | null; handle: string | undefined } {
+  const title = metaContent('meta[property="og:title"]') || document.title;
+  const match = title.match(/^(.+?)\s+\(@([^)]+)\)/);
+  return {
+    displayName: match?.[1]?.trim() || null,
+    handle: normalizeHandle(match?.[2]),
+  };
+}
+
+function substackProfileSlug(url: string): { author_profile_slug?: string } {
+  try {
+    const slug = new URL(url).pathname.match(/\/profile\/([^/]+)\/note\//)?.[1];
+    return slug ? { author_profile_slug: slug } : {};
+  } catch {
+    return {};
   }
 }

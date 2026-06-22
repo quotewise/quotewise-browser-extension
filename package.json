@@ -1,10 +1,11 @@
 {
   "name": "quotewise-chrome-extension",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Chrome extension for capturing quotes from web sources",
   "scripts": {
     "build": "webpack --mode production",
     "build:dev": "webpack --mode development",
+    "package": "npm run build && node scripts/package.mjs",
     "dev": "webpack --mode development --watch",
     "icons": "node scripts/generate-icons.mjs",
     "bump-version": "node scripts/bump-version.js",

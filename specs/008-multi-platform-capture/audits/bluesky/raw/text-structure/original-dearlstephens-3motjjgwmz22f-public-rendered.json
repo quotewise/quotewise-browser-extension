@@ -1,0 +1,160 @@
+{
+  "focalRoot": {
+    "attrs": {
+      "class": "css-g5y9jx",
+      "data-testid": "postThreadItem-by-dearlstephens.bsky.social"
+    },
+    "rect": {
+      "height": 1124,
+      "width": 600,
+      "x": 235,
+      "y": 52
+    },
+    "tag": "div",
+    "textLength": 410
+  },
+  "identity": {
+    "handle": "dearlstephens.bsky.social",
+    "sourceId": "3motjjgwmz22f",
+    "url": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f"
+  },
+  "meta": {
+    "probe": "text-structure",
+    "uiLang": "en",
+    "url": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f",
+    "version": "2026-06-22"
+  },
+  "metadata": {
+    "canonical": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f",
+    "documentTitle": "Post by @dearlstephens.bsky.social — Bluesky",
+    "ogDescription": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet!\n\nHappy Father’s Day, good man. You were one for the books.",
+    "ogDescriptionNewlineCount": 2,
+    "ogTitle": "D. Earl Stephens (@dearlstephens.bsky.social)",
+    "ogUrl": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f"
+  },
+  "observations": [
+    "Primary text container has explicit paragraph/newline evidence.",
+    "Metadata description contains newline characters."
+  ],
+  "platform": "bluesky",
+  "primaryTextContainer": {
+    "attrs": {
+      "class": "css-146c3p1 r-1xnzce8",
+      "dir": "auto"
+    },
+    "innerTextRaw": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet!\n\nHappy Father’s Day, good man. You were one for the books.",
+    "leafBlocks": [],
+    "newlineEvidence": {
+      "brCount": 0,
+      "hasParagraphBreaks": true,
+      "innerTextNewlineCount": 2,
+      "leafBlockCount": 0,
+      "textContentNewlineCount": 2
+    },
+    "normalizedInlineText": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet! Happy Father’s Day, good man. You were one for the books.",
+    "recommendedText": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet!\n\nHappy Father’s Day, good man. You were one for the books.",
+    "rect": {
+      "height": 132,
+      "width": 568,
+      "x": 251,
+      "y": 122
+    },
+    "tag": "div",
+    "textContentRaw": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet!\n\nHappy Father’s Day, good man. You were one for the books."
+  },
+  "sourceLinks": [
+    {
+      "attrs": {
+        "aria-label": "Reposts of this post",
+        "class": "css-g5y9jx r-1loqt21 r-1otgn73",
+        "href": "/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/reposted-by",
+        "role": "link"
+      },
+      "href": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/reposted-by",
+      "rect": {
+        "height": 20,
+        "width": 86,
+        "x": 251,
+        "y": 1093
+      },
+      "source": {
+        "handle": "dearlstephens.bsky.social",
+        "sourceId": "3motjjgwmz22f",
+        "url": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/reposted-by"
+      },
+      "text": "343 reposts",
+      "visible": false
+    },
+    {
+      "attrs": {
+        "aria-label": "Quotes of this post",
+        "class": "css-g5y9jx r-1loqt21 r-1otgn73",
+        "href": "/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/quotes",
+        "role": "link"
+      },
+      "href": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/quotes",
+      "rect": {
+        "height": 20,
+        "width": 65,
+        "x": 353,
+        "y": 1093
+      },
+      "source": {
+        "handle": "dearlstephens.bsky.social",
+        "sourceId": "3motjjgwmz22f",
+        "url": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/quotes"
+      },
+      "text": "11 quotes",
+      "visible": false
+    },
+    {
+      "attrs": {
+        "aria-label": "Likes on this post",
+        "class": "css-g5y9jx r-1loqt21 r-1otgn73",
+        "href": "/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/liked-by",
+        "role": "link"
+      },
+      "href": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/liked-by",
+      "rect": {
+        "height": 20,
+        "width": 69,
+        "x": 434,
+        "y": 1093
+      },
+      "source": {
+        "handle": "dearlstephens.bsky.social",
+        "sourceId": "3motjjgwmz22f",
+        "url": "https://bsky.app/profile/dearlstephens.bsky.social/post/3motjjgwmz22f/liked-by"
+      },
+      "text": "5.3K likes",
+      "visible": false
+    }
+  ],
+  "textContainers": [
+    {
+      "attrs": {
+        "class": "css-146c3p1 r-1xnzce8",
+        "dir": "auto"
+      },
+      "innerTextRaw": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet!\n\nHappy Father’s Day, good man. You were one for the books.",
+      "leafBlocks": [],
+      "newlineEvidence": {
+        "brCount": 0,
+        "hasParagraphBreaks": true,
+        "innerTextNewlineCount": 2,
+        "leafBlockCount": 0,
+        "textContentNewlineCount": 2
+      },
+      "normalizedInlineText": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet! Happy Father’s Day, good man. You were one for the books.",
+      "recommendedText": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet!\n\nHappy Father’s Day, good man. You were one for the books.",
+      "rect": {
+        "height": 132,
+        "width": 568,
+        "x": 251,
+        "y": 122
+      },
+      "tag": "div",
+      "textContentRaw": "🖊️That’s a picture of my stepdad reading my book shortly before his death. He was a prodigious reader, and as his health was failing told me, “I’m not ready to die, Earl, there are so many books I haven’t read yet!\n\nHappy Father’s Day, good man. You were one for the books."
+    }
+  ]
+}

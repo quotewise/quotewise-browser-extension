@@ -26,11 +26,23 @@ describe('manifest icon/runtime wiring', () => {
         'https://twitter.com/*',
         'https://x.com/*',
         'https://threads.com/*',
+        'https://*.threads.com/*',
         'https://threads.net/*',
+        'https://*.threads.net/*',
         'https://bsky.app/*',
         'https://substack.com/*',
         'https://*.substack.com/*',
       ]));
+    });
+
+    test(`${manifestName} does not expose the content bundle via web_accessible_resources`, () => {
+      // The content script is delivered via declared content_scripts and
+      // chrome.scripting.executeScript({files}); neither needs web-accessible
+      // resources. There is no chrome.runtime.getURL usage and no dynamic
+      // import() (webpack splitChunks:false), so exposing content/* to host
+      // pages only widens attack surface and CWS review scope.
+      const manifest = readManifest(manifestName);
+      expect(manifest.web_accessible_resources).toBeUndefined();
     });
   }
 });

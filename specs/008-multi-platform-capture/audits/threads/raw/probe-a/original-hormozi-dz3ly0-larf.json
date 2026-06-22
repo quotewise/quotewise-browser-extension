@@ -1,0 +1,38 @@
+{
+  "contract": {
+    "author": {
+      "displayName": "Thread",
+      "handle": "hormozi"
+    },
+    "likesCount": null,
+    "platform": "threads",
+    "platformCode": "TH",
+    "platformData": {
+      "source_id": "DZ3Ly0-larF"
+    },
+    "postedAt": "2026-06-21T21:00:54.000Z",
+    "requiresSelection": false,
+    "sourceId": "DZ3Ly0-larF",
+    "sourceUrl": "https://www.threads.com/@hormozi/post/DZ3Ly0-larF",
+    "text": "Thread"
+  },
+  "drift": [
+    "root: no configured root selector matched",
+    "root: no root contained a permalink for the URL sourceId"
+  ],
+  "meta": {
+    "probe": "capture-contract",
+    "uiLang": "en",
+    "url": "https://www.threads.com/@hormozi/post/DZ3Ly0-larF",
+    "version": "2026-06-21"
+  },
+  "selectors": {
+    "authorSelector": "a[href*=\"/@\"]",
+    "displaySelector": "h1",
+    "focalRootFoundBySourceIdLink": false,
+    "likesRaw": null,
+    "likesSelector": null,
+    "rootSelectorCount": 0,
+    "textSelector": "[dir=\"auto\"]"
+  }
+}

@@ -88,7 +88,7 @@ describe('DuplicateBadge', () => {
     ]);
   });
 
-  it('shows "Platform sighting exists" link for has_platform_sighting', () => {
+  it('shows "Earlier Sighting saved" link for has_platform_sighting', () => {
     badge.update({
       result: makeResult({
         matches: [makeMatch({
@@ -99,10 +99,11 @@ describe('DuplicateBadge', () => {
         })],
       }),
     });
-    expect(container.textContent).toContain('Platform sighting exists');
+    expect(container.textContent).toContain('Earlier Sighting saved');
+    expect(container.title).toBe('An earlier Sighting for this quote is already in Quotewise. We keep the earliest known source.');
     expect(container.querySelector('a')).toBeTruthy();
     expect(directives).toEqual([
-      { type: 'view_quote', url: 'https://quotewise.io/quotes/q1', text: 'View Quote' },
+      { type: 'view_quote', url: 'https://quotewise.io/quotes/q1', text: 'View Sighting' },
     ]);
   });
 
@@ -132,9 +133,31 @@ describe('DuplicateBadge', () => {
         })],
       }),
     });
-    expect(container.textContent).toContain('Platform sighting exists');
+    expect(container.textContent).toContain('Earlier Sighting saved');
     expect(directives).toEqual([
-      { type: 'submit', enabled: false, text: 'Sighting Exists' },
+      { type: 'submit', enabled: false, text: 'Earlier Saved' },
+    ]);
+  });
+
+  it('shows earlier-sighting copy for exact quote matches that are not this URL', () => {
+    badge.update({
+      result: duplicateResult({
+        recommendation: 'duplicate',
+        in_quotewise: true,
+        matches: [duplicateMatch({
+          match_source: 'similarity',
+          match_class: 'exact',
+          sighting_status: 'has_platform_sighting',
+          url: 'https://quotewise.io/quotes/earlier',
+        })],
+      }),
+    });
+
+    expect(container.textContent).toContain('Earlier Sighting saved');
+    expect(container.textContent).not.toContain('Already captured');
+    expect(container.title).toContain('earliest known source');
+    expect(directives).toEqual([
+      { type: 'view_quote', url: 'https://quotewise.io/quotes/earlier', text: 'View Sighting' },
     ]);
   });
 
@@ -342,5 +365,18 @@ describe('DuplicateBadge', () => {
     expect(container.textContent).toContain('Already attributed');
     expect(container.querySelector('a')).toBeNull();
     expect(container.innerHTML).not.toContain('javascript:');
+  });
+
+  it('does not pass a javascript: match URL to the View Quote button', () => {
+    badge.update({
+      result: duplicateResult({
+        recommendation: 'duplicate',
+        matches: [makeMatch({ url: 'javascript:alert(1)' })],
+      }),
+    });
+
+    // The View Quote button calls window.open(url); a non-http(s) URL must
+    // never reach it via the view_quote directive.
+    expect(directives.find((d) => d.type === 'view_quote')).toBeUndefined();
   });
 });
