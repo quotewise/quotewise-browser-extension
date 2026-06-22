@@ -123,7 +123,7 @@
       "phase": 3,
       "enabledByDefault": false,
       "urls": {
-        "original": null,
+        "original": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w",
         "reply_or_comment": null,
         "repost_quote_or_reshare": null,
         "media": null,
@@ -132,7 +132,18 @@
         "non_english": null,
         "low_or_zero_likes": null,
         "abbreviated_or_high_likes": null
-      }
+      },
+      "auditRuns": [
+        {
+          "fixtureClass": "original",
+          "authState": "public-rendered",
+          "url": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w",
+          "notes": "Plain Bluesky skeet by Matt Singer; generic Probe A/current adapter selectors select hidden feed content, while contract discovery finds the visible focal post.",
+          "probeA": "bluesky/raw/probe-a/original-mattsinger-3motounu5ys2w-public-rendered.json",
+          "otherFeatures": "bluesky/raw/other-features/original-mattsinger-3motounu5ys2w-public-rendered.json",
+          "contractDiscovery": "bluesky/raw/contract-discovery/original-mattsinger-3motounu5ys2w-public-rendered.json"
+        }
+      ]
     },
     "substack_notes": {
       "phase": 4,

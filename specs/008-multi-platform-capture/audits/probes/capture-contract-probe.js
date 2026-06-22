@@ -7,10 +7,10 @@
     const magnitude = compact.match(/(\d[\d.]*)\s*([KMB])(?![A-Za-z])/i);
     if (magnitude) {
       const multiplier = magnitude[2].toUpperCase() === 'K' ? 1e3 : magnitude[2].toUpperCase() === 'M' ? 1e6 : 1e9;
-      return Math.round(parseFloat(magnitude[1]) * multiplier);
+      return Math.round(Number(magnitude[1]) * multiplier);
     }
-    const number = parseFloat(compact.replace(/[^\d.]/g, ''));
-    return Number.isNaN(number) ? 0 : number;
+    const number = compact.replace(/[^\d.]/g, '').match(/\d[\d.]*/);
+    return number ? Number(number[0]) : 0;
   };
   const cleanUrl = (value) => {
     try {
@@ -193,4 +193,3 @@
   console.log(JSON.stringify(out, null, 2));
   return out;
 })();
-
