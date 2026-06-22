@@ -143,6 +143,12 @@
           ? ['.ProseMirror', '[class*="feedCommentBody" i]', '[dir="auto"]', 'article']
           : ['[dir="auto"]', 'article'];
     const elements = selectors.flatMap((selector) => Array.from(root.querySelectorAll(selector)));
+    if (platform === 'threads') {
+      for (const element of [...elements]) {
+        if (element.parentElement) elements.push(element.parentElement);
+        if (element.parentElement?.parentElement) elements.push(element.parentElement.parentElement);
+      }
+    }
     return elements.filter((element, index) =>
       elements.indexOf(element) === index &&
       isVisible(element) &&
@@ -193,11 +199,11 @@
     }));
   };
   const newlineCount = (value) => (String(value || '').match(/\n/g) || []).length;
-  const textEvidenceFor = (element) => {
+  const textEvidenceFor = (element, platform) => {
     const blocks = leafBlockTexts(element);
     const blockTexts = blocks.map((block) => block.normalizedText).filter(Boolean);
     const recommendedText = blockTexts.length > 1
-      ? blockTexts.join('\n\n')
+      ? blockTexts.join(platform === 'threads' ? '\n' : '\n\n')
       : compact(element.innerText || element.textContent);
     return {
       tag: element.tagName.toLowerCase(),
@@ -226,7 +232,7 @@
   const metadataText = metaContent('meta[property="og:description"]') || metaContent('meta[name="description"]') || null;
   const clone = (value) => value ? JSON.parse(JSON.stringify(value)) : value;
   const containers = candidateTextContainers(root, platform)
-    .map(textEvidenceFor)
+    .map((element) => textEvidenceFor(element, platform))
     .filter((candidate) => candidate.normalizedInlineText.length > 0)
     .filter((candidate) => !isChromeText(candidate))
     .sort((a, b) => {

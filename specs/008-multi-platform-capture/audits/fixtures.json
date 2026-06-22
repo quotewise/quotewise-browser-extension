@@ -48,6 +48,7 @@
         ],
         "repost_quote_or_reshare": "https://www.threads.com/@9six7/post/DZ3u2dNEXYK",
         "media": "https://www.threads.com/@huyquocc11/post/DZ1dYiKEjeH",
+        "multiline_text": "https://www.threads.com/@tobbigray/post/DZ2axAxDR32",
         "long_or_collapsed": null,
         "unavailable_private_login_gated_or_paywalled": null,
         "non_english": null,
@@ -108,6 +109,13 @@
           "otherFeatures": "threads/raw/other-features/repost-quote-9six7-dz3u2dnexyk-authenticated.json",
           "contractDiscovery": "threads/raw/contract-discovery/repost-quote-9six7-dz3u2dnexyk-authenticated.json",
           "textStructure": "threads/raw/text-structure/repost-quote-9six7-dz3u2dnexyk-authenticated.json"
+        },
+        {
+          "fixtureClass": "multiline_text",
+          "authState": "authenticated",
+          "url": "https://www.threads.com/@tobbigray/post/DZ2axAxDR32",
+          "notes": "Threads post with two visible text rows; shared container innerText preserves one newline while textContent concatenates the rows.",
+          "textStructure": "threads/raw/text-structure/multiline-tobbigray-dz2axaxdr32-authenticated.json"
         },
         {
           "fixtureClass": "reply_or_comment",

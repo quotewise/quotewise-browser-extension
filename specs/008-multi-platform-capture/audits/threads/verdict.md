@@ -31,6 +31,7 @@
 - Text-structure artifacts:
   - `raw/text-structure/original-die-workwear-dz3u4c5j30i-authenticated.json`
   - `raw/text-structure/repost-quote-9six7-dz3u2dnexyk-authenticated.json`
+  - `raw/text-structure/multiline-tobbigray-dz2axaxdr32-authenticated.json`
 - Raw Probe B artifacts: pending in `raw/probe-b/`
 
 ## Contract Criteria
@@ -45,7 +46,7 @@
 | Duplicate/preflight and submit succeed on live pages | Pending | No live submit result committed yet |
 | Deterministic fixture tests match the audited selector contract | Pending update | Existing local tests cover article/testid-root assumptions; they should be updated after the Threads contract is validated across scenario fixtures |
 | Chrome Web Store host permission rationale matches enabled hosts | Pending | Host permissions exist, but runtime flag remains disabled |
-| Visible body newlines are preserved | Pending | Text-structure probes on existing original and reshare fixtures found single-block text only; need a direct multiline Threads URL |
+| Visible body newlines are preserved | Candidate pass | `tobbigray` fixture reconstructs the visible body from two sibling text rows; shared container `innerText` preserves one newline while `textContent` concatenates rows without a separator |
 
 ## Notes
 
@@ -65,7 +66,7 @@ Current evidence supports this contract for an authenticated original Threads pe
 | Text | `meta[property="og:description"]` | High for original permalink |
 | Posted date | `time[datetime]` whose nearest permalink link contains `sourceId` | Medium; needs more scenarios |
 | Likes | Candidate: number between Like and Reply action icons | Medium for authenticated original, reply, and media fixtures; validate low/zero cases before promotion |
-| Rendered body | `[dir="auto"]` text candidate; preserve raw newlines when a multiline fixture proves the DOM contract | Supporting only; browser extraction can normalize/degrade text and multiline live evidence is still pending |
+| Rendered body | Source-linked visible text container; for multiline bodies, join direct visible child body rows with `\n` or use the shared container `innerText` | Supporting candidate; `tobbigray` validates row-based newline reconstruction |
 
 The prior generic Probe A is useful as negative evidence for X-like selectors, but it is not the proposed Threads adapter contract.
 
@@ -87,7 +88,7 @@ For reply/comment permalinks where `location.href` and canonical metadata disagr
 | reply/comment | Candidate contract found | Authenticated `arturoztalin`, `njr354151`, and `gompf79` replies show canonical/OG parent-context mismatch; `njr354151` validates embedded linked-content exclusion and `gompf79` validates emoji-heavy body text |
 | repost/quote/reshare | Candidate contract found | Authenticated `9six7` fixture validates wrapper context text, embedded repost text, and embedded media separation; canonical metadata is not usable |
 | media | Candidate contract found | Authenticated `huyquocc11` media permalink confirms canonical metadata and source-linked text remain focal while media nodes are present |
-| multiline text | Pending | Need direct URL with visible paragraph/newline text |
+| multiline text | Candidate contract found | Authenticated `tobbigray` fixture validates two visible text rows and newline reconstruction |
 | long/collapsed | Pending | Need direct URL |
 | unavailable/private/login-gated | Pending | Need direct URL |
 | non-English | Pending | Need direct URL |
@@ -158,3 +159,20 @@ For reply/comment permalinks where `location.href` and canonical metadata disagr
 - The sanitized media summary found one visible video element and image/video-player wrapper nodes below the embedded repost text. Hidden feed DOM also contained media nodes, so the other-features probe now reports visible media counts separately from document-wide counts.
 - Generic Probe A found no configured Threads root and captured feed/navigation text, reinforcing that Probe A is negative evidence for Threads.
 - Text-structure probe found the wrapper context text was a single text block with no newline or paragraph-boundary evidence; this fixture is not multiline coverage.
+
+2026-06-22 authenticated multiline text fixture notes:
+
+- `https://www.threads.com/@tobbigray/post/DZ2axAxDR32` rendered as a Threads post by `@tobbigray`.
+- Browser URL identity was `tobbigray` / `DZ2axAxDR32`.
+- The visible body was reconstructed as:
+
+  ```text
+  seriously be careful out there everyone
+  i had 2 Microsoft Copilot licenses in my car, and someone broke in and left 4 more
+  ```
+
+- The shared visible text container had two direct body rows, no `<br>` elements, `innerTextNewlineCount: 1`, `textContentNewlineCount: 0`, and `leafBlockCount: 2`.
+- Raw `textContent` on the shared container concatenated the two rows with no separator, so Threads multiline extraction must join direct body rows or use `innerText`.
+- Metadata was not usable in this logged-in rendering: canonical and OG URL pointed to `https://www.threads.com/`, and OG title/description were login-generic.
+- Source-linked timestamp evidence produced `2026-06-21T13:52:25.000Z`.
+- Adjacent action-row counts at capture time were likes `5.3K` (`5300`), replies `95`, reposts `142`, and shares `268`.
