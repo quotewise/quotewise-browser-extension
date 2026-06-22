@@ -366,4 +366,17 @@ describe('DuplicateBadge', () => {
     expect(container.querySelector('a')).toBeNull();
     expect(container.innerHTML).not.toContain('javascript:');
   });
+
+  it('does not pass a javascript: match URL to the View Quote button', () => {
+    badge.update({
+      result: duplicateResult({
+        recommendation: 'duplicate',
+        matches: [makeMatch({ url: 'javascript:alert(1)' })],
+      }),
+    });
+
+    // The View Quote button calls window.open(url); a non-http(s) URL must
+    // never reach it via the view_quote directive.
+    expect(directives.find((d) => d.type === 'view_quote')).toBeUndefined();
+  });
 });

@@ -238,11 +238,18 @@ export class DuplicateBadge {
 
   private getQuotePageUrl(match?: DuplicateCheckResult['matches'][number]): string | undefined {
     if (!match) return undefined;
-    if (match.url) return match.url;
-    if (!match.short_code) return undefined;
 
-    const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
-    return `${baseUrl}/quotes/${encodeURIComponent(match.short_code)}`;
+    let raw = match.url;
+    if (!raw) {
+      if (!match.short_code) return undefined;
+      const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
+      raw = `${baseUrl}/quotes/${encodeURIComponent(match.short_code)}`;
+    }
+
+    // This URL reaches both badge links and the View Quote button
+    // (window.open). The match URL is API-provided, so validate the scheme
+    // (http/https only) — a javascript:/data: URL must never be navigable.
+    return safeHref(raw) ?? undefined;
   }
 
   private getSafeQuotePageUrl(match?: DuplicateCheckResult['matches'][number]): string | null {
