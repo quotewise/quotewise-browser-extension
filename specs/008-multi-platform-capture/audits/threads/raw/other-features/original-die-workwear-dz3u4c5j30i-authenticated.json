@@ -734,14 +734,6 @@
   "stableIdentifiers": [
     {
       "attrs": {
-        "href": "/@interplanetarychris",
-        "role": "link"
-      },
-      "tag": "a",
-      "text": "Profile"
-    },
-    {
-      "attrs": {
         "href": "/@die_workwear",
         "role": "link"
       },
@@ -1054,14 +1046,6 @@
       },
       "tag": "time",
       "text": "1h"
-    },
-    {
-      "attrs": {
-        "href": "/@interplanetarychris",
-        "role": "link"
-      },
-      "tag": "a",
-      "text": "Profile"
     }
   ]
 }

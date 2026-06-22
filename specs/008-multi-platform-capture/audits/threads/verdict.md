@@ -4,15 +4,18 @@
 
 - Audit phase: Phase 2
 - Promotion decision: do not promote
-- Live URL set: original fixtures captured on 2026-06-21
+- Live URL set: original and reply fixtures captured on 2026-06-21
 - Raw Probe A artifacts:
   - `raw/probe-a/original-hormozi-dz3ly0-larf.json`
   - `raw/probe-a/original-die-workwear-dz3u4c5j30i-authenticated.json`
+  - `raw/probe-a/reply-arturoztalin-dz3e05qlnxc-authenticated.json`
 - Other-features artifacts:
   - `raw/other-features/original-hormozi-dz3ly0-larf.json`
   - `raw/other-features/original-die-workwear-dz3u4c5j30i-authenticated.json`
+  - `raw/other-features/reply-arturoztalin-dz3e05qlnxc-authenticated.json`
 - Contract-discovery artifacts:
   - `raw/contract-discovery/original-die-workwear-dz3u4c5j30i-authenticated.json`
+  - `raw/contract-discovery/reply-arturoztalin-dz3e05qlnxc-authenticated.json`
 - Raw Probe B artifacts: pending in `raw/probe-b/`
 
 ## Contract Criteria
@@ -22,7 +25,7 @@
 | Permalink extraction returns `platform`, `platformCode`, `sourceUrl`, and `sourceId` | Candidate pass for original permalinks | Contract-discovery returned `threads`, `TH`, canonical URL, source ID `DZ3U4c5j30i`, and handle `die_workwear` |
 | `/post/` and `/t/` IDs are both reliable | Pending | Local fixtures cover both forms; live evidence pending |
 | `threads.net` redirects are covered by runtime and manifest scope | Pending | Local fixture covers matching; live redirect behavior pending |
-| Focal post selection excludes quoted/reposted/embedded/reply-context content | Pending across scenarios | Original permalink evidence suggests metadata-primary focal text; reply, repost/quote, media, and related-thread scenarios still need live fixtures |
+| Focal post selection excludes quoted/reposted/embedded/reply-context content | Candidate pass for original and reply fixtures | Original fixture supports metadata-primary extraction; reply fixture shows canonical/OG can point to parent context, so browser URL source ID plus source-linked rendered text must win for replies |
 | Author handle resolves through preflight to a slug-bearing originator | Pending | No live preflight result committed yet |
 | Duplicate/preflight and submit succeed on live pages | Pending | No live submit result committed yet |
 | Deterministic fixture tests match the audited selector contract | Pending update | Existing local tests cover article/testid-root assumptions; they should be updated after the Threads contract is validated across scenario fixtures |
@@ -45,17 +48,27 @@ Current evidence supports this contract for an authenticated original Threads pe
 | Display name | `og:title` pattern `{displayName} (@handle) on Threads` | High for original permalink |
 | Text | `meta[property="og:description"]` | High for original permalink |
 | Posted date | `time[datetime]` whose nearest permalink link contains `sourceId` | Medium; needs more scenarios |
-| Likes | Candidate: number between Like and Reply action icons | Medium for authenticated original fixture; validate low/zero and abbreviated/high-like cases before promotion |
+| Likes | Candidate: number between Like and Reply action icons | Medium for authenticated original and reply fixtures; validate low/zero and abbreviated/high-like cases before promotion |
 | Rendered body | `[dir="auto"]` text candidate | Supporting only; browser extraction can normalize/degrade text |
 
 The prior generic Probe A is useful as negative evidence for X-like selectors, but it is not the proposed Threads adapter contract.
+
+For reply/comment permalinks where `location.href` and canonical metadata disagree:
+
+| Field | Candidate Source | Current Confidence |
+|-------|------------------|--------------------|
+| `sourceUrl` / `sourceId` / author handle | Browser URL path, not canonical metadata | High for reply fixture |
+| Text | First non-action `[dir="auto"]` text after the permalink/time link for the browser URL source ID | Medium; one reply fixture |
+| Posted date | `time[datetime]` whose nearest permalink link contains the browser URL source ID | High for reply fixture |
+| Parent context | Canonical URL, `og:title`, and `og:description` | Parent-only when canonical and browser URL disagree; do not use as focal |
+| Likes | Count between Like and Reply action icons in the same source-linked row | Medium; reply parsed `1` |
 
 ## Scenario Matrix
 
 | Fixture Class | Status | Notes |
 |---------------|--------|-------|
 | original | Candidate contract found | Two original fixtures captured; authenticated `die_workwear` discovery supports metadata-primary extraction |
-| reply/comment | Pending | Need direct URL |
+| reply/comment | Candidate contract found | Authenticated `arturoztalin` reply shows canonical/OG parent-context mismatch and validates source-linked rendered fallback |
 | repost/quote/reshare | Pending | Need direct URL |
 | media | Pending | Need direct URL |
 | long/collapsed | Pending | Need direct URL |
@@ -81,3 +94,12 @@ The prior generic Probe A is useful as negative evidence for X-like selectors, b
 - The same probe found an action-row count candidate: Like icon -> `2.3K` -> Reply icon, parsed as `2300` likes.
 - Supporting metadata exposed the correct `og:title`, `og:description`, `og:url`, and `time[datetime]`; the rendered DOM still did not expose `article`, `role="article"`, or `data-testid` hooks.
 - This confirms the blocker is not only a logged-out/public rendering issue; it also establishes metadata as the current primary candidate for original Threads permalinks.
+
+2026-06-21 authenticated reply fixture notes:
+
+- The provided URL was `https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc?xmt=AQG0Wg5Fei3m6HdTfEhA8VlIkLzFk8HVvIsmysisbgpy0w`; the browser normalized it to `https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc`.
+- Browser URL identity was `arturoztalin` / `DZ3e05qlNxc`, but canonical and OG metadata pointed to the parent original `die_workwear` / `DZ3U4c5j30i`.
+- Generic Probe A still found no configured post root and returned empty extraction fields for the reply fixture.
+- Contract discovery marked `metadataPrimary` as `mismatch_parent_context`, which means canonical/OG title and description must not be used as focal reply data when they disagree with the browser URL.
+- The `sourceLinkedRendered` candidate found reply text `Wait a sec.... 😅`, posted date `2026-06-21T23:47:09.000Z`, and likes count `1`.
+- The likes adjacency rule also held on this reply: Like icon -> `1` -> Reply icon.

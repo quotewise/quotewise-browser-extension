@@ -31,11 +31,16 @@
     attrs: attrs(element, ['role', 'data-testid', 'href']),
     label: text(element.getAttribute('aria-label'), 160)
   })).filter((entry) => /like|reply|repost|quote|bookmark|view|share|verified|protected|more|author|profile/i.test(entry.label)).slice(0, 80);
+  const isViewerProfileNav = (entry) =>
+    /^\/@[^/]+$/.test(entry.attrs.href || '') && /^profile$/i.test(entry.text);
   const stableIdentifiers = Array.from(document.querySelectorAll('[data-testid], [role], time[datetime], a[href]')).map((element) => ({
     tag: element.tagName.toLowerCase(),
     attrs: attrs(element, ['data-testid', 'role', 'datetime', 'href', 'aria-label']),
     text: text(element.textContent, 120)
-  })).filter((entry) => entry.attrs['data-testid'] || entry.attrs.datetime || /\/(status|post|note|notes|p|profile|@)/.test(entry.attrs.href || '')).slice(0, 120);
+  })).filter((entry) =>
+    !isViewerProfileNav(entry) &&
+    (entry.attrs['data-testid'] || entry.attrs.datetime || /\/(status|post|note|notes|p|profile|@)/.test(entry.attrs.href || ''))
+  ).slice(0, 120);
   const out = {
     meta: {
       probe: 'other-features',
@@ -53,4 +58,3 @@
   console.log(JSON.stringify(out, null, 2));
   return out;
 })();
-

@@ -1,0 +1,788 @@
+{
+  "actionLabels": [
+    {
+      "index": 7,
+      "label": "More",
+      "parentText": "More",
+      "rect": {
+        "height": 24,
+        "width": 24,
+        "x": 550,
+        "y": 18
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 8,
+      "label": "More",
+      "parentText": "More",
+      "rect": {
+        "height": 24,
+        "width": 24,
+        "x": 550,
+        "y": 18
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 11,
+      "label": "More",
+      "parentText": "More",
+      "rect": {
+        "height": 20,
+        "width": 20,
+        "x": 567,
+        "y": -201
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 12,
+      "label": "Like",
+      "parentText": "Like2.3K",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": -58
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 13,
+      "label": "Reply",
+      "parentText": "Reply14",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 135,
+        "y": -58
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 14,
+      "label": "Repost",
+      "parentText": "Repost36",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 198,
+        "y": -58
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 15,
+      "label": "Share",
+      "parentText": "Share33",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 260,
+        "y": -58
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 18,
+      "label": "More",
+      "parentText": "More",
+      "rect": {
+        "height": 20,
+        "width": 20,
+        "x": 567,
+        "y": -22
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 19,
+      "label": "Like",
+      "parentText": "Like112",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 60,
+        "y": 37
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 20,
+      "label": "Reply",
+      "parentText": "Reply1",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 131,
+        "y": 37
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 21,
+      "label": "Repost",
+      "parentText": "Repost",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 186,
+        "y": 37
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 22,
+      "label": "Share",
+      "parentText": "Share",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 229,
+        "y": 37
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 25,
+      "label": "More",
+      "parentText": "More",
+      "rect": {
+        "height": 20,
+        "width": 20,
+        "x": 567,
+        "y": 85
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 26,
+      "label": "Like",
+      "parentText": "Like1",
+      "rect": {
+        "height": 19,
+        "width": 19,
+        "x": 12,
+        "y": 161
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 27,
+      "label": "Reply",
+      "parentText": "Reply",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 67,
+        "y": 161
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 28,
+      "label": "Repost",
+      "parentText": "Repost",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 109,
+        "y": 161
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 29,
+      "label": "Share",
+      "parentText": "Share1",
+      "rect": {
+        "height": 18,
+        "width": 18,
+        "x": 151,
+        "y": 161
+      },
+      "role": "img",
+      "tag": "svg"
+    },
+    {
+      "index": 30,
+      "label": "View activity",
+      "parentText": "View activity",
+      "rect": {
+        "height": 12,
+        "width": 12,
+        "x": 575,
+        "y": 211
+      },
+      "role": "img",
+      "tag": "svg"
+    }
+  ],
+  "canonicalIdentity": {
+    "handle": "die_workwear",
+    "sourceId": "DZ3U4c5j30i",
+    "url": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i"
+  },
+  "contractCandidates": {
+    "actionCounts": {
+      "likes": {
+        "actionLabel": "Like",
+        "actionRect": {
+          "height": 19,
+          "width": 19,
+          "x": 12,
+          "y": 161
+        },
+        "confidence": "candidate_adjacent_between_actions",
+        "countRect": {
+          "height": 18,
+          "width": 8,
+          "x": 35,
+          "y": 161
+        },
+        "nextActionLabel": "Reply",
+        "nextActionRect": {
+          "height": 18,
+          "width": 18,
+          "x": 67,
+          "y": 161
+        },
+        "raw": "1",
+        "value": 1
+      },
+      "replies": null,
+      "reposts": null
+    },
+    "likes": {
+      "actionLabels": [
+        {
+          "index": 12,
+          "label": "Like",
+          "parentText": "Like2.3K",
+          "rect": {
+            "height": 19,
+            "width": 19,
+            "x": 60,
+            "y": -58
+          },
+          "role": "img",
+          "tag": "svg"
+        },
+        {
+          "index": 19,
+          "label": "Like",
+          "parentText": "Like112",
+          "rect": {
+            "height": 19,
+            "width": 19,
+            "x": 60,
+            "y": 37
+          },
+          "role": "img",
+          "tag": "svg"
+        },
+        {
+          "index": 26,
+          "label": "Like",
+          "parentText": "Like1",
+          "rect": {
+            "height": 19,
+            "width": 19,
+            "x": 12,
+            "y": 161
+          },
+          "role": "img",
+          "tag": "svg"
+        }
+      ],
+      "candidate": {
+        "actionLabel": "Like",
+        "actionRect": {
+          "height": 19,
+          "width": 19,
+          "x": 12,
+          "y": 161
+        },
+        "confidence": "candidate_adjacent_between_actions",
+        "countRect": {
+          "height": 18,
+          "width": 8,
+          "x": 35,
+          "y": 161
+        },
+        "nextActionLabel": "Reply",
+        "nextActionRect": {
+          "height": 18,
+          "width": 18,
+          "x": 67,
+          "y": 161
+        },
+        "raw": "1",
+        "value": 1
+      },
+      "disposition": "candidate_adjacent_action_count_needs_fixture_validation"
+    },
+    "metadataPrimary": {
+      "authorHandle": "arturoztalin",
+      "confidence": "mismatch_parent_context",
+      "displayName": "Derek Guy",
+      "likesCount": null,
+      "platform": "threads",
+      "platformCode": "TH",
+      "postedAt": "2026-06-21T23:47:09.000Z",
+      "sourceId": "DZ3e05qlNxc",
+      "sourceUrl": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i",
+      "text": "Today, on Father's Day, I'm thinking about how my dad immigrated to the United States after escaping three civil wars and working as a janitor, only to see his bloodline die out because his son stumbled into a menswear forum and then spent the next 20 years arguing about pants with teenagers named Pablo Thriftscobar.",
+      "titleBody": "(9+) Wait a sec.... 😅"
+    },
+    "renderedBodyCandidate": {
+      "hrefAncestor": null,
+      "index": 2,
+      "rect": {
+        "height": 105,
+        "width": 527,
+        "x": 60,
+        "y": -178
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Today, on Father's Day, I'm thinking about how my dad immigrated to the United States after escaping three civil wars and working as a janitor, only to see his bloodline die out because his son stumbled into a menswear forum and then spent the next 20 years arguing about pants with teenagers named Pablo Thriftscobar."
+    },
+    "sourceLinkedRendered": {
+      "authorHandle": "arturoztalin",
+      "confidence": "candidate_for_reply_or_context_permalink",
+      "likesCount": 1,
+      "platform": "threads",
+      "platformCode": "TH",
+      "postedAt": "2026-06-21T23:47:09.000Z",
+      "sourceId": "DZ3e05qlNxc",
+      "sourceUrl": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
+      "text": "Wait a sec.... 😅"
+    }
+  },
+  "identity": {
+    "handle": "arturoztalin",
+    "sourceId": "DZ3e05qlNxc",
+    "url": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc"
+  },
+  "locationIdentity": {
+    "handle": "arturoztalin",
+    "sourceId": "DZ3e05qlNxc",
+    "url": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc"
+  },
+  "meta": {
+    "probe": "threads-contract-discovery",
+    "uiLang": "en",
+    "url": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
+    "version": "2026-06-21"
+  },
+  "metadata": {
+    "canonical": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i",
+    "documentTitle": "(9+) Wait a sec.... 😅",
+    "ogDescription": "Today, on Father's Day, I'm thinking about how my dad immigrated to the United States after escaping three civil wars and working as a janitor, only to see his bloodline die out because his son stumbled into a menswear forum and then spent the next 20 years arguing about pants with teenagers named Pablo Thriftscobar.",
+    "ogTitle": "Derek Guy (@die_workwear) on Threads",
+    "ogUrl": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i"
+  },
+  "observations": [
+    "No article elements in rendered Threads permalink DOM.",
+    "No data-testid hooks in rendered Threads permalink DOM.",
+    "No role=article hooks in rendered Threads permalink DOM.",
+    "Canonical/OG metadata points to a different post than the browser URL; treat it as parent context for this fixture.",
+    "Focal rendered text candidate exists after the source-linked timestamp for the browser URL.",
+    "Rendered body text exists as dir=auto text, but browser extraction may normalize/degrade characters.",
+    "Like count candidate exists between Like and Reply action icons; validate across low/zero and abbreviated/high-like fixtures before promotion."
+  ],
+  "renderedTextCandidates": [
+    {
+      "hrefAncestor": "/@die_workwear",
+      "index": 0,
+      "rect": {
+        "height": 21,
+        "width": 99,
+        "x": 60,
+        "y": -202
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "die_workwear"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 1,
+      "rect": {
+        "height": 14,
+        "width": 24,
+        "x": 165,
+        "y": -198
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "3h"
+    },
+    "[Circular]",
+    {
+      "hrefAncestor": null,
+      "index": 3,
+      "rect": {
+        "height": 18,
+        "width": 29,
+        "x": 83,
+        "y": -58
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "2.3K"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 4,
+      "rect": {
+        "height": 18,
+        "width": 16,
+        "x": 157,
+        "y": -58
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "14"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 5,
+      "rect": {
+        "height": 18,
+        "width": 16,
+        "x": 220,
+        "y": -58
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "36"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 6,
+      "rect": {
+        "height": 18,
+        "width": 16,
+        "x": 282,
+        "y": -58
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "33"
+    },
+    {
+      "hrefAncestor": "/@joggerknotty",
+      "index": 7,
+      "rect": {
+        "height": 21,
+        "width": 92,
+        "x": 60,
+        "y": -23
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "joggerknotty"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 8,
+      "rect": {
+        "height": 14,
+        "width": 24,
+        "x": 158,
+        "y": -19
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "3h"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 9,
+      "rect": {
+        "height": 21,
+        "width": 527,
+        "x": 60,
+        "y": 1
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Your legacy will never dye."
+    },
+    {
+      "hrefAncestor": null,
+      "index": 10,
+      "rect": {
+        "height": 18,
+        "width": 25,
+        "x": 83,
+        "y": 37
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "112"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 11,
+      "rect": {
+        "height": 18,
+        "width": 8,
+        "x": 153,
+        "y": 37
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "1"
+    },
+    {
+      "hrefAncestor": "/@arturoztalin",
+      "index": 13,
+      "rect": {
+        "height": 21,
+        "width": 83,
+        "x": 60,
+        "y": 84
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "arturoztalin"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 14,
+      "rect": {
+        "height": 14,
+        "width": 24,
+        "x": 149,
+        "y": 87
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "1h"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 15,
+      "rect": {
+        "height": 21,
+        "width": 575,
+        "x": 12,
+        "y": 125
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Wait a sec.... 😅"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 16,
+      "rect": {
+        "height": 18,
+        "width": 8,
+        "x": 35,
+        "y": 161
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "1"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 19,
+      "rect": {
+        "height": 18,
+        "width": 8,
+        "x": 173,
+        "y": 161
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "1"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 20,
+      "rect": {
+        "height": 15,
+        "width": 103,
+        "x": 484,
+        "y": 209
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "View activityView activity"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 22,
+      "rect": {
+        "height": 21,
+        "width": 150,
+        "x": 61,
+        "y": 641
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Reply to arturoztalin..."
+    },
+    {
+      "hrefAncestor": null,
+      "index": 23,
+      "rect": {
+        "height": 17,
+        "width": 44,
+        "x": 41,
+        "y": 826
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "© 2026"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 24,
+      "rect": {
+        "height": 17,
+        "width": 84,
+        "x": 97,
+        "y": 826
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Threads Terms"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 25,
+      "rect": {
+        "height": 17,
+        "width": 78,
+        "x": 193,
+        "y": 826
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Privacy Policy"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 26,
+      "rect": {
+        "height": 17,
+        "width": 180,
+        "x": 284,
+        "y": 826
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Consumer Health Privacy Policy"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 27,
+      "rect": {
+        "height": 17,
+        "width": 83,
+        "x": 475,
+        "y": 826
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Cookies Policy"
+    },
+    {
+      "hrefAncestor": null,
+      "index": 28,
+      "rect": {
+        "height": 0,
+        "width": 0,
+        "x": 0,
+        "y": 0
+      },
+      "sourceLinkAncestor": false,
+      "tag": "span",
+      "text": "Mark spoiler"
+    }
+  ],
+  "roots": {
+    "articleCount": 0,
+    "dataTestIdCount": 0,
+    "regions": [],
+    "roleArticleCount": 0
+  },
+  "sourceLinks": [
+    {
+      "absoluteHref": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
+      "ariaLabel": null,
+      "containsSourceId": true,
+      "href": "/@arturoztalin/post/DZ3e05qlNxc",
+      "index": 10,
+      "rect": {
+        "height": 18,
+        "width": 24,
+        "x": 149,
+        "y": 86
+      },
+      "role": "link",
+      "text": "1h"
+    }
+  ],
+  "times": [
+    {
+      "datetime": "2026-06-21T22:20:15.000Z",
+      "index": 0,
+      "nearestSourceLinkHref": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i",
+      "rect": {
+        "height": 21,
+        "width": 24,
+        "x": 165,
+        "y": -201
+      },
+      "text": "3h"
+    },
+    {
+      "datetime": "2026-06-21T22:33:37.000Z",
+      "index": 1,
+      "nearestSourceLinkHref": "https://www.threads.com/@joggerknotty/post/DZ3WaVaAeV8",
+      "rect": {
+        "height": 21,
+        "width": 24,
+        "x": 158,
+        "y": -22
+      },
+      "text": "3h"
+    },
+    {
+      "datetime": "2026-06-21T23:47:09.000Z",
+      "index": 2,
+      "nearestSourceLinkHref": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
+      "rect": {
+        "height": 21,
+        "width": 24,
+        "x": 149,
+        "y": 84
+      },
+      "text": "1h"
+    }
+  ]
+}

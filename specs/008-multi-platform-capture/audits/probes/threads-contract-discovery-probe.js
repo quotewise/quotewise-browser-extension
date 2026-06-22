@@ -40,7 +40,9 @@
   };
 
   const canonical = document.querySelector('link[rel="canonical"]')?.href || null;
-  const identity = sourceFrom(canonical) || sourceFrom(location.href);
+  const locationIdentity = sourceFrom(location.href);
+  const canonicalIdentity = sourceFrom(canonical);
+  const identity = locationIdentity || canonicalIdentity;
   const sourceSelector = selectorForSourceId(identity?.sourceId || null);
   const ogTitle = metaContent('meta[property="og:title"]');
   const ogDescription = metaContent('meta[property="og:description"]') || metaContent('meta[name="description"]');
@@ -60,6 +62,7 @@
     rect: rectFor(link),
   }));
   const sourceLinks = links.filter(link => link.containsSourceId);
+  const primarySourceLink = sourceLinks[0] || null;
 
   const times = Array.from(document.querySelectorAll('time[datetime]')).map((time, index) => ({
     index,
@@ -95,15 +98,21 @@
   const numericTextCandidates = renderedTextCandidates
     .filter(candidate => parseCount(candidate.text) !== null)
     .map(candidate => ({ ...candidate, parsedCount: parseCount(candidate.text) }));
+  const focalActionLabels = primarySourceLink
+    ? actionLabels.filter(label => label.rect.y > primarySourceLink.rect.y && label.rect.y < primarySourceLink.rect.y + 500)
+    : actionLabels;
+  const focalNumericTextCandidates = primarySourceLink
+    ? numericTextCandidates.filter(candidate => candidate.rect.y > primarySourceLink.rect.y && candidate.rect.y < primarySourceLink.rect.y + 500)
+    : numericTextCandidates;
   const actionCountFor = (actionName, nextActionNames) => {
-    const action = actionLabels.find(label => new RegExp(`^${actionName}$`, 'i').test(label.label));
+    const action = focalActionLabels.find(label => new RegExp(`^${actionName}$`, 'i').test(label.label));
     if (!action) return null;
-    const nextAction = actionLabels.find(label =>
+    const nextAction = focalActionLabels.find(label =>
       nextActionNames.some(name => new RegExp(`^${name}$`, 'i').test(label.label)) &&
       Math.abs(label.rect.y - action.rect.y) <= 8 &&
       label.rect.x > action.rect.x
     );
-    const candidates = numericTextCandidates.filter(candidate =>
+    const candidates = focalNumericTextCandidates.filter(candidate =>
       Math.abs(candidate.rect.y - action.rect.y) <= 8 &&
       candidate.rect.x > action.rect.x &&
       (!nextAction || candidate.rect.x < nextAction.rect.x)
@@ -151,12 +160,30 @@
     candidate.text.length > 80 &&
     !/^reply to /i.test(candidate.text)
   ) || null;
+  const renderedFocalBySourceLink = primarySourceLink ? renderedTextCandidates.find(candidate =>
+    candidate.hrefAncestor === null &&
+    candidate.rect.y > primarySourceLink.rect.y &&
+    candidate.rect.y < primarySourceLink.rect.y + 220 &&
+    candidate.text !== primarySourceLink.text &&
+    candidate.text !== identity?.handle &&
+    !/^\d+(\.\d+)?[KMB]?$/i.test(candidate.text) &&
+    !/^\d+[hm]$/.test(candidate.text) &&
+    !/^reply to /i.test(candidate.text) &&
+    !/^view activity/i.test(candidate.text) &&
+    candidate.text !== 'More' &&
+    candidate.text !== 'Follow'
+  ) || null : null;
+  const canonicalMatchesLocation = !!identity?.sourceId &&
+    canonicalIdentity?.sourceId === identity.sourceId &&
+    canonicalIdentity?.handle === identity.handle;
 
   const observations = [
     document.querySelectorAll('article').length === 0 ? 'No article elements in rendered Threads permalink DOM.' : null,
     document.querySelectorAll('[data-testid]').length === 0 ? 'No data-testid hooks in rendered Threads permalink DOM.' : null,
     document.querySelectorAll('[role="article"]').length === 0 ? 'No role=article hooks in rendered Threads permalink DOM.' : null,
-    ogDescription ? 'og:description contains exact post body text for this original permalink.' : null,
+    ogDescription && canonicalMatchesLocation ? 'og:description contains exact post body text for this permalink.' : null,
+    ogDescription && !canonicalMatchesLocation ? 'Canonical/OG metadata points to a different post than the browser URL; treat it as parent context for this fixture.' : null,
+    renderedFocalBySourceLink ? 'Focal rendered text candidate exists after the source-linked timestamp for the browser URL.' : null,
     renderedBodyCandidate ? 'Rendered body text exists as dir=auto text, but browser extraction may normalize/degrade characters.' : null,
     actionCountCandidates.likes ? 'Like count candidate exists between Like and Reply action icons; validate across low/zero and abbreviated/high-like fixtures before promotion.' : null,
   ].filter(Boolean);
@@ -168,7 +195,9 @@
       url: location.href,
       uiLang: document.documentElement.lang || null,
     },
-    identity,
+    identity: identity ? { ...identity } : null,
+    locationIdentity: locationIdentity ? { ...locationIdentity } : null,
+    canonicalIdentity: canonicalIdentity ? { ...canonicalIdentity } : null,
     metadata: {
       canonical,
       ogUrl: metaContent('meta[property="og:url"]'),
@@ -188,8 +217,23 @@
         titleBody,
         postedAt,
         likesCount: null,
-        confidence: canonical && identity?.sourceId && ogDescription && displayFromTitle
+        confidence: canonicalMatchesLocation && canonical && identity?.sourceId && ogDescription && displayFromTitle
           ? 'high_for_original_permalink'
+          : canonical && canonicalIdentity && locationIdentity && !canonicalMatchesLocation
+            ? 'mismatch_parent_context'
+            : 'incomplete',
+      },
+      sourceLinkedRendered: {
+        platform: 'threads',
+        platformCode: 'TH',
+        sourceUrl: location.href,
+        sourceId: locationIdentity?.sourceId || identity?.sourceId || null,
+        authorHandle: locationIdentity?.handle || identity?.handle || null,
+        text: renderedFocalBySourceLink?.text || null,
+        postedAt,
+        likesCount: cloneActionCount(actionCountCandidates.likes)?.value ?? null,
+        confidence: renderedFocalBySourceLink && locationIdentity?.sourceId
+          ? 'candidate_for_reply_or_context_permalink'
           : 'incomplete',
       },
       renderedBodyCandidate,

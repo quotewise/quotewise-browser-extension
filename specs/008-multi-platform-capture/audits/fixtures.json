@@ -41,7 +41,7 @@
           "https://www.threads.com/@hormozi/post/DZ3Ly0-larF",
           "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i"
         ],
-        "reply_or_comment": null,
+        "reply_or_comment": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
         "repost_quote_or_reshare": null,
         "media": null,
         "long_or_collapsed": null,
@@ -65,6 +65,15 @@
           "probeA": "threads/raw/probe-a/original-die-workwear-dz3u4c5j30i-authenticated.json",
           "otherFeatures": "threads/raw/other-features/original-die-workwear-dz3u4c5j30i-authenticated.json",
           "contractDiscovery": "threads/raw/contract-discovery/original-die-workwear-dz3u4c5j30i-authenticated.json"
+        },
+        {
+          "fixtureClass": "reply_or_comment",
+          "authState": "authenticated",
+          "url": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
+          "providedUrl": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc?xmt=AQG0Wg5Fei3m6HdTfEhA8VlIkLzFk8HVvIsmysisbgpy0w",
+          "probeA": "threads/raw/probe-a/reply-arturoztalin-dz3e05qlnxc-authenticated.json",
+          "otherFeatures": "threads/raw/other-features/reply-arturoztalin-dz3e05qlnxc-authenticated.json",
+          "contractDiscovery": "threads/raw/contract-discovery/reply-arturoztalin-dz3e05qlnxc-authenticated.json"
         }
       ]
     },

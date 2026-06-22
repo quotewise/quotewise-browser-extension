@@ -1,0 +1,455 @@
+{
+  "accessibleLabels": [
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Profile",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "More",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "More",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "More",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Like",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Reply",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Repost",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Share",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "More",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Like",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Reply",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Repost",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Share",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "More",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Like",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Reply",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Repost",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Share",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "View activity",
+      "tag": "svg"
+    },
+    {
+      "attrs": {
+        "role": "img"
+      },
+      "label": "Profile",
+      "tag": "svg"
+    }
+  ],
+  "canonical": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i",
+  "hydration": [
+    {
+      "hasPostTerms": false,
+      "id": "envjson",
+      "textLength": 236,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": "__eqmc",
+      "textLength": 229,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 82,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 21452,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 2824,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 53,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 49,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 60,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 181,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 80,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 674,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 82,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 231999,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 83,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 122,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 83350,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 581,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 138,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 105,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 726,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 123,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 105,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 6325,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 80,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 8239,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 387,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 41522,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 83,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 95,
+      "type": "application/json"
+    },
+    {
+      "hasPostTerms": false,
+      "id": null,
+      "textLength": 94,
+      "type": "application/json"
+    }
+  ],
+  "jsonLd": [],
+  "meta": {
+    "probe": "other-features",
+    "uiLang": "en",
+    "url": "https://www.threads.com/@arturoztalin/post/DZ3e05qlNxc",
+    "version": "2026-06-21"
+  },
+  "metadata": [
+    {
+      "content": "Threads",
+      "key": "og:site_name"
+    },
+    {
+      "content": "article",
+      "key": "og:type"
+    },
+    {
+      "content": "article",
+      "key": "og:type"
+    },
+    {
+      "content": "Derek Guy (@die_workwear) on Threads",
+      "key": "og:title"
+    },
+    {
+      "content": "Today, on Father's Day, I'm thinking about how my dad immigrated to the United States after escaping three civil wars and working as a janitor, only to see his bloodline die out because his son stumbled into a menswear forum and then spent the next 20 years arguing about pants with teenagers named P",
+      "key": "og:description"
+    },
+    {
+      "content": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i",
+      "key": "og:url"
+    },
+    {
+      "content": "https://scontent-sea5-1.cdninstagram.com/v/t51.2885-19/358041502_2446364475533128_8145281079052367615_n.jpg?efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby40MDAuYzIifQ&_nc_ht=scontent-sea5-1.cdninstagram.com&_nc_cat=1&_nc_oc=Q6cZ2gGOzeKr3Kxrt_jX4vWqeif_m-o_0rBBoAM5BqG8n7p6XN1WZtaBq5rDIOrxLuF0lec&",
+      "key": "og:image"
+    },
+    {
+      "content": "Today, on Father's Day, I'm thinking about how my dad immigrated to the United States after escaping three civil wars and working as a janitor, only to...",
+      "key": "description"
+    },
+    {
+      "content": "summary",
+      "key": "twitter:card"
+    },
+    {
+      "content": "Derek Guy (@die_workwear) on Threads",
+      "key": "twitter:title"
+    },
+    {
+      "content": "Today, on Father's Day, I'm thinking about how my dad immigrated to the United States after escaping three civil wars and working as a janitor, only to see his bloodline die out because his son...",
+      "key": "twitter:description"
+    },
+    {
+      "content": "https://scontent-sea5-1.cdninstagram.com/v/t51.2885-19/358041502_2446364475533128_8145281079052367615_n.jpg?efg=eyJ2ZW5jb2RlX3RhZyI6InByb2ZpbGVfcGljLmRqYW5nby40MDAuYzIifQ&_nc_ht=scontent-sea5-1.cdninstagram.com&_nc_cat=1&_nc_oc=Q6cZ2gGOzeKr3Kxrt_jX4vWqeif_m-o_0rBBoAM5BqG8n7p6XN1WZtaBq5rDIOrxLuF0lec&",
+      "key": "twitter:image"
+    }
+  ],
+  "stableIdentifiers": [
+    {
+      "attrs": {
+        "href": "/@die_workwear",
+        "role": "link"
+      },
+      "tag": "a",
+      "text": "die_workwear"
+    },
+    {
+      "attrs": {
+        "href": "/@die_workwear/post/DZ3U4c5j30i",
+        "role": "link"
+      },
+      "tag": "a",
+      "text": "3h"
+    },
+    {
+      "attrs": {
+        "datetime": "2026-06-21T22:20:15.000Z"
+      },
+      "tag": "time",
+      "text": "3h"
+    },
+    {
+      "attrs": {
+        "href": "/@joggerknotty",
+        "role": "link"
+      },
+      "tag": "a",
+      "text": "joggerknotty"
+    },
+    {
+      "attrs": {
+        "href": "/@joggerknotty/post/DZ3WaVaAeV8",
+        "role": "link"
+      },
+      "tag": "a",
+      "text": "3h"
+    },
+    {
+      "attrs": {
+        "datetime": "2026-06-21T22:33:37.000Z"
+      },
+      "tag": "time",
+      "text": "3h"
+    },
+    {
+      "attrs": {
+        "href": "/@arturoztalin",
+        "role": "link"
+      },
+      "tag": "a",
+      "text": "arturoztalin"
+    },
+    {
+      "attrs": {
+        "href": "/@arturoztalin/post/DZ3e05qlNxc",
+        "role": "link"
+      },
+      "tag": "a",
+      "text": "1h"
+    },
+    {
+      "attrs": {
+        "datetime": "2026-06-21T23:47:09.000Z"
+      },
+      "tag": "time",
+      "text": "1h"
+    }
+  ]
+}
