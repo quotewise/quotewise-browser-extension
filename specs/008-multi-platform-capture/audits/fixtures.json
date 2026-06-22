@@ -37,7 +37,10 @@
       "phase": 2,
       "enabledByDefault": false,
       "urls": {
-        "original": "https://www.threads.com/@hormozi/post/DZ3Ly0-larF",
+        "original": [
+          "https://www.threads.com/@hormozi/post/DZ3Ly0-larF",
+          "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i"
+        ],
         "reply_or_comment": null,
         "repost_quote_or_reshare": null,
         "media": null,
@@ -46,7 +49,23 @@
         "non_english": null,
         "low_or_zero_likes": null,
         "abbreviated_or_high_likes": null
-      }
+      },
+      "auditRuns": [
+        {
+          "fixtureClass": "original",
+          "authState": "public-rendered",
+          "url": "https://www.threads.com/@hormozi/post/DZ3Ly0-larF",
+          "probeA": "threads/raw/probe-a/original-hormozi-dz3ly0-larf.json",
+          "otherFeatures": "threads/raw/other-features/original-hormozi-dz3ly0-larf.json"
+        },
+        {
+          "fixtureClass": "original",
+          "authState": "authenticated",
+          "url": "https://www.threads.com/@die_workwear/post/DZ3U4c5j30i",
+          "probeA": "threads/raw/probe-a/original-die-workwear-dz3u4c5j30i-authenticated.json",
+          "otherFeatures": "threads/raw/other-features/original-die-workwear-dz3u4c5j30i-authenticated.json"
+        }
+      ]
     },
     "bluesky": {
       "phase": 3,
