@@ -217,9 +217,13 @@ export function textWithLineBreaks(element: Element): string {
   return normalizeMultilineText(rawText);
 }
 
-export function bodyTextFromRoot(root: ParentNode, sourceId?: string): string {
+export function bodyTextFromRoot(root: ParentNode, sourceId?: string, ignoredTexts: string[] = []): string {
+  const ignored = ignoredTexts
+    .map(text => normalizeInlineText(text))
+    .filter(Boolean);
+
   const candidates = Array.from(root.querySelectorAll<HTMLElement>('div, span, p'))
-    .filter(element => bodyTextCandidate(element, sourceId))
+    .filter(element => bodyTextCandidate(element, sourceId, ignored))
     .map(element => ({
       element,
       text: textWithLineBreaks(element),
@@ -271,9 +275,14 @@ function sourceRootScore(element: HTMLElement, sourceId: string): number {
   return score;
 }
 
-function bodyTextCandidate(element: HTMLElement, sourceId?: string): boolean {
+function bodyTextCandidate(element: HTMLElement, sourceId?: string, ignoredTexts: string[] = []): boolean {
   const text = textWithLineBreaks(element);
   if (!text || actionOrMetricText(text)) {
+    return false;
+  }
+
+  const inlineText = normalizeInlineText(text);
+  if (ignoredTexts.includes(inlineText) || ignoredAuthorMetadataText(inlineText, ignoredTexts)) {
     return false;
   }
 
@@ -299,6 +308,26 @@ function bodyTextCandidate(element: HTMLElement, sourceId?: string): boolean {
   return true;
 }
 
+function ignoredAuthorMetadataText(value: string, ignoredTexts: string[]): boolean {
+  for (const ignoredText of ignoredTexts) {
+    if (!value.toLowerCase().startsWith(ignoredText.toLowerCase())) {
+      continue;
+    }
+
+    const remainder = value.slice(ignoredText.length).trim();
+    if (!remainder) {
+      return true;
+    }
+
+    if (/^(Verified\s*)?(More\s*)?$/i.test(remainder) ||
+      /^(Verified\s*)?\d+[smhdw](\s+More)?$/i.test(remainder)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function bodyTextScore(element: HTMLElement, text: string): number {
   let score = 0;
 
@@ -316,6 +345,9 @@ function bodyTextScore(element: HTMLElement, text: string): number {
   }
   if (text.length > 800) {
     score -= 2;
+  }
+  if (element.querySelector('button, [role="button"], [aria-label*="Like" i], [aria-label*="Reply" i], [aria-label*="Repost" i], [aria-label*="Share" i]')) {
+    score -= 6;
   }
   if (element.querySelector('img, video, audio, a[href^="http"]')) {
     score -= 4;
