@@ -1,6 +1,6 @@
 {
   "feature": "008-multi-platform-capture",
-  "status": "threads-live-audit-in-progress",
+  "status": "multi-platform-live-audit-in-progress",
   "notes": [
     "Fill url fields with public, logged-in-accessible permalinks before running probes.",
     "Do not add credentials, cookies, private session data, or private account-only content.",
@@ -126,7 +126,7 @@
         "original": "https://bsky.app/profile/mattsinger.bsky.social/post/3motounu5ys2w",
         "reply_or_comment": null,
         "repost_quote_or_reshare": null,
-        "media": null,
+        "media": "https://bsky.app/profile/vulture.com/post/3motti7lzfi2q",
         "long_or_collapsed": null,
         "unavailable_private_login_gated_or_paywalled": null,
         "non_english": null,
@@ -142,6 +142,15 @@
           "probeA": "bluesky/raw/probe-a/original-mattsinger-3motounu5ys2w-public-rendered.json",
           "otherFeatures": "bluesky/raw/other-features/original-mattsinger-3motounu5ys2w-public-rendered.json",
           "contractDiscovery": "bluesky/raw/contract-discovery/original-mattsinger-3motounu5ys2w-public-rendered.json"
+        },
+        {
+          "fixtureClass": "media",
+          "authState": "public-rendered",
+          "url": "https://bsky.app/profile/vulture.com/post/3motti7lzfi2q",
+          "notes": "Bluesky post with an external link card and visible card media; validates focal text exclusion from link-card text.",
+          "probeA": "bluesky/raw/probe-a/media-link-vulture-3motti7lzfi2q-public-rendered.json",
+          "otherFeatures": "bluesky/raw/other-features/media-link-vulture-3motti7lzfi2q-public-rendered.json",
+          "contractDiscovery": "bluesky/raw/contract-discovery/media-link-vulture-3motti7lzfi2q-public-rendered.json"
         }
       ]
     },
@@ -149,7 +158,7 @@
       "phase": 4,
       "enabledByDefault": false,
       "urls": {
-        "original": null,
+        "original": "https://substack.com/@stoicwisdoms/note/c-280076000",
         "reply_or_comment": null,
         "repost_quote_or_reshare": null,
         "media": null,
@@ -159,7 +168,18 @@
         "low_or_zero_likes": null,
         "abbreviated_or_high_likes": null,
         "custom_domain_evidence_only": null
-      }
+      },
+      "auditRuns": [
+        {
+          "fixtureClass": "original",
+          "authState": "public-rendered",
+          "url": "https://substack.com/@stoicwisdoms/note/c-280076000",
+          "notes": "Substack.com Note by @stoicwisdoms; metadata provides canonical URL, body, ISO published time, likes, and replies while visible Note root validates body and action counts.",
+          "probeA": "substack-notes/raw/probe-a/original-stoicwisdoms-c-280076000-public-rendered.json",
+          "otherFeatures": "substack-notes/raw/other-features/original-stoicwisdoms-c-280076000-public-rendered.json",
+          "contractDiscovery": "substack-notes/raw/contract-discovery/original-stoicwisdoms-c-280076000-public-rendered.json"
+        }
+      ]
     }
   }
 }

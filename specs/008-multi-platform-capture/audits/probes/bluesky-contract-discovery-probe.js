@@ -54,7 +54,7 @@
   const locationIdentity = sourceFrom(location.href);
   const sourceId = locationIdentity?.sourceId || null;
   const handle = locationIdentity?.handle || null;
-  const exactSourceLinks = Array.from(document.querySelectorAll('a[href]'))
+  const allSourceLinks = Array.from(document.querySelectorAll('a[href]'))
     .map((link, index) => {
       const rect = rectFor(link);
       const source = sourceFrom(link.getAttribute('href'));
@@ -68,8 +68,8 @@
         visible: isVisible(rect),
       };
     })
-    .filter((link) => link.source?.exactPermalink);
-  const sourceLinksForLocation = exactSourceLinks.filter((link) =>
+    .filter((link) => link.source);
+  const sourceLinksForLocation = allSourceLinks.filter((link) =>
     link.source?.sourceId === sourceId &&
     link.source?.handle === handle);
   const visibleThreadItems = Array.from(document.querySelectorAll('[data-testid^="postThreadItem-by-"]'))
@@ -87,7 +87,13 @@
     })
     .filter((entry) => entry.visible);
   const focalRoot = visibleThreadItems.find((entry) =>
-    entry.attrs['data-testid'] === `postThreadItem-by-${handle}`) ||
+    entry.attrs['data-testid'] === `postThreadItem-by-${handle}` &&
+    Array.from(entry.element.querySelectorAll('a[href]')).some((link) => {
+      const source = sourceFrom(link.getAttribute('href'));
+      return source?.sourceId === sourceId && source?.handle === handle;
+    })) ||
+    visibleThreadItems.find((entry) =>
+      entry.attrs['data-testid'] === `postThreadItem-by-${handle}`) ||
     visibleThreadItems.find((entry) => entry.text.includes(`@${handle}`)) ||
     null;
   const isActionOrChromeText = (value) =>
@@ -99,36 +105,48 @@
     /^\d+$/.test(value) ||
     /^\d[\d,.]*\s+(likes?|reposts?|replies?)$/i.test(value) ||
     /^\d{1,2}:\d{2}\s+[AP]M\s+·\s+/i.test(value);
-  const smallestTextCandidates = focalRoot ? Array.from(focalRoot.element.querySelectorAll('div, span'))
+  const textCandidateElements = focalRoot ? Array.from(focalRoot.element.querySelectorAll('div, span, a'))
     .map((element, index) => {
       const rect = rectFor(element);
       const text = clean(element.textContent, 1000);
-      const hasSameTextChild = Array.from(element.children).some((child) => clean(child.textContent, 1000) === text);
+      const hrefAncestor = element.closest('a[href]')?.getAttribute('href') || null;
+      const hrefPath = hrefAncestor ? parseUrl(hrefAncestor)?.pathname || hrefAncestor : null;
       return {
         index,
         tag: element.tagName.toLowerCase(),
         attrs: attrs(element, ['data-testid', 'role', 'aria-label']),
         text,
-        hrefAncestor: element.closest('a[href]')?.getAttribute('href') || null,
+        hrefAncestor,
+        hrefPath,
         buttonAncestor: !!element.closest('button'),
         rect,
         visible: isVisible(rect),
-        hasSameTextChild,
       };
     })
     .filter((candidate) =>
       candidate.visible &&
-      !candidate.hasSameTextChild &&
-      !candidate.hrefAncestor &&
+      (!candidate.hrefAncestor || candidate.hrefPath?.startsWith('/hashtag/')) &&
       !candidate.buttonAncestor &&
       candidate.text.length > 20 &&
       !candidate.text.includes(`@${handle}`) &&
-      !candidate.text.includes('Follow') &&
+      candidate.text !== 'Follow' &&
       !candidate.text.includes('Everybody can reply') &&
+      !/\d{1,2}:\d{2}\s+[AP]M\s+·\s+/i.test(candidate.text) &&
       !/\d[\d,.]*\s+likes?\b/i.test(candidate.text) &&
       !isActionOrChromeText(candidate.text))
-    .sort((a, b) => a.rect.y - b.rect.y || a.text.length - b.text.length)
-    .slice(0, 20) : [];
+    .sort((a, b) =>
+      a.rect.y - b.rect.y ||
+      Number(!!a.hrefAncestor) - Number(!!b.hrefAncestor) ||
+      (a.rect.width * a.rect.height) - (b.rect.width * b.rect.height) ||
+      a.text.length - b.text.length) : [];
+  const smallestTextCandidates = [];
+  const seenTextCandidates = new Set();
+  for (const candidate of textCandidateElements) {
+    if (seenTextCandidates.has(candidate.text)) continue;
+    seenTextCandidates.add(candidate.text);
+    smallestTextCandidates.push(candidate);
+    if (smallestTextCandidates.length >= 20) break;
+  }
   const bodyCandidate = smallestTextCandidates[0] || null;
   const authorLink = focalRoot ? Array.from(focalRoot.element.querySelectorAll('a[href^="/profile/"]'))
     .map((link, index) => {
@@ -181,6 +199,96 @@
     likeCandidates.find((candidate) => candidate.attrs['data-testid'] === 'likeBtn') ||
     likeCandidates.find((candidate) => candidate.parsedCount !== null) ||
     null;
+  const countCandidate = (testId) => {
+    if (!focalRoot) return null;
+    const element = focalRoot.element.querySelector(`[data-testid="${testId}"]`);
+    if (!element) return null;
+    const rect = rectFor(element);
+    const raw = element.getAttribute('aria-label') || clean(element.textContent, 120);
+    return {
+      tag: element.tagName.toLowerCase(),
+      attrs: attrs(element, ['data-testid', 'role', 'aria-label', 'href']),
+      raw,
+      text: clean(element.textContent, 120),
+      parsedCount: /\d/.test(raw) ? parseCount(raw) : null,
+      rect,
+      visible: isVisible(rect),
+    };
+  };
+  const actionCounts = {
+    replies: countCandidate('replyBtn'),
+    reposts: countCandidate('repostBtn'),
+    likes: countCandidate('likeBtn'),
+    repostsExpanded: countCandidate('repostCount-expanded'),
+    quotesExpanded: countCandidate('quoteCount-expanded'),
+    likesExpanded: countCandidate('likeCount-expanded'),
+    savesExpanded: countCandidate('bookmarkCount-expanded'),
+  };
+  const attachmentEvidence = focalRoot ? (() => {
+    const externalLinks = Array.from(focalRoot.element.querySelectorAll('a[href]'))
+      .map((link, index) => {
+        const rect = rectFor(link);
+        const url = parseUrl(link.getAttribute('href'));
+        const href = url ? `${url.origin}${url.pathname}` : link.getAttribute('href');
+        return {
+          index,
+          tag: link.tagName.toLowerCase(),
+          attrs: attrs(link, ['role', 'aria-label', 'data-testid']),
+          href,
+          text: clean(link.textContent, 500),
+          rect,
+          visible: isVisible(rect),
+        };
+      })
+      .filter((link) =>
+        link.visible &&
+        link.href &&
+        parseUrl(link.href)?.origin !== location.origin)
+      .slice(0, 20);
+    const hashtags = Array.from(focalRoot.element.querySelectorAll('a[href^="/hashtag/"]'))
+      .map((link, index) => {
+        const rect = rectFor(link);
+        return {
+          index,
+          tag: link.tagName.toLowerCase(),
+          attrs: attrs(link, ['role', 'aria-label', 'data-testid']),
+          href: link.getAttribute('href'),
+          text: clean(link.textContent, 120),
+          rect,
+          visible: isVisible(rect),
+        };
+      })
+      .filter((link) => link.visible)
+      .slice(0, 20);
+    const mediaElements = Array.from(focalRoot.element.querySelectorAll('img, video, canvas, [aria-label*="image" i], [aria-label*="video" i]'))
+      .map((element, index) => {
+        const rect = rectFor(element);
+        const nearestLink = element.closest('a[href]');
+        const nearestUrl = nearestLink ? parseUrl(nearestLink.getAttribute('href')) : null;
+        return {
+          index,
+          tag: element.tagName.toLowerCase(),
+          attrs: attrs(element, ['alt', 'role', 'aria-label', 'data-testid']),
+          nearestHref: nearestUrl ? `${nearestUrl.origin}${nearestUrl.pathname}` : nearestLink?.getAttribute('href') || null,
+          text: clean(element.textContent, 240),
+          rect,
+          visible: isVisible(rect),
+        };
+      })
+      .filter((entry) =>
+        entry.visible &&
+        !entry.nearestHref?.startsWith(`${location.origin}/profile/${handle}`) &&
+        !/avatar/i.test(entry.attrs['aria-label'] || entry.attrs.alt || ''))
+      .slice(0, 40);
+    return {
+      externalLinks,
+      hashtags,
+      mediaElements,
+      hasExternalLink: externalLinks.length > 0,
+      hasHashtags: hashtags.length > 0,
+      hasVisibleMedia: mediaElements.length > 0,
+    };
+  })() : { externalLinks: [], hashtags: [], mediaElements: [], hasExternalLink: false, hasHashtags: false, hasVisibleMedia: false };
   const cloneLikeCandidate = (candidate) => candidate ? ({
     index: candidate.index,
     tag: candidate.tag,
@@ -225,6 +333,9 @@
     canonical === 'https://bsky.app/' || canonical === 'https://bsky.app' ? 'Canonical metadata points to bsky.app root, not the permalink.' : null,
     bodyCandidate ? 'Visible focal body candidate exists inside postThreadItem-by-{handle} root.' : null,
     primaryLikeCandidate?.parsedCount !== null ? 'Visible like count candidate exists inside focal root.' : null,
+    attachmentEvidence.hasExternalLink ? 'External link-card candidate exists inside focal root.' : null,
+    attachmentEvidence.hasHashtags ? 'Hashtag candidates exist inside focal root.' : null,
+    attachmentEvidence.hasVisibleMedia ? 'Visible media candidate exists inside focal root.' : null,
   ].filter(Boolean);
   const out = {
     meta: {
@@ -275,6 +386,7 @@
         confidence: focalRoot && bodyCandidate && handle && sourceId ? 'candidate_visible_focal_root' : 'incomplete',
       },
       currentAdapterMimic: currentAdapterRoot,
+      actionCounts,
       likes: {
         disposition: primaryLikeCandidate?.parsedCount !== null
           ? 'candidate_visible_focal_root_like_count_needs_more_fixtures'
@@ -282,8 +394,9 @@
         candidate: cloneLikeCandidate(primaryLikeCandidate),
         candidates: likeCandidates.map(cloneLikeCandidate),
       },
+      attachments: attachmentEvidence,
     },
-    sourceLinks: exactSourceLinks.map((link) => ({ ...link, source: link.source ? { ...link.source } : null, rect: { ...link.rect } })).slice(0, 120),
+    sourceLinks: allSourceLinks.map((link) => ({ ...link, source: link.source ? { ...link.source } : null, rect: { ...link.rect } })).slice(0, 120),
     visibleThreadItems: visibleThreadItems.map((entry) => ({
       index: entry.index,
       tag: entry.tag,
