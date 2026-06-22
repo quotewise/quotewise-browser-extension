@@ -19,27 +19,30 @@
     if (atHandle) {
       return {
         handle: atHandle[1],
+        profileSlug: null,
         sourceId: atHandle[2],
         url: url.toString(),
         exactPermalink: url.pathname === `/@${atHandle[1]}/note/${atHandle[2]}`,
+      };
+    }
+    const profileNote = url?.pathname.match(/\/profile\/([^/]+)\/note\/([^/?#]+)/);
+    if (profileNote) {
+      return {
+        handle: null,
+        profileSlug: profileNote[1],
+        sourceId: profileNote[2],
+        url: url.toString(),
+        exactPermalink: url.pathname === `/profile/${profileNote[1]}/note/${profileNote[2]}`,
       };
     }
     const bareNote = url?.pathname.match(/\/note\/([^/?#]+)/);
     if (bareNote) {
       return {
         handle: null,
+        profileSlug: null,
         sourceId: bareNote[1],
         url: url.toString(),
         exactPermalink: url.pathname === `/note/${bareNote[1]}`,
-      };
-    }
-    const profileNote = url?.pathname.match(/\/profile\/[^/]+\/note\/([^/?#]+)/);
-    if (profileNote) {
-      return {
-        handle: null,
-        sourceId: profileNote[1],
-        url: url.toString(),
-        exactPermalink: false,
       };
     }
     return null;
@@ -86,7 +89,13 @@
   const titleIdentity = ogTitle?.match(/^(.+?)\s+\(@([^)]+)\)$/);
   const displayNameFromTitle = clean(titleIdentity?.[1] || '', 160) || null;
   const handleFromTitle = titleIdentity?.[2] || null;
-  const description = metaContent('meta[property="og:description"]') || metaContent('meta[name="description"]') || null;
+  const recoveredHandle = handle || handleFromTitle;
+  const description = clean(
+    metaContent('meta[property="og:description"]') || metaContent('meta[name="description"]') || '',
+    2000,
+  ) || null;
+  const compareText = (value) => clean(value, 2000).replace(/\s+/g, '');
+  const descriptionCompare = description ? compareText(description) : null;
   const publishedTime = metaContent('meta[property="og:published_time"]') ||
     metaContent('meta[property="article:published_time"]') ||
     null;
@@ -159,8 +168,18 @@
       candidate.visible &&
       !candidate.hasSameTextChild &&
       candidate.text.length > 20 &&
-      (!description || candidate.text === clean(description, 2000) || candidate.text.startsWith(clean(description, 80))))
-    .sort((a, b) => a.text.length - b.text.length || a.rect.y - b.rect.y)
+      (!descriptionCompare ||
+        compareText(candidate.text) === descriptionCompare ||
+        compareText(candidate.text).startsWith(descriptionCompare.slice(0, 80)) ||
+        descriptionCompare.startsWith(compareText(candidate.text).slice(0, 80))))
+    .sort((a, b) => {
+      if (descriptionCompare) {
+        const aDelta = Math.abs(descriptionCompare.length - compareText(a.text).length);
+        const bDelta = Math.abs(descriptionCompare.length - compareText(b.text).length);
+        return aDelta - bDelta || a.rect.y - b.rect.y || a.text.length - b.text.length;
+      }
+      return a.text.length - b.text.length || a.rect.y - b.rect.y;
+    })
     .slice(0, 20) : [];
   const bodyCandidate = textCandidates[0] || null;
   const authorLink = focalRoot ? Array.from(focalRoot.element.querySelectorAll('a[href^="/@"]'))
@@ -234,6 +253,7 @@
     description ? 'OG/description metadata contains the note body.' : null,
     publishedTime ? 'Metadata exposes an ISO published timestamp.' : null,
     twitterCardMetrics.length > 0 ? 'Twitter card metadata exposes likes/replies counts.' : null,
+    identity?.profileSlug && recoveredHandle ? 'Loaded profile-note URL has a profile slug; author handle was recovered from title/visible permalink evidence.' : null,
     focalRoot ? 'Visible focal root candidate is a Note article with a matching note permalink link.' : null,
     bodyCandidate ? 'Visible note body candidate matches metadata description.' : null,
   ].filter(Boolean);
@@ -269,13 +289,14 @@
         platformCode: 'SS',
         sourceUrl: canonical || ogUrl || location.href,
         sourceId,
-        authorHandle: handle || handleFromTitle,
+        authorHandle: recoveredHandle,
+        authorProfileSlug: identity?.profileSlug || null,
         displayName: displayNameFromTitle,
         text: description,
         postedAt: publishedTime,
         likesCount: twitterCardMetrics.find((metric) => /^likes?$/i.test(metric.label || ''))?.parsedCount ?? null,
         repliesCount: twitterCardMetrics.find((metric) => /^replies?$/i.test(metric.label || ''))?.parsedCount ?? null,
-        confidence: canonical && ogUrl && description && publishedTime && (handle || handleFromTitle) && sourceId
+        confidence: canonical && ogUrl && description && publishedTime && recoveredHandle && sourceId
           ? 'candidate_metadata_primary'
           : 'incomplete',
       },
@@ -284,7 +305,8 @@
         platformCode: 'SS',
         sourceUrl: location.href,
         sourceId,
-        authorHandle: handle || handleFromTitle,
+        authorHandle: recoveredHandle,
+        authorProfileSlug: identity?.profileSlug || null,
         displayName: authorLink?.text || displayNameFromTitle,
         text: bodyCandidate?.text || null,
         postedAt: null,

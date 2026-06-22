@@ -1,0 +1,1515 @@
+{
+  "accessibleLabels": [
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Like",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "Share",
+      "tag": "button"
+    },
+    {
+      "attrs": {},
+      "label": "More options",
+      "tag": "button"
+    }
+  ],
+  "canonical": "https://substack.com/profile/3476382-juliette-ryan/note/c-280494491",
+  "hydration": [
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 441,
+      "type": null
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 1075,
+      "type": "application/ld+json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 1075,
+      "type": "application/ld+json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 1067,
+      "type": "application/ld+json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 1067,
+      "type": "application/ld+json"
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 21021,
+      "type": null
+    },
+    {
+      "hasPostTerms": true,
+      "id": null,
+      "textLength": 614,
+      "type": null
+    }
+  ],
+  "jsonLd": [
+    {
+      "hasAuthor": true,
+      "hasDatePublished": false,
+      "hasUrl": true,
+      "index": 0,
+      "keys": [
+        "@context",
+        "@type",
+        "identifier",
+        "url",
+        "dateCreated",
+        "author",
+        "text",
+        "interactionStatistic"
+      ],
+      "type": "SocialMediaPosting"
+    },
+    {
+      "hasAuthor": true,
+      "hasDatePublished": false,
+      "hasUrl": true,
+      "index": 1,
+      "keys": [
+        "@context",
+        "@type",
+        "identifier",
+        "url",
+        "dateCreated",
+        "author",
+        "text",
+        "interactionStatistic"
+      ],
+      "type": "SocialMediaPosting"
+    },
+    {
+      "hasAuthor": true,
+      "hasDatePublished": false,
+      "hasUrl": true,
+      "index": 2,
+      "keys": [
+        "@context",
+        "@type",
+        "identifier",
+        "url",
+        "dateCreated",
+        "author",
+        "text",
+        "interactionStatistic"
+      ],
+      "type": "SocialMediaPosting"
+    },
+    {
+      "hasAuthor": true,
+      "hasDatePublished": false,
+      "hasUrl": true,
+      "index": 3,
+      "keys": [
+        "@context",
+        "@type",
+        "identifier",
+        "url",
+        "dateCreated",
+        "author",
+        "text",
+        "interactionStatistic"
+      ],
+      "type": "SocialMediaPosting"
+    }
+  ],
+  "media": {
+    "canvasCount": 0,
+    "documentCanvasCount": 0,
+    "documentImageCount": 75,
+    "documentVideoCount": 0,
+    "elements": [
+      {
+        "attrs": {
+          "alt": "Christopher Q Alexander's avatar"
+        },
+        "index": 0,
+        "nearestHref": null,
+        "rect": {
+          "height": 32,
+          "width": 32,
+          "x": 547,
+          "y": 20
+        },
+        "tag": "img",
+        "text": ""
+      },
+      {
+        "attrs": {
+          "alt": "Christopher Q Alexander's avatar"
+        },
+        "index": 56,
+        "nearestHref": null,
+        "rect": {
+          "height": 36,
+          "width": 36,
+          "x": 32,
+          "y": 196
+        },
+        "tag": "img",
+        "text": ""
+      },
+      {
+        "attrs": {
+          "alt": "Mr.Ataraxia's avatar"
+        },
+        "index": 58,
+        "nearestHref": "/profile/509098700-mrataraxia",
+        "rect": {
+          "height": 36,
+          "width": 36,
+          "x": 32,
+          "y": 551
+        },
+        "tag": "img",
+        "text": ""
+      },
+      {
+        "attrs": {
+          "alt": "Christopher Q Alexander's avatar"
+        },
+        "index": 68,
+        "nearestHref": null,
+        "rect": {
+          "height": 36,
+          "width": 36,
+          "x": 32,
+          "y": 434
+        },
+        "tag": "img",
+        "text": ""
+      }
+    ],
+    "imageCount": 4,
+    "videoCount": 0
+  },
+  "meta": {
+    "probe": "other-features",
+    "uiLang": "en",
+    "url": "https://substack.com/profile/3476382-juliette-ryan/note/c-280494491",
+    "version": "2026-06-21"
+  },
+  "metadata": [
+    {
+      "content": "article",
+      "key": "og:type"
+    },
+    {
+      "content": "summary",
+      "key": "twitter:card"
+    },
+    {
+      "content": "Substack",
+      "key": "author"
+    },
+    {
+      "content": "https://substack.com/profile/3476382-juliette-ryan/note/c-280494491",
+      "key": "og:url"
+    },
+    {
+      "content": "Likes",
+      "key": "twitter:label1"
+    },
+    {
+      "content": "Replies",
+      "key": "twitter:label2"
+    },
+    {
+      "content": "40",
+      "key": "og:image:width"
+    },
+    {
+      "content": "40",
+      "key": "og:image:height"
+    },
+    {
+      "content": "Substack",
+      "key": "og:site_name"
+    },
+    {
+      "content": "0",
+      "key": "twitter:data1"
+    },
+    {
+      "content": "0",
+      "key": "twitter:data2"
+    },
+    {
+      "content": "Here is the beautiful neuroscience behind the sadness of something ending: When you’re in the middle of a pleasurable experience, dopamine is driving the “wanting it to keep going” feeling via a series of anticipatory spikes. Even while you’re having it! When it ends, that anticipation is left hangi",
+      "key": "description"
+    },
+    {
+      "content": "Here is the beautiful neuroscience behind the sadness of something ending: When you’re in the middle of a pleasurable experience, dopamine is driving the “wanting it to keep going” feeling via a series of anticipatory spikes. Even while you’re having it! When it ends, that anticipation is left hangi",
+      "key": "og:description"
+    },
+    {
+      "content": "Here is the beautiful neuroscience behind the sadness of something ending: When you’re in the middle of a pleasurable experience, dopamine is driving the “wanting it to keep going” feeling via a series of anticipatory spikes. Even while you’re having it! When it ends, that anticipation is left hangi",
+      "key": "twitter:description"
+    },
+    {
+      "content": "https://substackcdn.com/image/fetch/$s_!aH6t!,w_40,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Ff74c4e8e-64ff-4133-bfa6-fb8e7751073b_2544x2544.jpeg",
+      "key": "og:image"
+    },
+    {
+      "content": "https://substackcdn.com/image/fetch/$s_!aH6t!,w_40,c_limit,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Ff74c4e8e-64ff-4133-bfa6-fb8e7751073b_2544x2544.jpeg",
+      "key": "twitter:image"
+    },
+    {
+      "content": "2026-06-22T02:48:35.112Z",
+      "key": "og:published_time"
+    },
+    {
+      "content": "Juliette Ryan (@hereisyourbrain)",
+      "key": "og:title"
+    },
+    {
+      "content": "Juliette Ryan (@hereisyourbrain)",
+      "key": "twitter:title"
+    }
+  ],
+  "stableIdentifiers": [
+    {
+      "attrs": {
+        "href": "/@josephfolley"
+      },
+      "tag": "a",
+      "text": "Unsolicited Advice"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms"
+      },
+      "tag": "a",
+      "text": "Stoic Wisdoms"
+    },
+    {
+      "attrs": {
+        "href": "/@deadpoetsdaily"
+      },
+      "tag": "a",
+      "text": "Dead Poets Daily"
+    },
+    {
+      "attrs": {
+        "href": "/@substack"
+      },
+      "tag": "a",
+      "text": "The Substack Post"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms"
+      },
+      "tag": "a",
+      "text": "Stoic Wisdoms"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms/note/c-280076000"
+      },
+      "tag": "a",
+      "text": "18h"
+    },
+    {
+      "attrs": {
+        "href": "/@thedankoe"
+      },
+      "tag": "a",
+      "text": "DAN KOE"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@thedankoe/note/c-276269969"
+      },
+      "tag": "a",
+      "text": "7d"
+    },
+    {
+      "attrs": {
+        "href": "/@jaredhenderson"
+      },
+      "tag": "a",
+      "text": "Jared Henderson"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@jaredhenderson/note/c-280428905"
+      },
+      "tag": "a",
+      "text": "4h"
+    },
+    {
+      "attrs": {
+        "href": "/@thelivingphilosophy"
+      },
+      "tag": "a",
+      "text": "The Living Philosophy"
+    },
+    {
+      "attrs": {
+        "href": "https://www.thelivingphilosophy.com/p/nihilism-vs-existentialism-vs-absurdism"
+      },
+      "tag": "a",
+      "text": "The Living PhilosophyNihilism vs. Existentialism vs. Absurdism"
+    },
+    {
+      "attrs": {
+        "href": "/@alexoconnor"
+      },
+      "tag": "a",
+      "text": "Alex O'Connor"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@josephfolley"
+      },
+      "tag": "a",
+      "text": "Joseph Folley"
+    },
+    {
+      "attrs": {
+        "href": "/@classicalwisdom"
+      },
+      "tag": "a",
+      "text": "Classical Wisdom"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@dostoevskysblog"
+      },
+      "tag": "a",
+      "text": "Fyodor"
+    },
+    {
+      "attrs": {
+        "href": "/@thestoicmanual"
+      },
+      "tag": "a",
+      "text": "Stoic Philosophy"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms"
+      },
+      "tag": "a",
+      "text": "Stoic Wisdoms"
+    },
+    {
+      "attrs": {
+        "href": "/@seanmcarroll"
+      },
+      "tag": "a",
+      "text": "Sean Carroll"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@philosophizethis"
+      },
+      "tag": "a",
+      "text": "Philosophize This!"
+    },
+    {
+      "attrs": {
+        "href": "/@misanthropist"
+      },
+      "tag": "a",
+      "text": "Albert Camus"
+    },
+    {
+      "attrs": {
+        "href": "/@oxfordpoetry"
+      },
+      "tag": "a",
+      "text": "Oxford Poetry"
+    },
+    {
+      "attrs": {
+        "href": "/@dailykafka"
+      },
+      "tag": "a",
+      "text": "Daily Kafka"
+    },
+    {
+      "attrs": {
+        "href": "/@bigthinkmedia"
+      },
+      "tag": "a",
+      "text": "Big Think"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@3blue1brown"
+      },
+      "tag": "a",
+      "text": "Grant Sanderson"
+    },
+    {
+      "attrs": {
+        "href": "/@davidfrench3"
+      },
+      "tag": "a",
+      "text": "David French"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@philosopheasy"
+      },
+      "tag": "a",
+      "text": "Philosopheasy"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@theintellectualistofficial"
+      },
+      "tag": "a",
+      "text": "The Intellectualist"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@theeconomistofficial"
+      },
+      "tag": "a",
+      "text": "The Economist"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@currentaffairs"
+      },
+      "tag": "a",
+      "text": "Current Affairs"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@nietzschewisdoms"
+      },
+      "tag": "a",
+      "text": "Nietzsche Wisdoms"
+    },
+    {
+      "attrs": {
+        "href": "/@philosophyvault"
+      },
+      "tag": "a",
+      "text": "Philosophy Vault"
+    },
+    {
+      "attrs": {
+        "href": "/@slavojzizek"
+      },
+      "tag": "a",
+      "text": "Slavoj Žižek"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@substack"
+      },
+      "tag": "a",
+      "text": "Substack"
+    },
+    {
+      "attrs": {
+        "href": "/@josephfolley"
+      },
+      "tag": "a",
+      "text": "Joseph Folley"
+    },
+    {
+      "attrs": {
+        "href": "/@lorenzoelijahphd"
+      },
+      "tag": "a",
+      "text": "Lorenzo Elijah, PhD"
+    },
+    {
+      "attrs": {
+        "href": "/@lorenzoelijahphd/note/c-272859605"
+      },
+      "tag": "a",
+      "text": "Jun 8"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms"
+      },
+      "tag": "a",
+      "text": "Stoic Wisdoms"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "https://www.stoicwisdoms.com/p/10-books-that-made-me-think-differently"
+      },
+      "tag": "a",
+      "text": "Stoic Wisdoms10 Books That Made Me Think Differently"
+    },
+    {
+      "attrs": {
+        "href": "https://open.substack.com/chat/posts/c0908044-0b3f-46dc-8232-9da04f312a6b?utm_source=permalink"
+      },
+      "tag": "a",
+      "text": "Almost two years ago I put together a list of the ten books that changed how I think. They're as worth reading now as th"
+    },
+    {
+      "attrs": {
+        "href": "https://www.stoicwisdoms.com/p/10-books-that-made-me-think-differently"
+      },
+      "tag": "a",
+      "text": "stoicwisdoms.com/p/10-books-that-made-me-think-differently"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicproductivity"
+      },
+      "tag": "a",
+      "text": "Stoic Productivity"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicproductivity/note/c-274177789"
+      },
+      "tag": "a",
+      "text": "Jun 10"
+    },
+    {
+      "attrs": {
+        "href": "/@philosophors"
+      },
+      "tag": "a",
+      "text": "Philosophors"
+    },
+    {
+      "attrs": {
+        "href": "/@philosophors/note/c-267805601"
+      },
+      "tag": "a",
+      "text": "May 30"
+    },
+    {
+      "attrs": {
+        "href": "/@psychologicalpulse"
+      },
+      "tag": "a",
+      "text": "Psychological Pulse"
+    },
+    {
+      "attrs": {
+        "href": "/@psychologicalpulse/note/c-268060028"
+      },
+      "tag": "a",
+      "text": "May 31"
+    },
+    {
+      "attrs": {
+        "href": "/@girlstonerdiary"
+      },
+      "tag": "a",
+      "text": "L ★"
+    },
+    {
+      "attrs": {
+        "href": "https://notesfromundergroundd.substack.com/p/the-crime-of-doing-nothing-the-tragedy"
+      },
+      "tag": "a",
+      "text": "☭ notes from underground ☭The Crime of Doing Nothing (The Tragedy of Doomscrolling)"
+    },
+    {
+      "attrs": {
+        "href": "https://notesfromundergroundd.substack.com/"
+      },
+      "tag": "a",
+      "text": "☭ notes from underground ☭"
+    },
+    {
+      "attrs": {
+        "href": "/@profoundideas"
+      },
+      "tag": "a",
+      "text": "Craig Perry"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@profoundideas/note/c-270762126"
+      },
+      "tag": "a",
+      "text": "Jun 4"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms"
+      },
+      "tag": "a",
+      "text": "Stoic Wisdoms"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms/note/c-278166855"
+      },
+      "tag": "a",
+      "text": "4d"
+    },
+    {
+      "attrs": {
+        "href": "/@markmanson"
+      },
+      "tag": "a",
+      "text": "Mark Manson"
+    },
+    {
+      "attrs": {
+        "href": "/@markmanson/note/c-272877614"
+      },
+      "tag": "a",
+      "text": "Jun 8"
+    },
+    {
+      "attrs": {
+        "href": "/@unmodernmanbot"
+      },
+      "tag": "a",
+      "text": "Machiavelli Bot"
+    },
+    {
+      "attrs": {
+        "href": "/@unmodernmanbot/note/c-272636329"
+      },
+      "tag": "a",
+      "text": "Jun 8"
+    },
+    {
+      "attrs": {
+        "href": "/@nietzschewisdoms"
+      },
+      "tag": "a",
+      "text": "Nietzsche Wisdoms"
+    },
+    {
+      "attrs": {
+        "href": "/@nietzschewisdoms/note/c-275973539"
+      },
+      "tag": "a",
+      "text": "8d"
+    },
+    {
+      "attrs": {
+        "href": "/@plumpits"
+      },
+      "tag": "a",
+      "text": "Kylee"
+    },
+    {
+      "attrs": {
+        "href": "https://plumpits.substack.com/p/unrot-your-brain"
+      },
+      "tag": "a",
+      "text": "plum pitsunrot your brain"
+    },
+    {
+      "attrs": {
+        "href": "https://plumpits.substack.com/"
+      },
+      "tag": "a",
+      "text": "plum pits"
+    },
+    {
+      "attrs": {
+        "href": "/@poetrybycrim"
+      },
+      "tag": "a",
+      "text": "crim"
+    },
+    {
+      "attrs": {
+        "href": "/@poetrybycrim/note/c-268455481"
+      },
+      "tag": "a",
+      "text": "May 31"
+    },
+    {
+      "attrs": {
+        "href": "/@yourgirlesme"
+      },
+      "tag": "a",
+      "text": "Esme"
+    },
+    {
+      "attrs": {
+        "href": "/@yourgirlesme/note/c-273114318"
+      },
+      "tag": "a",
+      "text": "Jun 9"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms"
+      },
+      "tag": "a",
+      "text": "Stoic Wisdoms"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms/note/c-280076000"
+      },
+      "tag": "a",
+      "text": "18h"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms"
+      },
+      "tag": "a",
+      "text": "@stoicwisdoms"
+    },
+    {
+      "attrs": {
+        "href": "/note/c-280076000/restacks"
+      },
+      "tag": "a",
+      "text": "42 Restacks"
+    },
+    {
+      "attrs": {
+        "href": "/@hereisyourbrain"
+      },
+      "tag": "a",
+      "text": "Juliette Ryan"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@hereisyourbrain/note/c-280494491"
+      },
+      "tag": "a",
+      "text": "1h"
+    },
+    {
+      "attrs": {
+        "href": "/profile/509098700-mrataraxia?utm_source=substack-feed-item"
+      },
+      "tag": "a",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/profile/509098700-mrataraxia"
+      },
+      "tag": "a",
+      "text": "Mr.Ataraxia"
+    },
+    {
+      "attrs": {
+        "href": "/profile/509098700-mrataraxia/note/c-280230888"
+      },
+      "tag": "a",
+      "text": "11h"
+    },
+    {
+      "attrs": {
+        "href": "/profile/441041288-joelnorth?utm_source=substack-feed-item"
+      },
+      "tag": "a",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/profile/441041288-joelnorth"
+      },
+      "tag": "a",
+      "text": "JoelNorth"
+    },
+    {
+      "attrs": {
+        "href": "/profile/441041288-joelnorth/note/c-280241008"
+      },
+      "tag": "a",
+      "text": "11h"
+    },
+    {
+      "attrs": {
+        "href": "/profile/322840139-divyanshu-goyal?utm_source=substack-feed-item"
+      },
+      "tag": "a",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/profile/322840139-divyanshu-goyal"
+      },
+      "tag": "a",
+      "text": "Divyanshu Goyal"
+    },
+    {
+      "attrs": {
+        "href": "/profile/322840139-divyanshu-goyal/note/c-280147956"
+      },
+      "tag": "a",
+      "text": "14h"
+    },
+    {
+      "attrs": {
+        "href": "/profile/406601634-halimah?utm_source=substack-feed-item"
+      },
+      "tag": "a",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/profile/406601634-halimah"
+      },
+      "tag": "a",
+      "text": "Halimah🩷"
+    },
+    {
+      "attrs": {
+        "href": "/profile/406601634-halimah/note/c-280294967"
+      },
+      "tag": "a",
+      "text": "9h"
+    },
+    {
+      "attrs": {
+        "href": "/profile/516347036-kyle-r-stevenson?utm_source=substack-feed-item"
+      },
+      "tag": "a",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/profile/516347036-kyle-r-stevenson"
+      },
+      "tag": "a",
+      "text": "Kyle R. Stevenson"
+    },
+    {
+      "attrs": {
+        "href": "/profile/516347036-kyle-r-stevenson/note/c-280369962"
+      },
+      "tag": "a",
+      "text": "7h"
+    },
+    {
+      "attrs": {
+        "href": "/profile/426583916-hope-the-2nd-act-architect?utm_source=substack-feed-item"
+      },
+      "tag": "a",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/profile/426583916-hope-the-2nd-act-architect"
+      },
+      "tag": "a",
+      "text": "Hope | The 2nd Act Architect"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/profile/426583916-hope-the-2nd-act-architect/note/c-280340007"
+      },
+      "tag": "a",
+      "text": "8h"
+    },
+    {
+      "attrs": {
+        "href": "/profile/37309320-kim?utm_source=substack-feed-item"
+      },
+      "tag": "a",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/profile/37309320-kim"
+      },
+      "tag": "a",
+      "text": "Kim"
+    },
+    {
+      "attrs": {
+        "href": "/profile/37309320-kim/note/c-280170075"
+      },
+      "tag": "a",
+      "text": "13h"
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms"
+      },
+      "tag": "a",
+      "text": "Stoic Wisdoms"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@stoicwisdoms/note/c-280076000"
+      },
+      "tag": "a",
+      "text": "18h"
+    },
+    {
+      "attrs": {
+        "href": "/@hereisyourbrain"
+      },
+      "tag": "a",
+      "text": "Juliette Ryan"
+    },
+    {
+      "attrs": {
+        "data-testid": "user-badge"
+      },
+      "tag": "div",
+      "text": ""
+    },
+    {
+      "attrs": {
+        "href": "/@hereisyourbrain/note/c-280494491"
+      },
+      "tag": "a",
+      "text": "1h"
+    }
+  ]
+}

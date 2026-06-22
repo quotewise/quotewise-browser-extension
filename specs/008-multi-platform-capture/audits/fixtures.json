@@ -159,7 +159,7 @@
       "enabledByDefault": false,
       "urls": {
         "original": "https://substack.com/@stoicwisdoms/note/c-280076000",
-        "reply_or_comment": null,
+        "reply_or_comment": "https://substack.com/profile/3476382-juliette-ryan/note/c-280494491",
         "repost_quote_or_reshare": null,
         "media": null,
         "long_or_collapsed": null,
@@ -178,6 +178,15 @@
           "probeA": "substack-notes/raw/probe-a/original-stoicwisdoms-c-280076000-public-rendered.json",
           "otherFeatures": "substack-notes/raw/other-features/original-stoicwisdoms-c-280076000-public-rendered.json",
           "contractDiscovery": "substack-notes/raw/contract-discovery/original-stoicwisdoms-c-280076000-public-rendered.json"
+        },
+        {
+          "fixtureClass": "reply_or_comment",
+          "authState": "public-rendered",
+          "url": "https://substack.com/profile/3476382-juliette-ryan/note/c-280494491",
+          "notes": "Substack reply/comment URL using a /profile/{slug}/note/{id} path; metadata and visible permalink evidence recover @hereisyourbrain while generic Probe A drifts to the parent note.",
+          "probeA": "substack-notes/raw/probe-a/reply-juliette-ryan-c-280494491-public-rendered.json",
+          "otherFeatures": "substack-notes/raw/other-features/reply-juliette-ryan-c-280494491-public-rendered.json",
+          "contractDiscovery": "substack-notes/raw/contract-discovery/reply-juliette-ryan-c-280494491-public-rendered.json"
         }
       ]
     }
