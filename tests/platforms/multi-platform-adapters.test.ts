@@ -224,6 +224,50 @@ describe('multi-platform adapters', () => {
     expect(data?.author.handle).toBe('markmanson');
   });
 
+  it('does not capture multiline Threads replies after the focal post action bar', () => {
+    const url = 'https://www.threads.com/@markmanson/post/DZvPnJoGCcN';
+    document.head.innerHTML = `
+      <link rel="canonical" href="https://www.threads.com/">
+      <meta property="og:url" content="https://www.threads.com/">
+      <meta property="og:description" content="Join Threads to share ideas.">
+    `;
+    document.body.innerHTML = `
+      <div>
+        <div>
+          <a href="/@markmanson"><span>markmanson</span></a>
+          <a href="/@markmanson/post/DZvPnJoGCcN"><time datetime="2026-06-18T19:00:18.000Z">3d</time></a>
+        </div>
+        <div>
+          <span>How to stay unhappy: Keep expecting other people to fix your life for you.</span>
+        </div>
+        <div>
+          <button aria-label="Like">Like</button><span>244</span>
+          <button aria-label="Reply">Reply</button><span>4</span>
+          <button aria-label="Repost">Repost</button><span>18</span>
+          <button aria-label="Share">Share</button><span>4</span>
+        </div>
+        <div>
+          <span>jmsamulskie</span><span>3d</span>
+          <div>
+            <span>Benno noticed that. 💥</span>
+            <span>📌 Benno writes daily on Threads:</span>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const data = new ThreadsAdapter().extractFromDom(url);
+
+    expect(data).toEqual(expect.objectContaining({
+      platform: 'threads',
+      sourceId: 'DZvPnJoGCcN',
+      text: 'How to stay unhappy: Keep expecting other people to fix your life for you.',
+      postedAt: '2026-06-18T19:00:18.000Z',
+      likesCount: 244,
+    }));
+    expect(data?.author.handle).toBe('markmanson');
+  });
+
   it('matches Threads /t/ permalinks on threads.net redirects', () => {
     const url = 'https://www.threads.net/@alice/t/Credirect123';
     document.body.innerHTML = `

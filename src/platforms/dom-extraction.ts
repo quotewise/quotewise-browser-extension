@@ -221,9 +221,10 @@ export function bodyTextFromRoot(root: ParentNode, sourceId?: string, ignoredTex
   const ignored = ignoredTexts
     .map(text => normalizeInlineText(text))
     .filter(Boolean);
+  const firstAction = firstPostActionElement(root);
 
   const candidates = Array.from(root.querySelectorAll<HTMLElement>('div, span, p'))
-    .filter(element => bodyTextCandidate(element, sourceId, ignored))
+    .filter(element => bodyTextCandidate(element, sourceId, ignored, firstAction))
     .map(element => ({
       element,
       text: textWithLineBreaks(element),
@@ -275,9 +276,18 @@ function sourceRootScore(element: HTMLElement, sourceId: string): number {
   return score;
 }
 
-function bodyTextCandidate(element: HTMLElement, sourceId?: string, ignoredTexts: string[] = []): boolean {
+function bodyTextCandidate(
+  element: HTMLElement,
+  sourceId?: string,
+  ignoredTexts: string[] = [],
+  firstAction?: HTMLElement | null,
+): boolean {
   const text = textWithLineBreaks(element);
   if (!text || actionOrMetricText(text)) {
+    return false;
+  }
+
+  if (firstAction && elementFollows(element, firstAction)) {
     return false;
   }
 
@@ -306,6 +316,19 @@ function bodyTextCandidate(element: HTMLElement, sourceId?: string, ignoredTexts
   }
 
   return true;
+}
+
+function firstPostActionElement(root: ParentNode): HTMLElement | null {
+  const elements = Array.from(root.querySelectorAll<HTMLElement>('button, [role="button"], [aria-label]'));
+  return elements.find(element => {
+    const label = normalizeInlineText(element.getAttribute('aria-label') || element.getAttribute('title') || '');
+    const text = normalizeInlineText(element.textContent || '');
+    return /^(Like|Reply|Repost|Share)\b/i.test(label || text);
+  }) || null;
+}
+
+function elementFollows(element: Element, reference: Element): boolean {
+  return !!(reference.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
 
 function ignoredAuthorMetadataText(value: string, ignoredTexts: string[]): boolean {
