@@ -82,6 +82,19 @@ describe('OriginatorLookup', () => {
     expect(container.innerHTML).toContain('href="https://quotewise.io/create?handle=nobody"');
   });
 
+  it('does not render a javascript: create URL (falls back to a safe link)', async () => {
+    sendMessage.mockResolvedValue({
+      success: true,
+      found: false,
+      create_url: 'javascript:alert(1)',
+    });
+
+    await lookup.lookup('eviluser', 'https://x.com/eviluser/status/1');
+
+    expect(container.innerHTML).not.toContain('javascript:');
+    expect(container.innerHTML).toContain('Create on Quotewise');
+  });
+
   it('renders a fallback create link when API not-found omits create_url', async () => {
     sendMessage.mockResolvedValue({
       success: true,
