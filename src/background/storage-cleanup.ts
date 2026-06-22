@@ -6,6 +6,7 @@
 import { debugLog } from '../config/environment';
 
 export const USER_IDENTIFYING_CACHE_KEYS = [
+  'currentPost',
   'currentTweet',
   'preloadedOriginator',
   'preloadedDuplicateCheck',
@@ -122,17 +123,19 @@ export class StorageCleanupService {
    */
   private async cleanupTweets(now: number): Promise<number> {
     try {
-      const result = await chrome.storage.local.get(['currentTweet']);
+      const result = await chrome.storage.local.get(['currentPost', 'currentTweet']);
+      const currentPost = result.currentPost as StoredTweetData | undefined;
       const currentTweet = result.currentTweet as StoredTweetData | undefined;
+      const storedPost = currentPost ?? currentTweet;
       
-      if (!currentTweet) {
+      if (!storedPost) {
         return 0;
       }
       
-      const age = now - currentTweet.timestamp;
+      const age = now - storedPost.timestamp;
       if (age > this.config.maxAge.tweets) {
-        await chrome.storage.local.remove(['currentTweet']);
-        debugLog(`Cleaned up stale tweet data (age: ${Math.round(age / (60 * 60 * 1000))}h)`);
+        await chrome.storage.local.remove(['currentPost', 'currentTweet']);
+        debugLog(`Cleaned up stale post data (age: ${Math.round(age / (60 * 60 * 1000))}h)`);
         return 1;
       }
       
@@ -225,15 +228,16 @@ export class StorageCleanupService {
     
     try {
       const result = await chrome.storage.local.get([
+        'currentPost',
         'currentTweet',
         'lastAuthCheck', 
         'originator_search_history'
       ]);
       
       // Check tweets
-      if (result.currentTweet) {
+      if (result.currentPost || result.currentTweet) {
         stats.tweets.count = 1;
-        stats.tweets.oldestAge = now - result.currentTweet.timestamp;
+        stats.tweets.oldestAge = now - (result.currentPost ?? result.currentTweet).timestamp;
       }
       
       // Check auth

@@ -155,9 +155,12 @@ export interface DuplicateCheckResponse {
 }
 
 // Platform Types
-export type PlatformCode = 'TX' | 'GR' | 'WQ' | 'BQ' | 'QI' | 'UN';
+export type PlatformCode = 'TX' | 'TH' | 'BS' | 'SS' | 'GR' | 'WQ' | 'BQ' | 'QI' | 'UN';
 
 export interface PlatformData {
+  source_id?: string | null;
+  post_id?: string | null;
+  note_id?: string | null;
   tweet_id?: string | null;
   reply_count?: number;
   retweet_count?: number;

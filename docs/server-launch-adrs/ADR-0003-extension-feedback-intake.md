@@ -1,9 +1,9 @@
 # ADR-0003 — Extension feedback intake (Turnstile-gated)
 
-- **Status:** Accepted — backend delivered (merged to `main` 2026-06-21, deploying). Extension-side link still pending.
+- **Status:** Accepted — backend and extension delivered. Backend merged to `main` 2026-06-21; extension link merged in `quotewise-chrome-extension` PR #18 (`007-extension-feedback-link`).
 - **Date:** 2026-06-19 (proposed) · 2026-06-21 (backend delivered)
 - **Priority:** P2 (recommended for launch)
-- **Related beads:** `qw-0psq.21` (extension "Send feedback" link — still open). Supersedes stale stubs `qw-4wy`, `qw-vzq`.
+- **Related beads:** `qw-0psq.21` (closed; backend intake + extension "Send feedback" link delivered). Superseded stale stubs `qw-4wy`, `qw-vzq`.
 - **Delivered by:** quotewise PR #178 ("[codex] Add Turnstile feedback intake").
 
 ## Context
@@ -55,4 +55,4 @@ Confirmed behavior:
 ## Acceptance
 
 - [x] A public, Turnstile-gated feedback page exists at an agreed URL (`https://quotewise.io/feedback/`) and records submissions with extension context.
-- [ ] The extension's "Send feedback" link opens it with `v`, `src`, `platform` params. *(Extension-side change — point the link at `https://quotewise.io/feedback/`; tracked by `qw-0psq.21`.)*
+- [x] Extension "Send feedback" links open it with `v`, `src`, `platform` params. Implemented in `quotewise-chrome-extension` PR #18 via `007-extension-feedback-link`.

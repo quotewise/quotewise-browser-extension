@@ -1,4 +1,4 @@
-import type { TwitterData } from '../../types';
+import type { CapturedPostData } from '../../types';
 import { DEFAULT_SETTINGS, MessageType, type Settings } from '../../types';
 import type { DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
 import { AuthState } from '../../auth/auth-state-machine';
@@ -13,8 +13,19 @@ import { FirstRunNotice } from './components/first-run-notice';
 import { AccountMenu } from './components/account-menu';
 import { classifyDuplicateSighting, classifyMatchResolution } from '../../utils/duplicate-status';
 import { getSettings, onSettingsChanged, updateSettings } from '../../settings/settings-store';
+import {
+  captureAuthorHandle,
+  captureLikesCount,
+  capturePlatform,
+  capturePlatformCode,
+  capturePlatformData,
+  capturePostedAt,
+  captureRequiresSelection,
+  captureSourceId,
+  captureSourceUrl,
+} from '../../platforms/capture';
 
-type DataProvider = () => Promise<TwitterData | null>;
+type DataProvider = () => Promise<CapturedPostData | null>;
 
 const SUBMIT_PHASE_MIN_VISIBLE_MS = 350;
 
@@ -50,7 +61,7 @@ export class OverlayBar {
   private hidden = false;
   private dataProvider: DataProvider;
   private currentPlatformLabel = 'Twitter';
-  private currentData: TwitterData | null = null;
+  private currentData: CapturedPostData | null = null;
   private duplicateBadge: DuplicateBadge | null = null;
   private duplicateBadgeContainer: HTMLElement | null = null;
   private quotePreview: QuotePreview | null = null;
@@ -576,7 +587,7 @@ export class OverlayBar {
     `;
   }
 
-  render(data: TwitterData | null): void {
+  render(data: CapturedPostData | null): void {
     if (!this.shadow) return;
     const previewEl = this.shadow.getElementById('tweet-preview');
     const protectedBadge = this.shadow.getElementById('protected-badge');
@@ -587,18 +598,19 @@ export class OverlayBar {
 
     if (!previewEl) return;
     if (!data) {
-      previewEl.textContent = 'No tweet detected on this page.';
+      previewEl.textContent = 'No supported post detected on this page.';
       if (protectedBadge) protectedBadge.setAttribute('style', 'display:none;');
       return;
     }
 
-    const protectedText = data.isProtected || data.platform_data?.is_protected;
+    const platformData = capturePlatformData(data);
+    const protectedText = data.isProtected || platformData.is_protected;
     if (protectedBadge) {
       protectedBadge.setAttribute('style', protectedText ? '' : 'display:none;');
     }
 
     const snippet = (data.text || '').trim();
-    previewEl.textContent = snippet || 'Tweet text unavailable';
+    previewEl.textContent = snippet || 'Post text unavailable';
   }
 
   private wireInteractions(): void {
@@ -728,12 +740,12 @@ export class OverlayBar {
 
     // On articles, watch for the user highlighting a passage after opening so
     // capture enables live without reopening the bar.
-    if (this.currentData.isArticle) {
+    if (captureRequiresSelection(this.currentData)) {
       this.startSelectionWatcher();
     }
 
     // Start originator lookup by handle
-    const handle = this.currentData.author?.username;
+    const handle = captureAuthorHandle(this.currentData);
     if (handle) {
       await this.lookupOriginator(handle);
     } else {
@@ -811,7 +823,7 @@ export class OverlayBar {
   private async checkNow(): Promise<void> {
     if (!this.currentData) return;
 
-    const handle = this.currentData.author?.username;
+    const handle = captureAuthorHandle(this.currentData);
     if (!handle) {
       this.setOriginatorHtml('<span class="badge error">!</span> <span>No author handle available</span>');
       return;
@@ -825,9 +837,10 @@ export class OverlayBar {
       const response = await this.sendMessage({
         type: MessageType.CHECK_NOW,
         data: {
-          tweetId: this.currentData.platform_data?.tweet_id,
+          sourceId: captureSourceId(this.currentData),
           handle,
-          sourceUrl: this.currentData.url,
+          platform: capturePlatform(this.currentData),
+          sourceUrl: captureSourceUrl(this.currentData),
           text: this.captureState.selectedText || this.currentData.text,
         },
       });
@@ -916,7 +929,7 @@ export class OverlayBar {
    * full tweet text as before.
    */
   private requiresSelection(): boolean {
-    return !!this.currentData?.isArticle && !this.captureState.selectedText;
+    return !!this.currentData && captureRequiresSelection(this.currentData) && !this.captureState.selectedText;
   }
 
   /**
@@ -1038,7 +1051,9 @@ export class OverlayBar {
     this.captureState.isLookingUp = true;
 
     try {
-      const outcome = await this.originatorLookup.lookup(handle, this.currentData?.url);
+      const sourceUrl = this.currentData ? captureSourceUrl(this.currentData) : undefined;
+      const platform = this.currentData ? capturePlatform(this.currentData) : 'twitter';
+      const outcome = await this.originatorLookup.lookup(handle, sourceUrl, platform);
 
       this.captureState.lookupResult = outcome.status;
 
@@ -1052,7 +1067,7 @@ export class OverlayBar {
           // Use preloaded duplicate data if available and fresh
           if (
             outcome.preloadedDuplicateCheck &&
-            outcome.preloadedDuplicateCheck.url === this.currentData?.url &&
+            outcome.preloadedDuplicateCheck.url === sourceUrl &&
             (Date.now() - outcome.preloadedDuplicateCheck.timestamp) < 60000
           ) {
             const result = outcome.preloadedDuplicateCheck.result as DuplicateCheckResult;
@@ -1139,18 +1154,20 @@ export class OverlayBar {
 
     try {
       this.setSubmitProgressPhase('submitting');
+      const sourceUrl = captureSourceUrl(this.currentData);
+      const likesCount = captureLikesCount(this.currentData);
       const response = await this.sendMessage({
         type: MessageType.SUBMIT_QUOTE,
         data: {
           text: quoteText,
           originator_slug: originatorSlug,
-          source_url: this.currentData.url,
-          platform_code: 'TX',
-          likes_count: this.currentData.likes || 0,
-          quote_date: this.currentData.date || undefined,
+          source_url: sourceUrl,
+          platform_code: capturePlatformCode(this.currentData),
+          ...(likesCount !== undefined ? { likes_count: likesCount } : {}),
+          quote_date: capturePostedAt(this.currentData) || undefined,
           ...(collectionId ? { collection_id: collectionId } : {}),
           attribution_type: 'DIRECT',
-          platform_data: this.currentData.platform_data,
+          platform_data: capturePlatformData(this.currentData),
           ...decisionFields
         }
       });
@@ -1377,6 +1394,8 @@ export class OverlayBar {
     this.updateDuplicateInfo({ checking: true });
 
     const quoteText = this.captureState.selectedText || this.currentData.text;
+    const sourceUrl = captureSourceUrl(this.currentData);
+    const handle = captureAuthorHandle(this.currentData);
 
     try {
       const response = await this.sendMessage({
@@ -1384,8 +1403,8 @@ export class OverlayBar {
         data: {
           text: quoteText,
           originator_slug: originatorSlug,
-          source_url: this.currentData.url,
-          social_handle: this.currentData.author?.username
+          source_url: sourceUrl,
+          social_handle: handle
         }
       });
 
@@ -1457,16 +1476,18 @@ export class OverlayBar {
     this.duplicateBadge.update(
       state,
       this.captureState.selectedText || this.currentData?.text,
-      this.currentData?.date,
+      this.currentData ? capturePostedAt(this.currentData) : null,
     );
   }
 
   private async clearPreloadedDuplicateCheckForCurrentUrl(): Promise<void> {
-    if (!this.currentData?.url) return;
+    if (!this.currentData) return;
+    const sourceUrl = captureSourceUrl(this.currentData);
+    if (!sourceUrl) return;
 
     try {
       const storage = await chrome.storage.local.get(['preloadedDuplicateCheck']);
-      if (storage.preloadedDuplicateCheck?.url === this.currentData.url) {
+      if (storage.preloadedDuplicateCheck?.url === sourceUrl) {
         await chrome.storage.local.remove(['preloadedDuplicateCheck']);
       }
     } catch {
