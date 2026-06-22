@@ -60,6 +60,9 @@ logs
 *.crx
 *.pem
 
+# Packaged extension (Chrome Web Store upload artifact)
+quotewise-extension-*.zip
+
 # Temporary files
 *.tmp
 tmp/
