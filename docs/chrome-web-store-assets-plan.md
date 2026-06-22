@@ -35,14 +35,15 @@ Keep text minimal (name + a ≤5–7-word tagline); avoid busy/cluttered.
 3. **Famous, non-controversial, genuinely quotable line.** Historical greats (Einstein, etc.)
    won't work — they aren't on social media; we need a living author who posts aphorisms.
 
-**Originator shortlist** (living authors who post clean, quotable lines on supported platforms):
-- **James Clear** (Atomic Habits) — universally respected, squeaky-clean aphorisms, active on X/Threads. *Top pick.*
-- **Mark Manson** (@markmanson, Threads) — clean aphorisms; we already have a verified real quote ("Improving your life does not remove your problems. It simply exchanges them for better problems.").
-- **Maria Popova / The Marginalian** (@brainpicker) — literary, reputable; Bluesky/Threads.
-- **Adam Grant**, **Susan Cain**, **Brené Brown** — reputable, quotable, broadly liked.
+**Featured originator — DECIDED: James Clear** (Atomic Habits). Universally respected,
+squeaky-clean aphorisms, active on X/Threads. Use **one real James Clear post** on a supported
+platform across the whole set for consistency; confirm the post is real and capturable before
+shooting. Pick a famous, non-controversial line (e.g. one of his well-known habit/identity
+aphorisms).
 
-Pick one, confirm they have a real, capturable post, and keep the same person across the set
-for consistency.
+Fallback alternates (only if a James Clear post can't be used): Mark Manson (@markmanson,
+Threads — we already have a verified real quote), Maria Popova / The Marginalian, Adam Grant,
+Susan Cain.
 
 ## Screenshot storyboard (5, 1280×800, consistent branded canvas + short caption band)
 
@@ -72,4 +73,6 @@ headline per frame (high-converting, consistent). Export 1280×800, no alpha.
   no-alpha export), and the **promo-tile mockups** can be produced from there.
 
 ## Status
-⚙️ Pick originator + post → capture raw frames → composite + caption → export → small promo tile.
+✅ Originator decided: **James Clear**. Next: pick the specific real post → capture raw frames
+(clean profile, extension load-unpacked) → composite + caption → export 1280×800 no-alpha →
+small promo tile (440×280).
