@@ -181,6 +181,49 @@ describe('multi-platform adapters', () => {
     expect(data?.author.handle).toBe('readswithravi');
   });
 
+  it('does not capture Threads reply author timestamp rows when metadata is stale', () => {
+    const url = 'https://www.threads.com/@markmanson/post/DZ2-BMFFInM';
+    document.head.innerHTML = `
+      <link rel="canonical" href="https://www.threads.com/">
+      <meta property="og:url" content="https://www.threads.com/">
+      <meta property="og:description" content="Join Threads to share ideas.">
+    `;
+    document.body.innerHTML = `
+      <div aria-label="Column body">
+        <div>
+          <div>
+            <a href="/@markmanson"><span>markmanson</span></a>
+            <a href="/@markmanson/post/DZ2-BMFFInM"><time datetime="2026-06-21T19:00:31.000Z">22h</time></a>
+          </div>
+          <div>
+            <span>Improving your life does not remove your problems. It simply exchanges them for better problems.</span>
+          </div>
+          <div>
+            <button aria-label="Like">Like</button><span>189</span>
+            <button aria-label="Reply">Reply</button><span>7</span>
+            <button aria-label="Repost">Repost</button><span>18</span>
+            <button aria-label="Share">Share</button><span>1</span>
+          </div>
+        </div>
+        <div>
+          <div><span>designed.by.saif</span><span>21h</span></div>
+          <div><span>Growth doesn't eliminate challenges. It upgrades them.</span></div>
+        </div>
+      </div>
+    `;
+
+    const data = new ThreadsAdapter().extractFromDom(url);
+
+    expect(data).toEqual(expect.objectContaining({
+      platform: 'threads',
+      sourceId: 'DZ2-BMFFInM',
+      text: 'Improving your life does not remove your problems. It simply exchanges them for better problems.',
+      postedAt: '2026-06-21T19:00:31.000Z',
+      likesCount: 189,
+    }));
+    expect(data?.author.handle).toBe('markmanson');
+  });
+
   it('matches Threads /t/ permalinks on threads.net redirects', () => {
     const url = 'https://www.threads.net/@alice/t/Credirect123';
     document.body.innerHTML = `
