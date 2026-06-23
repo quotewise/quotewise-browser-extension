@@ -15,12 +15,14 @@ These ADRs capture the **backend changes the extension needs** for a solid publi
 | [ADR-0003](ADR-0003-extension-feedback-intake.md) | Extension feedback intake (Turnstile-gated) | P2 | `qw-0psq.21` (supersedes `qw-4wy`, `qw-vzq`) | No — recommended for launch |
 | [ADR-0004](ADR-0004-oauth-production-redirect-readiness.md) | OAuth production redirect / client readiness | P1 | `qw-0psq.20` | **Yes** |
 | [ADR-0005](ADR-0005-privacy-policy-data-disclosure.md) | Privacy policy + data-handling disclosure update | P1 | `qw-0psq.15` | **Yes** (Chrome Web Store gate) |
+| [ADR-0006](ADR-0006-collections-membership.md) | Collections: add existing quote to a collection + membership in duplicate-check | P1 | `qw-si1t` | No — fast-follow feature |
 
 ## Launch-critical vs. fast-follow
 
 - **Must land before Chrome Web Store submission:** ADR-0004 (OAuth redirect for the real extension ID) and ADR-0005 (privacy-policy content). Without these the extension either cannot authenticate in production or will be rejected at review.
 - **Strongly recommended at launch:** ADR-0003 (feedback intake) — cheap, and early bug reports are the highest-value signal post-launch.
 - **First post-launch feature:** ADR-0001 + ADR-0002 (the "Add another sighting vs. Add new variant" flow, `qw-hsly`). Current behavior — treating a similarity match as an additional sighting — is acceptable for v1.
+- **Also fast-follow:** ADR-0006 (collections membership — add an existing quote to a collection + per-collection membership in duplicate-check; extension spec 009, `qw-si1t`). Not launch-gating, but its data-disclosure surface (collection fetch/cache + synced last-used set) must be folded into ADR-0005's privacy-policy copy.
 
 ## Conventions referenced
 
