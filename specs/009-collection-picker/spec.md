@@ -14,6 +14,7 @@
 
 - Q: How should the inline "create a new collection" capability (FR-003) be resolved in the frozen API contract? → A: Defer inline-create — v1 lists existing collections only; no create-collection endpoint is added. Inline creation moves to a follow-up spec.
 - Q: When a NEW quote is captured into multiple collections and the quote is created but one collection-add fails, what happens? → A: The capture always survives (never rolled back over a filing failure); the overlay stays open showing per-collection outcome + retry. Inline retry is the target but MAY degrade to "capture + warning + auto-hide" if idempotency edge cases prove hard — the surviving capture is the non-negotiable invariant.
+- Remediation (analyze C1/C2/I1/U1, 2026-06-22): (C1) the collection list is fetched ONLY on explicit picker open and cached — never preloaded on tweet-page load — to satisfy Article II.1; FR-022/FR-023 updated. (C2) added a store-listing/privacy-policy disclosure task (T025) for the new fetch/cache/synced last-used set (Article II.3). (I1) capture-survival and honest failure-surfacing are MUST; inline retry is the SHOULD target with a defined warning+auto-hide fallback (FR-013/FR-015/SC-005 reconciled). (U1) capturing with zero collections selected is explicitly allowed (FR-002).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -37,6 +38,8 @@ A user is capturing a brand-new quote. Beside the capture action, a collection p
 3. **Given** the user has no existing collections, **When** the picker opens, **Then** it shows an honest empty state pointing the user to create a collection in the Quotewise web app (inline creation is out of scope for this feature) rather than an empty silent list.
 4. **Given** the user has a default collection and Auto-add is ON, **When** they override the picker selection for one capture, **Then** that capture honors the override and the very next capture's picker is seeded from the default/last-used again (the default is not mutated).
 5. **Given** the picker is open, **When** the user toggles checkboxes, **Then** nothing is written to Quotewise until they take the explicit capture action (selections are staged).
+6. **Given** Auto-add is OFF or the user has no collections, so the picker opens with nothing selected, **When** the user captures without selecting any collection, **Then** the quote is still captured (enters Quotewise) with no collection assignment and no membership calls.
+7. **Given** the picker is open and the user has just created a new collection in the Quotewise web app, **When** they click Refresh in the picker, **Then** the list re-fetches on demand and the new collection appears and can be selected, with prior staged selections preserved.
 
 ---
 
@@ -79,11 +82,12 @@ A user can set and change their auto-add behavior and default collection from th
 ### Edge Cases
 
 - **No collections yet**: The picker has no existing collections to offer; it MUST surface an honest empty state directing the user to create a collection in the Quotewise web app (inline creation is out of scope), rather than showing an empty silent list.
+- **Capture with nothing selected**: Capturing a new quote with no collection selected (Auto-add OFF, or no collections exist) is allowed — the quote is captured with no collection assignment and no membership calls. Selection is never required to capture (FR-002).
 - **Already in every collection**: For an already-captured quote that is already in all of the user's collections, the picker's editable list is empty; the overlay shows the "Already in: …" status with no redundant re-add offered.
 - **Logged out**: No collection picker or settings render; the existing Login affordance is shown instead. Collections are never fetched or displayed without authentication.
 - **Private mode**: Capture is paused; no capture UI (and therefore no picker) is shown.
-- **Collection list stale/unavailable at picker open**: If the preloaded list is missing or expired, the overlay refreshes it; if it cannot be loaded, the picker surfaces an honest "couldn't load your collections" state rather than an empty silent list.
-- **Preload disabled by the user**: When the user has disabled pre-action network calls, the collection list MUST NOT be preloaded; it is fetched only when the picker is opened (an explicit action).
+- **Collection list stale/unavailable at picker open**: If the cached list is missing or expired, the overlay fetches it on open; if it cannot be loaded, the picker surfaces an honest "couldn't load your collections" state rather than an empty silent list.
+- **Preload disabled by the user**: Unaffected for collections — the collection list is never part of page-load preload; it is always fetched on explicit picker open. The setting continues to gate the duplicate/originator preloads only.
 - **Partial multi-add failure**: Successful adds are kept; failed adds are reported per-collection and retryable; the user is never told "added" when an add failed.
 - **Service-worker restart mid-add**: An add that is retried after a worker restart MUST NOT create duplicate membership or corrupt state (idempotent add).
 
@@ -94,7 +98,7 @@ A user can set and change their auto-add behavior and default collection from th
 #### New-capture picker (P1)
 
 - **FR-001**: The overlay MUST present a collection picker adjacent to the capture/primary action for a new (not-already-in-Quotewise) quote when the user is authenticated and not in private mode.
-- **FR-002**: The picker MUST allow selecting multiple collections (multi-select), and a single capture MUST be fileable into all selected collections in one action.
+- **FR-002**: The picker MUST allow selecting multiple collections (multi-select), and a single capture MUST be fileable into all selected collections in one action. Selecting collections is OPTIONAL: a new quote MUST remain capturable with zero collections selected (e.g. Auto-add OFF, or the user has no collections) — in that case the quote is captured with no collection assignment and no membership calls are made. Capture is never blocked on collection selection (consistent with FR-013).
 - **FR-003**: The picker MUST list only the user's existing collections. Inline creation of a new collection from the picker is OUT OF SCOPE for this feature (deferred to a follow-up spec). When the user has no existing collection to file into, the picker MUST present an honest empty state directing them to create one in the Quotewise web app.
 - **FR-004**: A per-capture selection MUST override the auto-add default for that capture only and MUST NOT mutate the stored default or last-used set except as defined by FR-016.
 - **FR-005**: Picker selections MUST be staged locally; no collection membership or quote write MUST occur until the user takes the explicit capture action (consistent with "no silent submission").
@@ -111,9 +115,9 @@ A user can set and change their auto-add behavior and default collection from th
 #### Multi-add behavior & feedback (P1, P2)
 
 - **FR-012**: A multi-collection add MUST be best-effort per collection: each target is attempted independently, and the result MUST report which collections succeeded and which failed.
-- **FR-013**: A captured quote MUST NOT be discarded because a collection-add failed — the capture (the quote entering Quotewise) is the primary outcome and MUST survive any secondary collection-filing failure (no all-or-nothing rollback). On partial failure, successful adds MUST be preserved, and the user MUST be able to retry only the failed collection(s).
+- **FR-013**: A captured quote MUST NOT be discarded because a collection-add failed — the capture (the quote entering Quotewise) is the primary outcome and MUST survive any secondary collection-filing failure (no all-or-nothing rollback). On partial failure, successful adds MUST be preserved and the failure MUST be surfaced honestly (a failed collection is never reported as added). Per-collection inline retry with the overlay staying open is the target (SHOULD); where it is not implemented, the defined fallback in Assumptions ("Pragmatic fallback for partial-failure UX") applies.
 - **FR-014**: Adding the same quote to a collection it is already a member of MUST be a safe no-op (idempotent), never producing a duplicate or an error the user must resolve.
-- **FR-015**: On FULL success, the overlay MUST show a brief confirmation that names the collection(s) added to, then auto-dismiss (matching the existing post-action pattern), and MUST NOT offer an Undo affordance. On PARTIAL failure, the overlay MUST NOT auto-dismiss — it MUST stay open showing the per-collection outcome and the retry affordance until the user dismisses it or the failures are cleared.
+- **FR-015**: On FULL success, the overlay MUST show a brief confirmation that names the collection(s) added to, then auto-dismiss (matching the existing post-action pattern), and MUST NOT offer an Undo affordance. On PARTIAL failure, the overlay MUST surface which collection(s) failed and MUST NOT report them as added. The target (SHOULD) is to stay open with per-collection inline retry; the defined fallback (Assumptions) is a brief warning naming the unsaved collection(s) before auto-hide. Either path surfaces the failure honestly (Article VII).
 
 #### Defaults, settings surfacing & memory (P3)
 
@@ -126,12 +130,13 @@ A user can set and change their auto-add behavior and default collection from th
 #### States, privacy & badge (cross-cutting)
 
 - **FR-021**: The collection picker and the dropdown collection settings MUST NOT render when the user is logged out (show the existing Login affordance) or in private mode (capture paused).
-- **FR-022**: The user's collection list MUST be available to the picker without a perceptible wait in the common case by preloading it on tweet-page load alongside existing preloads, cached for a short window (target ≈ 5 minutes — long enough to span the user's decision window without re-fetching, since collections change rarely mid-session).
-- **FR-023**: The collection-list preload MUST be gated by the existing "disable pre-action network calls" setting; when preload is disabled, the list MUST be fetched only when the picker is opened (an explicit user action).
+- **FR-022**: The user's collection list MUST be fetched ONLY on an explicit user action — opening the overlay/picker — and MUST NOT be fetched passively on tweet-page load (Article II.1). The fetched list MUST be cached (`chrome.storage.local`, target ≈ 5 minutes) so that subsequent picker opens within the window render synchronously without a network round trip; a cold (cache-miss) open MAY show a brief loading state while the list fetches.
+- **FR-023**: Because the collection list is fetched only on explicit picker open (FR-022), the extension MUST issue no collection request on tweet-page load in any setting state — so it makes no pre-action collection egress and needs no preload gate. The existing "disable pre-action network calls" setting continues to govern the duplicate/originator preloads, unchanged.
 - **FR-024**: The cached collection list and the remembered last-used set are user-identifying data and MUST be wiped on logout, on entering private mode, and by the existing manual "clear my data" affordance.
 - **FR-025**: After a successful add (a new capture filed into a collection, or an existing quote added to a collection), the toolbar icon state MUST reflect collection membership using the existing canonical "in your collection" state, replacing the current hardcoded "exists, not collected" post-action value. No new icon states are introduced.
 - **FR-026**: All new injected UI (picker, status indicators, confirmations, dropdown controls) MUST meet the extension's accessibility bar: keyboard-operable, status conveyed by glyph/text and not color alone, visible focus, ARIA labels, and no host-page layout shift.
 - **FR-027**: All new copy (status, confirmations, errors) MUST be honest and non-manipulative, and MUST NOT overstate what was captured or imply membership/verification beyond the data.
+- **FR-028**: The collection picker MUST provide a manual "Refresh" control that re-fetches the user's collection list on demand (an explicit user action), bypassing and updating the cache — so a collection the user just created elsewhere (e.g. the Quotewise web app) appears without waiting for the cache window to expire or reopening the overlay. Refresh MUST reconcile against the new list, preserving the user's current staged selections for collections that still exist and dropping any that no longer exist.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -148,8 +153,8 @@ A user can set and change their auto-add behavior and default collection from th
 - **SC-001**: A user can file a captured quote into one or more non-default collections in a single capture action without altering their default — verified by the next capture defaulting normally.
 - **SC-002**: For a quote already in Quotewise, the overlay states whether it is in the user's collections (and names them) before the user takes any action.
 - **SC-003**: A user can add an already-captured quote to a collection from the blocked state in no more than two interactions, without re-capturing and without creating a sighting.
-- **SC-004**: When collections were preloaded, opening the picker shows the list with no perceptible loading state (no spinner in the common case).
-- **SC-005**: A multi-collection add reports a per-collection outcome; in a partial-failure case, every successful add is retained and every failed add is individually retryable.
+- **SC-004**: On a warm cache (collection list fetched within the last ≈ 5 minutes), opening the picker renders the list synchronously with no network round trip and no spinner; on a cold open the picker MAY show a brief loading state while the list fetches.
+- **SC-005**: A multi-collection add reports a per-collection outcome; in a partial-failure case, every successful add is retained and every failure is surfaced honestly to the user — retryable inline where implemented, otherwise reported by name for re-filing.
 - **SC-006**: The default destination is configurable from the overlay dropdown, and the chosen default and last-used set survive a browser restart and appear on a second signed-in device.
 - **SC-007**: No collection UI (picker or settings) appears when the user is logged out or in private mode, and no collection data is fetched in those states.
 - **SC-008**: After a successful add, the toolbar icon reflects "in your collection," and this state is conveyed by glyph/text (not color alone).
@@ -174,9 +179,9 @@ This feature depends on backend (`django-api`) support. The contract below is **
 - **Existing quotes get membership only.** Adding an already-captured quote records no sighting and attaches no source URL; "add to collection" means exactly that.
 - **One setting, two surfaces.** The auto-add/default value is single-sourced in synced storage; exposing it in both the overlay dropdown and the options page is a presentation choice, not a second setting, so the surfaces cannot diverge.
 - **Collection creation is external.** Collections are created in the Quotewise web app (or a future spec); this feature neither creates collections nor defines their visibility/default rules.
-- **Cache window.** A few minutes is an acceptable freshness window for the preloaded collection list; a collection created on another surface mid-session may not appear until the next refresh, which is acceptable.
+- **Cache window.** A few minutes is an acceptable freshness window for the cached collection list; a collection created on another surface mid-session may not appear until the cache window expires — or until the user clicks the picker's manual Refresh (FR-028), which re-fetches on demand.
 - **Auth model unchanged.** The feature uses the extension's existing OAuth Bearer-token auth; no new permissions are required.
-- **Pragmatic fallback for partial-failure UX.** The inline retry-in-overlay (FR-013/FR-015) is the target behavior. If inline retry introduces hard idempotency edge cases during implementation, it MAY degrade to: capture survives + a brief warning naming the unsaved collection(s) + auto-hide (re-file later in the web app). The non-negotiable invariant is that the capture survives a filing failure; inline retry is desirable, not required.
+- **Pragmatic fallback for partial-failure UX (defined).** Non-negotiable invariants (MUST): the capture survives a filing failure, and any failed collection is surfaced honestly (never reported as added). Target (SHOULD): the overlay stays open with per-collection inline retry. Defined fallback if inline retry proves hard (e.g. idempotency edge cases): the overlay shows a brief warning naming the unsaved collection(s), then auto-hides, and the user re-files from the web app. FR-013, FR-015, and SC-005 are written against these invariants — the choice between target and fallback is implementation latitude, not a spec contradiction.
 - **Stale last-used / deleted collections.** If a remembered last-used collection (or an already-member collection from the duplicate match) no longer exists, the picker silently drops it from the pre-selection and list rather than erroring; the remembered set is reconciled against the freshly loaded collection list.
 
 ## Out of Scope
@@ -190,7 +195,7 @@ This feature depends on backend (`django-api`) support. The contract below is **
 
 ## Constitution Notes
 
-- **Article II (Privacy & Data Minimization)**: The collection-list preload is a read of the user's own account data (no tweet text, no write), and FR-023 binds it to the existing preload-disable setting while FR-024 wipes the cached list and last-used set on logout/private/clear-data — keeping pre-action egress and cached user data within constitutional bounds.
+- **Article II (Privacy & Data Minimization)**: The collection list is fetched ONLY on explicit picker open — never as a passive pre-action call — so pre-action egress stays limited to `{tweet_id, handle, source_url}` (II.1, FR-022/FR-023). FR-024 wipes the cached list and the synced last-used set on logout/private/clear-data (II.2). Disclosure (II.3) of the new collection fetch, the `storage.local` cache, and the synced last-used set is reviewed against the store listing + privacy policy as a task (see tasks T025).
 - **Article I (Capture Integrity)**: The picker governs destination only; FR-006 forbids any quote-text editing and FR-005 preserves "no silent submission."
 - **Article VII (User Experience)**: FR-026/FR-027 carry the WCAG 2.1 AA and honest-copy requirements into all new UI.
 - **Article V (Resilience)**: FR-014's idempotent add and the idempotent membership endpoint keep retries and mid-flight worker termination safe.
