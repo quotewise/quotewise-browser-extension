@@ -1,10 +1,10 @@
 # ADR-0006 — Collections: add an existing quote to a collection + membership in duplicate-check
 
-- **Status:** 📝 Proposed 2026-06-22 (extension spec `009-collection-picker`; backend not yet implemented)
+- **Status:** ✅ Backend resolved 2026-06-22 (bead `qw-si1t`) — **supersedes the `{id}` proposal below**: reuse the existing **slug**-keyed add endpoint; `member_collections` is `{ slug, name }`. See [Backend resolution](#backend-resolution-2026-06-22).
 - **Date:** 2026-06-22
 - **Priority:** P1 (fast-follow feature; **not** launch-gating)
 - **Related beads:** `qw-si1t` (Collections membership API: add existing quote to collection + member_collections in duplicate-check)
-- **Endpoints:** `POST /v1/collections/{id}/quotes/` (**NEW**) · `POST /v1/quotes/check_duplicate/` (extend) · reuses `GET /v1/collections/`, `POST /v1/quotes/`
+- **Endpoints:** `POST /v1/collections/{slug}/quotes/` (**existing**, reused) · `POST /v1/quotes/check_duplicate/` (extend) · reuses `GET /v1/collections/`, `POST /v1/quotes/`
 - **Builds on:** [ADR-0001](ADR-0001-duplicate-check-match-provenance.md) (duplicate-check match payload) · disclosure rides [ADR-0005](ADR-0005-privacy-policy-data-disclosure.md)
 
 ## Context
@@ -60,6 +60,34 @@ Add `member_collections` to each `matches[]` entry, alongside the existing `in_u
 1. Implement `POST /v1/collections/{id}/quotes/` per above (idempotent add; membership only; owner-scoped).
 2. Add `member_collections: [{ id, name }]` to `check_duplicate` matches, scoped to the requesting user's memberships (single query — avoid N+1 across matches).
 3. Keep it **v1** and additive/back-compat (no breaking changes to `listCollections()` / `POST /v1/quotes/`).
+
+## Backend resolution (2026-06-22)
+
+Implemented under bead `qw-si1t`. Two findings change the proposal above; **this section is authoritative where it conflicts**.
+
+**1. No new endpoint — reuse the existing slug-keyed add endpoint.**
+`POST /v1/collections/{slug}/quotes/` already exists and already does an idempotent, membership-only add (`201` on add, `200` if already a member; never duplicates membership; creates **no** sighting and **no** source URL). Collections are identified by their **slug** — the canonical public identifier, unique per user. The extension MUST use the collection **slug** (from `GET /v1/collections/`) in the path, **not** the UUID `id`:
+
+```jsonc
+// POST /v1/collections/{slug}/quotes/   (Bearer auth)
+{ "quote_id": "482931" }     // → 201 added · 200 already-member (idempotent)
+```
+
+**2. `member_collections` carries `{ slug, name }` (not `{ id, name }`).**
+Slug is the canonical identifier everywhere; the new field does not expose collection `id`.
+
+```jsonc
+"member_collections": [ { "slug": "favorites", "name": "Favorites" } ]
+```
+
+- **Always present** — an empty array `[]` when the quote is in none of the user's collections (read it unconditionally; never `undefined`).
+- `in_user_collections` is `true` **iff** this array is non-empty (the two are derived from one query).
+
+**Error semantics (as implemented — codebase conventions, not the proposal's 403/404):**
+- Collection not owned by the caller → **`404`** (not `403`): the API never reveals that another user's collection exists.
+- Missing/invalid quote in the body → **`400`** (`QUOTE_NOT_FOUND` validation error), not `404`.
+
+**Why slug, not id:** slug is uniqueness-guaranteed per user+collection and is already the canonical public identifier across the API (originators, MCP). Short-lived/internal clients should be mandated onto slug rather than handed opaque ids. The existing UUID `id` that `GET /v1/collections/` still emits is left untouched but should be ignored by the extension.
 
 ## Consequences
 
