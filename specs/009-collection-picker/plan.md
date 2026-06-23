@@ -8,7 +8,7 @@
 
 Add a multi-select collection picker beside the capture action so a user files a new quote into chosen existing collection(s) — overriding their default for that capture only — and surface, on already-captured quotes, which of the user's collections already hold the quote plus an add-to-more affordance (membership-only). Auto-add/default settings also gain a second surface in the overlay dropdown (one shared synced value), and the toolbar badge reflects real membership after an add.
 
-Technical approach: a new pure seed/reconcile helper + a `CollectionPicker` UI component in the existing Shadow-DOM overlay; one new idempotent backend endpoint (`POST /v1/collections/{id}/quotes/`) called once per target collection (best-effort, per-collection feedback); a `member_collections` field added to the duplicate-check response; collection list fetched ONLY on explicit picker open and cached in `storage.local` (rebuildable, ~5 min TTL) — never preloaded on page load (Article II.1) — and the last-used set persisted in `storage.sync` (written once per completed add, only when changed — well inside the 120/min write limit). No new npm dependencies and no new manifest permissions.
+Technical approach: a new pure seed/reconcile helper + a `CollectionPicker` UI component in the existing Shadow-DOM overlay; reuse the existing **slug**-keyed `POST /v1/collections/{slug}/quotes/` (no new endpoint) called once per target collection (best-effort, per-collection feedback); a slug-keyed `member_collections` field on the duplicate-check response; collection list fetched ONLY on explicit picker open and cached in `storage.local` (rebuildable, ~5 min TTL) — never preloaded on page load (Article II.1) — and the last-used set of slugs persisted in `storage.sync` (written once per completed add, only when changed — well inside the 120/min write limit). No new npm dependencies and no new manifest permissions.
 
 ## Technical Context
 
@@ -17,7 +17,7 @@ Technical approach: a new pure seed/reconcile helper + a `CollectionPicker` UI c
 **Primary Dependencies**: None new. Platform: `chrome.storage.sync`/`chrome.storage.local`, `chrome.action` (badge), `chrome.runtime` messaging. Build: Webpack (`splitChunks: false`). Test: Jest + ts-jest (jsdom).
 
 **Storage**:
-- `chrome.storage.sync` — existing `Settings` (adds `lastUsedCollectionIds: string[]`; reuses `autoAddToCollection`, `defaultCollectionId`). Synced, persistent. Written once per completed add, only when the set changes (per context7: sync allows 120 writes/min, 1800/hr — over-limit writes fail immediately; this usage is orders of magnitude under).
+- `chrome.storage.sync` — existing `Settings` (adds `lastUsedCollectionSlugs: string[]`; renames `defaultCollectionId` → `defaultCollectionSlug`; reuses `autoAddToCollection`). All collection keys are **slugs**. Synced, persistent. Written once per completed add, only when the set changes (per context7: sync allows 120 writes/min, 1800/hr — over-limit writes fail immediately; this usage is orders of magnitude under).
 - `chrome.storage.local` — collection-list cache `{ collections, default_collection_id, ts }` with ~5 min TTL, populated on explicit picker open (NOT page-load preload — Article II.1). Rebuildable disposable cache (Article V).
 
 **Testing**: Jest/jsdom. Deterministic logic (seed precedence, stale reconcile, partial-failure aggregation, badge resolution) is test-first (Article VI.1); the picker UI is fixture-characterized (Article VI.2).
@@ -75,15 +75,15 @@ src/
 │       ├── collection-seed.ts              # NEW — pure: seed precedence (last-used→default→blank) + stale reconcile (test-first)
 │       ├── account-menu.ts                 # add Auto-add toggle + default-collection selector (dropdown surface)
 │       └── duplicate-badge.ts              # already-captured: show member_collections + "add to more"
-├── settings/settings-store.ts              # add lastUsedCollectionIds; normalize/get/update
-├── api/quotewise-api.ts                    # NEW addQuoteToCollection(); member_collections typing
+├── settings/settings-store.ts              # add lastUsedCollectionSlugs; rename defaultCollectionId→defaultCollectionSlug; normalize/get/update
+├── api/quotewise-api.ts                    # NEW addQuoteToCollection(slug, quoteId) → POST /v1/collections/{slug}/quotes/; member_collections {slug,name} typing
 ├── background/
 │   ├── service-worker.ts                   # badge after add (no collection page-load preload)
 │   ├── api-handler.ts                      # route ADD_QUOTE_TO_COLLECTION; LIST_COLLECTIONS = fetch-on-open + storage.local cache (+ force-refresh)
 │   └── privacy-cleanup.ts                  # wipe collection cache + last-used set
 └── types/
-    ├── api.ts                              # DuplicateCheckResult.matches[].member_collections; AddToCollection req/result
-    └── chrome.ts                           # MessageType.ADD_QUOTE_TO_COLLECTION; Settings.lastUsedCollectionIds
+    ├── api.ts                              # DuplicateCheckResult.matches[].member_collections {slug,name} (always present); AddToCollection req/result
+    └── chrome.ts                           # MessageType.ADD_QUOTE_TO_COLLECTION; Settings.lastUsedCollectionSlugs + defaultCollectionSlug
 
 tests/                                      # mirror: collection-seed (unit, test-first), settings-store, api client, picker fixtures, badge resolver
 ```

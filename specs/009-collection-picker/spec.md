@@ -15,6 +15,7 @@
 - Q: How should the inline "create a new collection" capability (FR-003) be resolved in the frozen API contract? → A: Defer inline-create — v1 lists existing collections only; no create-collection endpoint is added. Inline creation moves to a follow-up spec.
 - Q: When a NEW quote is captured into multiple collections and the quote is created but one collection-add fails, what happens? → A: The capture always survives (never rolled back over a filing failure); the overlay stays open showing per-collection outcome + retry. Inline retry is the target but MAY degrade to "capture + warning + auto-hide" if idempotency edge cases prove hard — the surviving capture is the non-negotiable invariant.
 - Remediation (analyze C1/C2/I1/U1, 2026-06-22): (C1) the collection list is fetched ONLY on explicit picker open and cached — never preloaded on tweet-page load — to satisfy Article II.1; FR-022/FR-023 updated. (C2) added a store-listing/privacy-policy disclosure task (T025) for the new fetch/cache/synced last-used set (Article II.3). (I1) capture-survival and honest failure-surfacing are MUST; inline retry is the SHOULD target with a defined warning+auto-hide fallback (FR-013/FR-015/SC-005 reconciled). (U1) capturing with zero collections selected is explicitly allowed (FR-002).
+- Backend realignment (ADR-0006 resolution, 2026-06-22): the membership add reuses the existing **slug**-keyed `POST /v1/collections/{slug}/quotes/` (no new endpoint); `member_collections` is `{ slug, name }` and always present (empty `[]` when none); errors are 404 (not-owned) / 400 (missing quote). The extension keys collections by **slug** everywhere (picker, last-used set, default setting) and ignores the UUID `id`; `POST /v1/quotes/` accepts a slug in `collection_id` for new captures.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -162,16 +163,16 @@ A user can set and change their auto-add behavior and default collection from th
 
 ## API Contract (frozen dependency)
 
-This feature depends on backend (`django-api`) support. The contract below is **frozen by this spec**; the server-side implementation is tracked separately (see Dependencies). It is included here, contrary to the usual "no implementation detail" guidance, at explicit stakeholder direction so there is a single authoritative contract.
+This feature depends on backend (`django-api`) support, **now implemented** (ADR-0006 backend resolution, bead `qw-si1t`). The contract below matches that implementation and is the single authoritative reference for the extension; it is included here, contrary to the usual "no implementation detail" guidance, at explicit stakeholder direction.
 
-- **Add existing quote to a collection** — `POST /v1/collections/{id}/quotes/` with an existing `quote_id`. MUST be idempotent: adding a quote already present returns success without duplicating membership. To support best-effort per-collection feedback (FR-012/013), the extension issues one request per target collection (one collection per call); a bulk body is not required.
-- **Membership in duplicate-check response** — the existing duplicate-check response gains, per matched quote, `member_collections: [{ id, name }]` alongside the existing `in_user_collections` boolean, so the overlay can both label "already in" collections and exclude them from the editable list in a single round trip.
-- **Reused, already-existing endpoints** — listing the user's collections and submitting a new quote with an optional collection assignment already exist and are reused for the new-capture path; no change required to those contracts beyond what is stated above.
+- **Add existing quote to a collection** — reuse the existing **slug-keyed** endpoint `POST /v1/collections/{slug}/quotes/` with body `{ quote_id }` (no new endpoint). Idempotent: `201` on add, `200` if already a member; never duplicates membership; membership only (no sighting, no source URL). The extension uses the collection **slug** (from `GET /v1/collections/`), never the UUID `id`, and issues one request per target collection (best-effort per-collection feedback — FR-012/013). Errors: collection not owned → `404`; missing/invalid quote → `400` (`QUOTE_NOT_FOUND`).
+- **Membership in duplicate-check response** — the existing duplicate-check response gains, per matched quote, `member_collections: [{ slug, name }]` alongside the existing `in_user_collections` boolean. It is **always present** (an empty array `[]` when the quote is in none of the user's collections); `in_user_collections` is true iff the array is non-empty. The overlay reads it unconditionally to label "already in" collections and exclude them from the editable list in one round trip.
+- **Reused, already-existing endpoints** — `GET /v1/collections/` (list) and `POST /v1/quotes/` (new-capture submit) already exist. `POST /v1/quotes/` accepts a collection **slug** in its optional `collection_id`, so a new capture is filed by passing the chosen slug there for the first selected collection and adding any others via the slug endpoint above.
 
 ## Dependencies
 
-- **Backend (`django-api`)**: Implementation of the frozen contract above (new membership endpoint + duplicate-check response field). Tracked as a separate beads issue labeled `django-api` (this feature is labeled `chrome-ext`; the contract bead carries both `chrome-ext,django-api`).
-- **Existing extension surfaces** reused/extended: the capture overlay, the overlay dropdown/account menu, the options page settings, the duplicate/already-captured display, the synced settings store, the page-load preload pipeline, and the canonical toolbar icon-state table.
+- **Backend (`django-api`)**: Implemented (ADR-0006 backend resolution, bead `qw-si1t`) — the existing slug-keyed `POST /v1/collections/{slug}/quotes/` plus `member_collections` on the duplicate-check response. No new endpoint.
+- **Existing extension surfaces** reused/extended: the capture overlay, the overlay dropdown/account menu, the options page settings, the duplicate/already-captured display, the synced settings store, and the canonical toolbar icon-state table.
 
 ## Assumptions
 
@@ -190,7 +191,7 @@ This feature depends on backend (`django-api`) support. The contract below is **
 - Removing a quote from a collection from within the overlay (web-app only).
 - Recording sightings or source URLs when adding an existing quote (membership only).
 - Introducing any new toolbar icon states (the existing canonical table is reused).
-- The `django-api` server-side implementation of the new endpoint and the duplicate-check response field (contract frozen here; implementation tracked separately).
+- The `django-api` server-side implementation (now done — bead `qw-si1t` / ADR-0006); this spec covers the extension surface only.
 - Bulk/transactional multi-collection add semantics (the chosen model is best-effort, per-collection).
 
 ## Constitution Notes
