@@ -8,13 +8,13 @@ Phase 1. Extension-side shapes only (the backend owns Collection/membership pers
 ```ts
 interface Settings {
   privateMode: boolean;
-  autoAddToCollection: boolean;        // existing — governs picker seeded vs blank (FR-020)
-  defaultCollectionId: string | null;  // existing — default destination (FR-017 fallback)
-  lastUsedCollectionIds: string[];     // NEW — full last-used set (FR-016/018); default []
+  autoAddToCollection: boolean;          // existing — governs picker seeded vs blank (FR-020)
+  defaultCollectionSlug: string | null;  // was defaultCollectionId — now a SLUG (FR-017 fallback)
+  lastUsedCollectionSlugs: string[];     // NEW — full last-used set of SLUGS (FR-016/018); default []
   firstRunNoticeShown: boolean;
 }
 ```
-- Validation/normalize: `lastUsedCollectionIds` coerced to `string[]` (drop non-strings); deduped. Reconciled against the live collection list at seed time, not at write time (R5).
+- Validation/normalize: `lastUsedCollectionSlugs` coerced to `string[]` (drop non-strings); deduped. Reconciled against the live collection list at seed time, not at write time (R5). The legacy `defaultCollectionId` (UUID) is **not migrated** — it is dropped; the user re-picks the default once (pre-production, sole user).
 - Lifecycle: written once per completed add when the set changes (R2); wiped (→ `[]`) on logout/private/clear-data (FR-024).
 
 ### Collection-list cache (`chrome.storage.local`, key `collectionsCache`)
@@ -30,33 +30,33 @@ interface CollectionsCache {
 ### Staged picker selection (in-memory, overlay only — not persisted)
 ```ts
 interface PickerState {
-  available: Collection[];             // from cache/list
-  alreadyIn: { id: string; name: string }[]; // read-only "Already in" (existing-quote path), from member_collections
-  checked: Set<string>;                // staged selection; seeded by seedSelection() (R5)
+  available: Collection[];                 // from cache/list (each carries slug)
+  alreadyIn: { slug: string; name: string }[]; // read-only "Already in" (existing-quote path), from member_collections
+  checked: Set<string>;                    // staged selection of SLUGS; seeded by seedSelection() (R5)
 }
 ```
 - Never written until the explicit capture/add action (FR-005). Discarded on overlay close.
 
 ### Add result (in-memory)
 ```ts
-interface CollectionAddResult { collectionId: string; ok: boolean; error?: string }
+interface CollectionAddResult { collectionSlug: string; ok: boolean; error?: string }
 ```
 - Aggregated by `summarizeAdds()` → drives the per-collection success/failure + retry UI (FR-012/013/015).
 
 ## Type changes (`src/types/api.ts`)
-- `DuplicateMatch.member_collections?: { id: string; name: string }[]` — NEW, optional (absent on old responses).
-- `AddToCollectionRequest { quote_id: string }`, `AddToCollectionResult { success: boolean; alreadyMember?: boolean; error?: string }` — NEW.
+- `DuplicateMatch.member_collections: { slug: string; name: string }[]` — NEW. Always present (empty `[]` when none); read unconditionally.
+- `AddToCollectionRequest { quote_id: string }` (collection identified by **slug** in the path), `AddToCollectionResult { success: boolean; alreadyMember?: boolean; error?: string }` — NEW.
 
 ## Message type (`src/types/chrome.ts`)
-- `MessageType.ADD_QUOTE_TO_COLLECTION` — content → background → `addQuoteToCollection(collectionId, quoteId)`.
-- Reuses existing `LIST_COLLECTIONS` (served from cache when fresh) and `SUBMIT_QUOTE` (new captures, with `collection_id`).
+- `MessageType.ADD_QUOTE_TO_COLLECTION` — content → background → `addQuoteToCollection(collectionSlug, quoteId)` → `POST /v1/collections/{slug}/quotes/`.
+- Reuses existing `LIST_COLLECTIONS` (served from cache when fresh) and `SUBMIT_QUOTE` (new captures; `collection_id` carries the chosen **slug**).
 
 ## State transitions (already-captured quote → membership)
 ```
 duplicate-check → match.member_collections present
   → partitionMembership() → { alreadyIn (read-only), addable (checkboxes) }
   → user checks subset → explicit "Add"
-  → one ADD_QUOTE_TO_COLLECTION per checked id (idempotent)
+  → one ADD_QUOTE_TO_COLLECTION per checked slug (idempotent)
   → summarizeAdds() → full success: confirm + auto-hide + badge=InCollection
                     → partial: stay open, per-collection retry
 ```

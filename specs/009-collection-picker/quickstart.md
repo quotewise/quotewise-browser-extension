@@ -24,10 +24,10 @@ bun run test
 
 ## Privacy check (Article II)
 - Confirm `GET /v1/collections/` fires only when you open the picker — never on tweet-page load, in any setting state (Article II.1). The "disable pre-action network calls" setting governs the duplicate/originator preloads, not collections.
-- Log out / enter private mode / use clear-data: confirm `collectionsCache` (storage.local) and `lastUsedCollectionIds` (storage.sync) are wiped.
+- Log out / enter private mode / use clear-data: confirm `collectionsCache` (storage.local) and `lastUsedCollectionSlugs` (storage.sync) are wiped.
 
 ## Automated tests to add (test-first for deterministic logic)
 - `tests/content/ui/collection-seed.test.ts` — `seedSelection` precedence + stale reconcile; `partitionMembership`; `summarizeAdds`.
-- `tests/settings/settings-store.test.ts` — `lastUsedCollectionIds` normalize/persist/clear; change-guarded write.
+- `tests/settings/settings-store.test.ts` — `lastUsedCollectionSlugs` normalize/persist/clear; change-guarded write.
 - `tests/api/quotewise-api.test.ts` — `addQuoteToCollection` (201/200 both success); `member_collections` parsed/absent-safe.
 - Picker fixture characterization + badge resolver wiring.

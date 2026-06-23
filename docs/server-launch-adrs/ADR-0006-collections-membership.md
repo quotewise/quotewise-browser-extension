@@ -83,6 +83,9 @@ Slug is the canonical identifier everywhere; the new field does not expose colle
 - **Always present** — an empty array `[]` when the quote is in none of the user's collections (read it unconditionally; never `undefined`).
 - `in_user_collections` is `true` **iff** this array is non-empty (the two are derived from one query).
 
+**3. `POST /v1/quotes/` accepts a collection slug.**
+The new-capture submit path passes the chosen collection **slug** in the optional `collection_id` (the create endpoint resolves slug → collection); the extension never sends the UUID `id`. A new capture files the first selected collection via this `collection_id` and any additional collections via the slug add endpoint above.
+
 **Error semantics (as implemented — codebase conventions, not the proposal's 403/404):**
 - Collection not owned by the caller → **`404`** (not `403`): the API never reveals that another user's collection exists.
 - Missing/invalid quote in the body → **`400`** (`QUOTE_NOT_FOUND` validation error), not `404`.
