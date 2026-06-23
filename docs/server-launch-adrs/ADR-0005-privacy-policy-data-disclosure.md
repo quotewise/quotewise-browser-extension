@@ -18,9 +18,9 @@ The problem is **content accuracy**. Per the 2026-04-21 pre-ship review, the exi
 
 Reads from the page (Twitter/X): tweet text, author username/display-name/verified/avatar URL, engagement metrics, tweet date, tweet URL, protected-tweet flag.
 
-Stores in `chrome.storage.local`: OAuth access/refresh tokens (+ expiries, scopes), `currentTweet`, `preloadedOriginator`, `preloadedDuplicateCheck`, recent originator search history. Logout/private-mode clears user-data caches and tokens.
+Stores in `chrome.storage.local`: OAuth access/refresh tokens (+ expiries, scopes), `currentTweet`, `preloadedOriginator`, `preloadedDuplicateCheck`, a short-lived `collectionsCache`, recent originator search history. Synced settings include collection defaults and the `lastUsedCollectionSlugs` convenience list. Logout/private-mode/clear-data clears user-data caches and collection selections; logout clears tokens.
 
-Transmits to `https://api.quotewise.io` (Bearer auth): captured quote text, originator slug, source URL, social handle, platform — to `/v1/quotes/`, `/v1/quotes/check_duplicate/`, `/v1/quotes/preflight/`, `/v1/originators/by-handle/`.
+Transmits to `https://api.quotewise.io` (Bearer auth): captured quote text, originator slug, source URL, social handle, platform — to `/v1/quotes/`, `/v1/quotes/check_duplicate/`, `/v1/quotes/preflight/`, `/v1/originators/by-handle/`. On explicit collection picker/settings open, fetches the user's collection names/slugs from `/v1/collections/`; on explicit add/capture, sends selected collection slug(s) to `/v1/quotes/` and `/v1/collections/{slug}/quotes/`.
 
 ## Decision (proposed)
 

@@ -4,9 +4,16 @@
  */
 
 import type { ExtensionMessage } from '../types/index';
-import type { QuotewiseApiClient } from '../types/api';
+import type { CollectionsListResponse, QuotewiseApiClient } from '../types/api';
 import { QuotewiseApiClientImpl } from '../api/quotewise-api';
 import { getEnvironmentConfig, detectEnvironment } from '../config/environment';
+
+const COLLECTIONS_CACHE_KEY = 'collectionsCache';
+const COLLECTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface CollectionsCache extends CollectionsListResponse {
+    ts: number;
+}
 
 /**
  * API Handler for Chrome extension service worker
@@ -83,6 +90,10 @@ export class ApiHandler {
                     await this.handleSubmitQuote(message, sendResponse);
                     break;
 
+                case 'ADD_QUOTE_TO_COLLECTION':
+                    await this.handleAddQuoteToCollection(message, sendResponse);
+                    break;
+
                 case 'LOOKUP_ORIGINATOR_BY_HANDLE':
                     await this.handleLookupOriginatorByHandle(message, sendResponse);
                     break;
@@ -92,7 +103,7 @@ export class ApiHandler {
                     break;
 
                 case 'LIST_COLLECTIONS':
-                    await this.handleListCollections(sendResponse);
+                    await this.handleListCollections(message, sendResponse);
                     break;
 
                 default:
@@ -110,6 +121,19 @@ export class ApiHandler {
                 error: error instanceof Error ? error.message : 'API request failed'
             });
         }
+    }
+
+    private isFreshCollectionsCache(value: unknown): value is CollectionsCache {
+        if (!value || typeof value !== 'object') {
+            return false;
+        }
+
+        const cache = value as Partial<CollectionsCache>;
+        return (
+            Array.isArray(cache.collections) &&
+            typeof cache.ts === 'number' &&
+            Date.now() - cache.ts < COLLECTIONS_CACHE_TTL_MS
+        );
     }
     
     /**
@@ -233,18 +257,81 @@ export class ApiHandler {
         }
     }
 
-    /**
-     * Handle collections list for options page
-     */
-    private async handleListCollections(
+    private async handleAddQuoteToCollection(
+        message: ExtensionMessage,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sendResponse: (response: any) => void
     ): Promise<void> {
         try {
+            const data = message.data || {};
+            const collectionSlug = data.collectionSlug ?? data.collection_slug;
+            const quoteId = data.quoteId ?? data.quote_id;
+
+            if (typeof collectionSlug !== 'string' || !collectionSlug) {
+                sendResponse({
+                    success: false,
+                    error: 'Collection slug is required'
+                });
+                return;
+            }
+
+            if (typeof quoteId !== 'string' || !quoteId) {
+                sendResponse({
+                    success: false,
+                    error: 'Quote ID is required'
+                });
+                return;
+            }
+
+            const result = await this.apiClient.addQuoteToCollection(collectionSlug, quoteId);
+            sendResponse(result);
+        } catch (error) {
+            console.error('Error adding quote to collection:', error);
+            sendResponse({
+                success: false,
+                ...this.authFailureFields(error),
+                error: error instanceof Error ? error.message : 'Unable to add quote to collection'
+            });
+        }
+    }
+
+    /**
+     * Handle collections list for options page
+     */
+    private async handleListCollections(
+        message: ExtensionMessage,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sendResponse: (response: any) => void
+    ): Promise<void> {
+        try {
+            const forceRefresh = message.data &&
+                typeof message.data === 'object' &&
+                (message.data as { forceRefresh?: unknown }).forceRefresh === true;
+            if (!forceRefresh) {
+                const storage = await chrome.storage.local.get([COLLECTIONS_CACHE_KEY]);
+                const cache = storage[COLLECTIONS_CACHE_KEY];
+                if (this.isFreshCollectionsCache(cache)) {
+                    sendResponse({
+                        success: true,
+                        collections: cache.collections,
+                        default_collection_id: cache.default_collection_id,
+                        fromCache: true
+                    });
+                    return;
+                }
+            }
+
             const result = await this.apiClient.listCollections();
+            await chrome.storage.local.set({
+                [COLLECTIONS_CACHE_KEY]: {
+                    ...result,
+                    ts: Date.now()
+                }
+            });
             sendResponse({
                 success: true,
-                ...result
+                ...result,
+                fromCache: false
             });
         } catch (error) {
             console.error('Error listing collections:', error);

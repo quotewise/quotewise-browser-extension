@@ -51,7 +51,8 @@ describe('collection auto-add submit wiring', () => {
       settings: {
         privateMode: false,
         autoAddToCollection: true,
-        defaultCollectionId: 'collection-1',
+        defaultCollectionSlug: 'favorites',
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
       },
     });
@@ -60,7 +61,7 @@ describe('collection auto-add submit wiring', () => {
 
     const submitCall = (chrome.runtime.sendMessage as jest.Mock).mock.calls
       .find(([message]) => message.type === MessageType.SUBMIT_QUOTE);
-    expect(submitCall[0].data.collection_id).toBe('collection-1');
+    expect(submitCall[0].data.collection_id).toBe('favorites');
   });
 
   it('omits collection_id when auto-add is disabled', async () => {
@@ -68,7 +69,8 @@ describe('collection auto-add submit wiring', () => {
       settings: {
         privateMode: false,
         autoAddToCollection: false,
-        defaultCollectionId: 'collection-1',
+        defaultCollectionSlug: 'favorites',
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
       },
     });
@@ -79,4 +81,59 @@ describe('collection auto-add submit wiring', () => {
       .find(([message]) => message.type === MessageType.SUBMIT_QUOTE);
     expect(submitCall[0].data.collection_id).toBeUndefined();
   });
+
+  it('uses staged picker selections and adds remaining collections after capture', async () => {
+    (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+      settings: {
+        privateMode: false,
+        autoAddToCollection: true,
+        defaultCollectionSlug: 'my-collected-quotes',
+        lastUsedCollectionSlugs: [],
+        firstRunNoticeShown: true,
+      },
+    });
+    const overlay = setupOverlay() as any;
+    overlay.collectionPicker = {
+      getSelectedCollections: () => [
+        collection('favorites', 'Favorites'),
+        collection('research', 'Research'),
+      ],
+      setSelectedSlugs: jest.fn(),
+    };
+
+    await overlay.submitQuote();
+
+    const submitCall = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .find(([message]) => message.type === MessageType.SUBMIT_QUOTE);
+    const addCall = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .find(([message]) => message.type === MessageType.ADD_QUOTE_TO_COLLECTION);
+    const badgeCall = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .find(([message]) => message.type === MessageType.UPDATE_COLLECTION_BADGE);
+
+    expect(submitCall[0].data.collection_id).toBe('favorites');
+    expect(addCall[0].data).toEqual({ collectionSlug: 'research', quoteId: 'q1' });
+    expect(badgeCall[0].data.state).toBe('already_collected');
+    expect(chrome.storage.sync.set).toHaveBeenCalledWith({
+      settings: {
+        privateMode: false,
+        autoAddToCollection: true,
+        defaultCollectionSlug: 'my-collected-quotes',
+        lastUsedCollectionSlugs: ['favorites', 'research'],
+        firstRunNoticeShown: true,
+      },
+    });
+  });
 });
+
+function collection(slug: string, name: string) {
+  return {
+    id: `id-${slug}`,
+    slug,
+    name,
+    description: '',
+    is_default: false,
+    quote_count: 0,
+    created_at: '2026-06-22T00:00:00Z',
+    updated_at: '2026-06-22T00:00:00Z',
+  };
+}

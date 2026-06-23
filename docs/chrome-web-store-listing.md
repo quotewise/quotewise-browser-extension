@@ -47,7 +47,7 @@ HOW IT WORKS
 
 3. Duplicate check. Before saving, Quotewise checks whether this quote already exists in the database. If it does, you'll see it — no accidental doubles.
 
-4. Save with attribution. The quote is submitted with the author's name, the platform, the source link, and the public engagement counts visible on the post at capture time.
+4. Save with attribution. The quote is submitted with the author's name, the platform, the source link, and the public engagement counts visible on the post at capture time. If you use Quotewise collections, you can choose which existing collection(s) to file it into during capture.
 
 
 SUPPORTED PLATFORMS
@@ -75,6 +75,8 @@ GOOD TO KNOW
 Quotes you capture go into the public Quotewise database, not a private personal collection. They may appear in public search results, on Quotewise quote pages, and via the Quotewise API, attributed to the original author. Submissions from new contributors are reviewed by Quotewise curators before they are published. This is the whole point: you are helping build a shared, carefully attributed library of contemporary voices, the kind of quotes that appear on social media before they ever appear in a book.
 
 A free Quotewise account is required. Sign-in is handled through OAuth — no passwords are entered into the extension, and the extension does not read your browser cookies or access any page content outside the specific post you choose to capture.
+
+When you open the collection picker or collection settings, the extension fetches your existing Quotewise collection names so you can choose where to file a quote. That list is cached briefly in Chrome local storage for speed, and the slugs for your most recently used collection set are stored in synced extension settings so future captures can be pre-selected. These collection caches/settings are cleared when you log out, enable Private mode, or choose Clear my data.
 
 For full details on how data is handled, see quotewise.io/privacy.
 

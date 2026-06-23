@@ -1,7 +1,9 @@
 import { DEFAULT_SETTINGS, type Settings } from '../../src/types/chrome';
 import {
+  clearLastUsedCollectionSlugs,
   getSettings,
   onSettingsChanged,
+  updateLastUsedCollectionSlugs,
   updateSettings,
 } from '../../src/settings/settings-store';
 
@@ -22,14 +24,31 @@ describe('settings-store', () => {
     (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
       settings: {
         privateMode: true,
-        defaultCollectionId: 'collection-1',
+        defaultCollectionSlug: 'favorites',
+        lastUsedCollectionSlugs: ['research', 'favorites'],
       },
     });
 
     await expect(getSettings()).resolves.toEqual({
       ...DEFAULT_SETTINGS,
       privateMode: true,
-      defaultCollectionId: 'collection-1',
+      defaultCollectionSlug: 'favorites',
+      lastUsedCollectionSlugs: ['research', 'favorites'],
+    });
+  });
+
+  it('drops legacy defaultCollectionId and normalizes last-used slugs', async () => {
+    (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+      settings: {
+        defaultCollectionId: 'legacy-uuid',
+        lastUsedCollectionSlugs: ['research', 42, 'research', '', 'favorites'],
+      },
+    });
+
+    await expect(getSettings()).resolves.toEqual({
+      ...DEFAULT_SETTINGS,
+      defaultCollectionSlug: null,
+      lastUsedCollectionSlugs: ['research', 'favorites'],
     });
   });
 
@@ -41,15 +60,54 @@ describe('settings-store', () => {
       },
     });
 
-    const next = await updateSettings({ defaultCollectionId: 'collection-2' });
+    const next = await updateSettings({ defaultCollectionSlug: 'research' });
 
     expect(next).toEqual({
       ...DEFAULT_SETTINGS,
       privateMode: true,
-      defaultCollectionId: 'collection-2',
+      defaultCollectionSlug: 'research',
       firstRunNoticeShown: true,
     });
     expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1);
+    expect(chrome.storage.sync.set).toHaveBeenCalledWith({ settings: next });
+  });
+
+  it('updates last-used slugs with dedupe and skips unchanged writes', async () => {
+    (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        lastUsedCollectionSlugs: ['research', 'favorites'],
+      },
+    });
+
+    await expect(updateLastUsedCollectionSlugs(['research', 'research', '', 'favorites']))
+      .resolves
+      .toEqual({
+        ...DEFAULT_SETTINGS,
+        lastUsedCollectionSlugs: ['research', 'favorites'],
+      });
+    expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+
+    await expect(updateLastUsedCollectionSlugs(['favorites']))
+      .resolves
+      .toEqual({
+        ...DEFAULT_SETTINGS,
+        lastUsedCollectionSlugs: ['favorites'],
+      });
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears last-used slugs through the settings store', async () => {
+    (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        lastUsedCollectionSlugs: ['research'],
+      },
+    });
+
+    const next = await clearLastUsedCollectionSlugs();
+
+    expect(next.lastUsedCollectionSlugs).toEqual([]);
     expect(chrome.storage.sync.set).toHaveBeenCalledWith({ settings: next });
   });
 

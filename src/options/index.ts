@@ -174,7 +174,7 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
   function applySettings(settings: Settings): void {
     privateToggle.checked = settings.privateMode;
     autoAddToggle.checked = settings.autoAddToCollection;
-    collectionSelect.value = settings.defaultCollectionId || '';
+    collectionSelect.value = settings.defaultCollectionSlug || '';
   }
 
   function setStatus(message: string): void {
@@ -228,9 +228,9 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
   });
 
   collectionSelect.addEventListener('change', () => {
-    void updateSettings({ defaultCollectionId: collectionSelect.value || null }).then(settings => {
+    void updateSettings({ defaultCollectionSlug: collectionSelect.value || null }).then(settings => {
       applySettings(settings);
-      setStatus(settings.defaultCollectionId ? 'Default collection saved.' : 'Default collection cleared.');
+      setStatus(settings.defaultCollectionSlug ? 'Default collection saved.' : 'Default collection cleared.');
     });
   });
 
@@ -289,26 +289,29 @@ async function loadCollections(
   if (collections.length === 0) {
     select.disabled = true;
     hint.textContent = 'No collections found.';
-    await updateSettings({ autoAddToCollection: false, defaultCollectionId: null }).then(applySettings);
+    await updateSettings({ autoAddToCollection: false, defaultCollectionSlug: null }).then(applySettings);
     return;
   }
 
   for (const collection of collections) {
     const option = document.createElement('option');
-    option.value = collection.id;
+    option.value = collection.slug;
     option.textContent = collection.name;
     select.appendChild(option);
   }
 
   const settings = await getSettings();
-  const validIds = new Set(collections.map(collection => collection.id));
-  const preferred = settings.defaultCollectionId && validIds.has(settings.defaultCollectionId)
-    ? settings.defaultCollectionId
-    : response.default_collection_id && validIds.has(response.default_collection_id)
-      ? response.default_collection_id
+  const validSlugs = new Set(collections.map(collection => collection.slug));
+  const defaultCollection = response.default_collection_id
+    ? collections.find(collection => collection.id === response.default_collection_id)
+    : collections.find(collection => collection.is_default);
+  const preferred = settings.defaultCollectionSlug && validSlugs.has(settings.defaultCollectionSlug)
+    ? settings.defaultCollectionSlug
+    : defaultCollection?.slug && validSlugs.has(defaultCollection.slug)
+      ? defaultCollection.slug
       : null;
-  const nextSettings = preferred !== settings.defaultCollectionId
-    ? await updateSettings({ defaultCollectionId: preferred })
+  const nextSettings = preferred !== settings.defaultCollectionSlug
+    ? await updateSettings({ defaultCollectionSlug: preferred })
     : settings;
 
   select.disabled = false;

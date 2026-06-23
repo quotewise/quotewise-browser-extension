@@ -24,6 +24,7 @@ function makeDuplicateResult(
       similarity: 1,
       match_type: 'exact',
       in_user_collections: false,
+      member_collections: [],
       originator: { id: '1', full_name: 'Author', sort_name: null, birth_year: null, death_year: null },
       workflow_status: 'published',
       likes_count: 0,

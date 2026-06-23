@@ -12,18 +12,18 @@ export class QuotePreview {
     if (selectedText) {
       this.container.innerHTML = `
         <span class="badge info">Selection</span>
-        <span class="quote-text">"${this.escapeHtml(selectedText)}"</span>
-        <button class="clear-selection" title="Use full tweet">✕</button>
+        <span class="quote-text">${this.escapeHtml(selectedText)}</span>
+        <button class="clear-selection" title="Use full source" aria-label="Use full source text">✕</button>
       `;
       const clearBtn = this.container.querySelector('.clear-selection');
       clearBtn?.addEventListener('click', () => {
         this.callbacks.onClearSelection();
       });
     } else {
-      const preview = text.length > 100
-        ? text.substring(0, 100) + '...'
-        : text;
-      this.container.innerHTML = `<span class="quote-text">"${this.escapeHtml(preview)}"</span>`;
+      this.container.innerHTML = `
+        <span class="badge info">Full source</span>
+        <span class="quote-text">${this.escapeHtml(text)}</span>
+      `;
     }
   }
 
@@ -34,25 +34,22 @@ export class QuotePreview {
   showSelectionRequired(): void {
     this.container.innerHTML = `
       <span class="badge warning">Select text</span>
-      <span class="quote-text">Highlight a passage in the article to capture it as a quote.</span>
+      <span class="quote-text quote-text-muted">Highlight a passage in the article to capture it as a quote.</span>
     `;
   }
 
   showSuccess(text: string, wasPartial: boolean): void {
-    const preview = text.length > 80
-      ? text.substring(0, 80) + '...'
-      : text;
-
     if (wasPartial) {
       this.container.innerHTML = `
         <span class="badge info">Selection</span>
         <span class="badge success">✓ Submitted</span>
-        <span class="quote-text">"${this.escapeHtml(preview)}"</span>
+        <span class="quote-text">${this.escapeHtml(text)}</span>
       `;
     } else {
       this.container.innerHTML = `
+        <span class="badge info">Full source</span>
         <span class="badge success">✓ Submitted</span>
-        <span class="quote-text">"${this.escapeHtml(preview)}"</span>
+        <span class="quote-text">${this.escapeHtml(text)}</span>
       `;
     }
   }

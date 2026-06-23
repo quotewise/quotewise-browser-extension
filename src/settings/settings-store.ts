@@ -2,6 +2,27 @@ import { DEFAULT_SETTINGS, type Settings } from '../types/chrome';
 
 const SETTINGS_KEY = 'settings';
 
+function normalizeSlugList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const slugs: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const slug = item.trim();
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    slugs.push(slug);
+  }
+  return slugs;
+}
+
+function settingsEqual(a: Settings, b: Settings): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function normalizeSettings(value: unknown): Settings {
   if (!value || typeof value !== 'object') {
     return { ...DEFAULT_SETTINGS };
@@ -15,9 +36,10 @@ function normalizeSettings(value: unknown): Settings {
     autoAddToCollection: typeof partial.autoAddToCollection === 'boolean'
       ? partial.autoAddToCollection
       : DEFAULT_SETTINGS.autoAddToCollection,
-    defaultCollectionId: typeof partial.defaultCollectionId === 'string'
-      ? partial.defaultCollectionId
+    defaultCollectionSlug: typeof partial.defaultCollectionSlug === 'string'
+      ? partial.defaultCollectionSlug
       : null,
+    lastUsedCollectionSlugs: normalizeSlugList(partial.lastUsedCollectionSlugs),
     firstRunNoticeShown: typeof partial.firstRunNoticeShown === 'boolean'
       ? partial.firstRunNoticeShown
       : DEFAULT_SETTINGS.firstRunNoticeShown,
@@ -32,8 +54,19 @@ export async function getSettings(): Promise<Settings> {
 export async function updateSettings(patch: Partial<Settings>): Promise<Settings> {
   const current = await getSettings();
   const next = normalizeSettings({ ...current, ...patch });
+  if (settingsEqual(current, next)) {
+    return next;
+  }
   await chrome.storage.sync.set({ [SETTINGS_KEY]: next });
   return next;
+}
+
+export async function updateLastUsedCollectionSlugs(slugs: string[]): Promise<Settings> {
+  return updateSettings({ lastUsedCollectionSlugs: normalizeSlugList(slugs) });
+}
+
+export async function clearLastUsedCollectionSlugs(): Promise<Settings> {
+  return updateLastUsedCollectionSlugs([]);
 }
 
 export function onSettingsChanged(

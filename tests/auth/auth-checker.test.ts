@@ -14,6 +14,7 @@ const mockApiClient = {
   searchOriginators: jest.fn(),
   checkQuoteDuplicate: jest.fn(),
   submitQuote: jest.fn(),
+  addQuoteToCollection: jest.fn(),
   listCollections: jest.fn(),
   lookupOriginatorByHandle: jest.fn(),
   preflightCheck: jest.fn()

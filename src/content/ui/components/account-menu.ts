@@ -1,10 +1,13 @@
 import { MessageType, type Settings } from '../../../types';
 import { AuthState, type AuthStateData } from '../../../auth/auth-state-machine';
 import { getSettings, onSettingsChanged, updateSettings } from '../../../settings/settings-store';
+import type { Collection } from '../../../types/api';
 
 type MessageResponse = {
   success?: boolean;
   error?: string;
+  collections?: Collection[];
+  default_collection_id?: string | null;
   data?: {
     state?: AuthState | string;
     username?: string;
@@ -21,6 +24,10 @@ export class AccountMenu {
   private authState: AuthState = AuthState.UNKNOWN;
   private username: string | null = null;
   private statusMessage: string | null = null;
+  private collections: Collection[] = [];
+  private collectionsLoaded = false;
+  private collectionsLoading = false;
+  private collectionsError: string | null = null;
   private unsubscribe: (() => void) | null = null;
 
   constructor(
@@ -77,12 +84,16 @@ export class AccountMenu {
     const isAuthenticated = this.authState === AuthState.AUTHENTICATED;
     const authActionText = isAuthenticated ? 'Log out' : 'Log in';
     const accountLabel = this.statusMessage || this.accountLabel();
+    const collectionControls = isAuthenticated && !this.settings.privateMode
+      ? this.collectionControlsHtml()
+      : '';
     this.menu.innerHTML = `
       <div class="menu-status" role="status">${this.escapeHtml(accountLabel)}</div>
       <label class="menu-row" role="menuitemcheckbox" aria-checked="${this.settings.privateMode ? 'true' : 'false'}">
         <input type="checkbox" id="account-private-toggle" ${this.settings.privateMode ? 'checked' : ''}>
         <span>Private mode</span>
       </label>
+      ${collectionControls}
       <button type="button" role="menuitem" id="account-open-settings">Open settings</button>
       <button type="button" role="menuitem" id="account-send-feedback">Send feedback</button>
       <button type="button" role="menuitem" id="account-auth-action">${authActionText}</button>
@@ -90,6 +101,14 @@ export class AccountMenu {
     this.menu.querySelector('#account-private-toggle')?.addEventListener('change', event => {
       const target = event.target as HTMLInputElement;
       void updateSettings({ privateMode: target.checked });
+    });
+    this.menu.querySelector('#account-auto-add-toggle')?.addEventListener('change', event => {
+      const target = event.target as HTMLInputElement;
+      void updateSettings({ autoAddToCollection: target.checked });
+    });
+    this.menu.querySelector('#account-default-collection-select')?.addEventListener('change', event => {
+      const target = event.target as HTMLSelectElement;
+      void updateSettings({ defaultCollectionSlug: target.value || null });
     });
     this.menu.querySelector('#account-open-settings')?.addEventListener('click', () => {
       void this.sendMessage({ type: MessageType.OPEN_OPTIONS_PAGE });
@@ -108,6 +127,88 @@ export class AccountMenu {
         this.button?.focus();
       }
     });
+  }
+
+  private collectionControlsHtml(): string {
+    const selectDisabled = this.collectionsLoading || this.collections.length === 0;
+    const options = [
+      `<option value="">No default collection</option>`,
+      ...this.collections.map(collection => (
+        `<option value="${this.escapeHtml(collection.slug)}" ${collection.slug === this.settings?.defaultCollectionSlug ? 'selected' : ''}>${this.escapeHtml(collection.name)}</option>`
+      )),
+    ].join('');
+    const hint = this.collectionsError
+      ? this.collectionsError
+      : this.collectionsLoading || !this.collectionsLoaded
+        ? 'Loading collections...'
+        : this.collections.length === 0
+          ? 'No collections found.'
+          : 'Default collection';
+
+    return `
+      <label class="menu-row" role="menuitemcheckbox" aria-checked="${this.settings?.autoAddToCollection ? 'true' : 'false'}">
+        <input type="checkbox" id="account-auto-add-toggle" ${this.settings?.autoAddToCollection ? 'checked' : ''}>
+        <span>Auto-add Captures</span>
+      </label>
+      <label class="menu-row collection-select-row">
+        <span>${this.escapeHtml(hint)}</span>
+        <select id="account-default-collection-select" aria-label="Default collection" ${selectDisabled ? 'disabled' : ''}>
+          ${options}
+        </select>
+      </label>
+    `;
+  }
+
+  private async loadCollectionsForMenu(): Promise<void> {
+    if (
+      this.collectionsLoaded ||
+      this.collectionsLoading ||
+      this.authState !== AuthState.AUTHENTICATED ||
+      this.settings?.privateMode
+    ) {
+      return;
+    }
+
+    this.collectionsLoading = true;
+    this.collectionsError = null;
+    this.renderMenu();
+
+    try {
+      const response = await this.sendMessage({ type: MessageType.LIST_COLLECTIONS });
+      if (!response.success) {
+        throw new Error(response.error || 'Unable to load collections.');
+      }
+
+      this.collections = response.collections || [];
+      this.collectionsLoaded = true;
+      await this.reconcileDefaultCollection(response.default_collection_id || null);
+    } catch (error) {
+      this.collectionsError = error instanceof Error ? error.message : 'Unable to load collections.';
+      this.collections = [];
+    } finally {
+      this.collectionsLoading = false;
+      this.renderMenu();
+    }
+  }
+
+  private async reconcileDefaultCollection(defaultCollectionId: string | null): Promise<void> {
+    if (!this.settings || this.collections.length === 0) {
+      return;
+    }
+
+    const validSlugs = new Set(this.collections.map(collection => collection.slug));
+    if (this.settings.defaultCollectionSlug && validSlugs.has(this.settings.defaultCollectionSlug)) {
+      return;
+    }
+
+    const defaultCollection = defaultCollectionId
+      ? this.collections.find(collection => collection.id === defaultCollectionId)
+      : this.collections.find(collection => collection.is_default);
+    if (!defaultCollection) {
+      return;
+    }
+
+    this.settings = await updateSettings({ defaultCollectionSlug: defaultCollection.slug });
   }
 
   private async refreshAuthState(): Promise<void> {
@@ -226,6 +327,7 @@ export class AccountMenu {
     if (!this.menu || !this.button) return;
     this.menu.hidden = false;
     this.button.setAttribute('aria-expanded', 'true');
+    void this.loadCollectionsForMenu();
     (this.menu.querySelector('input, button') as HTMLElement | null)?.focus();
   }
 

@@ -15,22 +15,22 @@ describe('QuotePreview', () => {
 
   it('shows full text when no selection', () => {
     preview.update('Hello world', null);
-    expect(container.querySelector('.quote-text')?.textContent).toBe('"Hello world"');
-    expect(container.querySelector('.badge')).toBeNull();
+    expect(container.querySelector('.badge.info')?.textContent).toBe('Full source');
+    expect(container.querySelector('.quote-text')?.textContent).toBe('Hello world');
     expect(container.querySelector('.clear-selection')).toBeNull();
   });
 
-  it('shows truncated text with "..." for text > 100 chars', () => {
+  it('shows exact text for long full-source submissions', () => {
     const longText = 'a'.repeat(150);
     preview.update(longText, null);
     const displayed = container.querySelector('.quote-text')?.textContent;
-    expect(displayed).toBe(`"${'a'.repeat(100)}..."`);
+    expect(displayed).toBe(longText);
   });
 
   it('shows selected text with Selection badge and clear button', () => {
     preview.update('full tweet text here', 'selected portion');
     expect(container.querySelector('.badge.info')?.textContent).toBe('Selection');
-    expect(container.querySelector('.quote-text')?.textContent).toBe('"selected portion"');
+    expect(container.querySelector('.quote-text')?.textContent).toBe('selected portion');
     expect(container.querySelector('.clear-selection')).not.toBeNull();
   });
 
@@ -48,10 +48,10 @@ describe('QuotePreview', () => {
     expect(container.querySelector('.clear-selection')).toBeNull();
   });
 
-  it('shows success state without Selection badge', () => {
+  it('shows success state with Full source badge when no selection was used', () => {
     preview.showSuccess('submitted text', false);
     expect(container.querySelector('.badge.success')?.textContent).toBe('✓ Submitted');
-    expect(container.querySelector('.badge.info')).toBeNull();
+    expect(container.querySelector('.badge.info')?.textContent).toBe('Full source');
     expect(container.querySelector('.quote-text')?.textContent).toContain('submitted text');
     expect(container.querySelector('.clear-selection')).toBeNull();
   });
@@ -62,11 +62,11 @@ describe('QuotePreview', () => {
     expect(container.querySelector('.badge.success')?.textContent).toBe('✓ Submitted');
   });
 
-  it('truncates success text at 80 chars', () => {
+  it('shows exact success text for long submissions', () => {
     const longText = 'b'.repeat(100);
     preview.showSuccess(longText, false);
     const displayed = container.querySelector('.quote-text')?.textContent;
-    expect(displayed).toBe(`"${'b'.repeat(80)}..."`);
+    expect(displayed).toBe(longText);
   });
 
   it('escapes HTML in text display', () => {

@@ -27,7 +27,7 @@ CWS data-type taxonomy. Declare **only** the two rows marked *Yes*; leave the re
 | Data type | Collected? | What / why |
 |---|---|---|
 | Authentication information | **Yes** | OAuth access/refresh tokens stored in `chrome.storage.local` to keep the user signed in; sent as a Bearer token to authenticate quote submissions. Cleared on sign-out. |
-| Website content | **Yes** | The quote text, the post author's display name/handle, the source post URL, and public engagement counts of the post the user chooses to capture — sent to the Quotewise API to save the quote with attribution. |
+| Website content | **Yes** | The quote text, the post author's display name/handle, the source post URL, and public engagement counts of the post the user chooses to capture — sent to the Quotewise API to save the quote with attribution. The extension also fetches the signed-in user's collection names/slugs only when the user opens the collection picker or collection settings, so captures can be filed into selected collections. |
 | Personally identifiable info | No | The extension does not collect the user's name/email/address. The captured author handle is the **third-party post author** (public), declared under Website content, not the extension user's PII. |
 | Personal communications | No | Only the single post the user selects is read; no inbox/DM/mail access. |
 | User activity | No | **Do not declare.** CWS "user activity" means behavioral monitoring (clicks, scroll, keystroke, mouse). The extension performs none — capture is a single user-initiated action. |
@@ -69,6 +69,7 @@ reflected in the single-purpose narrative before this tab is submitted:
 | **AWS Comprehend (fallback)** | Quote text | Only when local language detection falls back. Same sub-processor (AWS). |
 | **Human curation** | Quote text (+ originator/URL) | Below-threshold submissions are read by Quotewise staff/curators in a moderation queue. Submitter PII is not part of the review. |
 | **PostHog analytics (EU)** | Event metadata + internal numeric user id | No content, URL, handle, token, or email; the submission POST emits no event. Disclose the processor for completeness. |
+| **Collection filing** | Collection names/slugs; selected collection slug(s) | Collection list is fetched on explicit picker/settings open, cached in `chrome.storage.local` for a short rebuildable window, and selected/last-used collection slugs are stored in synced settings so future captures can be pre-selected. Cleared on logout, private mode, and "Clear my data." |
 
 No selling, ad networks, or ad targeting exist in any capture path (confirmed by absence).
 

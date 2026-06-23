@@ -4,7 +4,10 @@ import { USER_IDENTIFYING_CACHE_KEYS } from './storage-cleanup';
 
 export async function clearUserDataCaches(): Promise<void> {
   await chrome.storage.local.remove([...USER_IDENTIFYING_CACHE_KEYS]);
-  await updateSettings({ defaultCollectionId: null });
+  await updateSettings({
+    defaultCollectionSlug: null,
+    lastUsedCollectionSlugs: [],
+  });
 }
 
 export async function logoutAndClearUserData(): Promise<void> {
