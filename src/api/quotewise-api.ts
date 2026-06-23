@@ -9,6 +9,7 @@ import type {
   DuplicateCheckResult,
   QuoteSubmissionRequest,
   QuoteSubmissionResult,
+  AddToCollectionResult,
   AuthStatusResult,
   CollectionsListResponse,
   HandleLookupResult,
@@ -22,6 +23,78 @@ import { attemptTokenRefresh } from '../auth/token-refresh';
 
 /** Max characters of quote text sent to the preflight endpoint (enough for duplicate matching). */
 const MAX_PREFLIGHT_TEXT_LENGTH = 2000;
+
+function normalizeMemberCollections(value: unknown): { slug: string; name: string }[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((item): item is { slug: string; name: string } => (
+      !!item &&
+      typeof item === 'object' &&
+      typeof (item as { slug?: unknown }).slug === 'string' &&
+      typeof (item as { name?: unknown }).name === 'string'
+    ))
+    .map(item => ({ slug: item.slug, name: item.name }));
+}
+
+function normalizeDuplicateCheckResult(result: DuplicateCheckResult): DuplicateCheckResult {
+  return {
+    ...result,
+    matches: Array.isArray(result.matches)
+      ? result.matches.map(match => ({
+          ...match,
+          member_collections: normalizeMemberCollections(
+            (match as { member_collections?: unknown }).member_collections
+          ),
+        }))
+      : [],
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function normalizeCollection(value: unknown): CollectionsListResponse['collections'][number] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = value.id;
+  const name = value.name;
+  const slug = value.slug;
+  if (typeof id !== 'string' || typeof name !== 'string' || typeof slug !== 'string') {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    slug,
+    description: typeof value.description === 'string' ? value.description : '',
+    is_default: value.is_default === true,
+    quote_count: typeof value.quote_count === 'number' ? value.quote_count : 0,
+    created_at: typeof value.created_at === 'string' ? value.created_at : '',
+    updated_at: typeof value.updated_at === 'string' ? value.updated_at : '',
+  };
+}
+
+function normalizeCollectionsListResponse(result: unknown): CollectionsListResponse {
+  if (!isRecord(result) || !Array.isArray(result.data)) {
+    return { collections: [], default_collection_id: null };
+  }
+
+  const collections = result.data
+    .map(normalizeCollection)
+    .filter((collection): collection is CollectionsListResponse['collections'][number] => collection !== null);
+
+  return {
+    collections,
+    default_collection_id: collections.find(collection => collection.is_default)?.id || null,
+  };
+}
 
 /**
  * Main API client implementation with OAuth 2.0 Bearer token support
@@ -267,7 +340,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         }
       );
       
-      return result;
+      return normalizeDuplicateCheckResult(result);
     } catch (error) {
       console.error('Error checking duplicates:', error);
       if (error instanceof Error && error.name === 'AuthenticationError') {
@@ -345,16 +418,50 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   }
 
   /**
+   * Add an existing quote to a user-owned collection by collection slug.
+   */
+  async addQuoteToCollection(collectionSlug: string, quoteId: string): Promise<AddToCollectionResult> {
+    if (!collectionSlug.trim()) {
+      return { success: false, error: 'Collection slug is required' };
+    }
+
+    if (!quoteId.trim()) {
+      return { success: false, error: 'Quote ID is required' };
+    }
+
+    try {
+      await this.makeRequest<unknown>(
+        `/v1/collections/${encodeURIComponent(collectionSlug)}/quotes/`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ quote_id: quoteId })
+        }
+      );
+
+      return { success: true };
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AuthenticationError') {
+        throw error;
+      }
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unable to add quote to collection',
+      };
+    }
+  }
+
+  /**
    * List user's collections
    */
   async listCollections(): Promise<CollectionsListResponse> {
     try {
-      const result = await this.makeRequest<CollectionsListResponse>(
+      const result = await this.makeRequest<unknown>(
         '/v1/collections/',
         { method: 'GET' }
       );
 
-      return result;
+      return normalizeCollectionsListResponse(result);
     } catch (error) {
       console.error('Error listing collections:', error);
 

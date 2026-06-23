@@ -1115,6 +1115,7 @@ async function applySettingsPresentation(next: Settings, prev: Settings): Promis
 
   if (next.privateMode && !prev.privateMode) {
     await clearAutomaticWorkForPrivateMode();
+    await clearUserDataCaches();
   }
 
   for (const tab of await getAffectedTabs()) {
@@ -1720,6 +1721,7 @@ chrome.runtime.onMessage.addListener((
       // Delegate API messages to API handler
       case MessageType.SEARCH_ORIGINATORS:
       case MessageType.SUBMIT_QUOTE:
+      case MessageType.ADD_QUOTE_TO_COLLECTION:
       case MessageType.LIST_COLLECTIONS:
         // Delegate to API handler (guaranteed initialized by ensureServicesInitialized)
         apiHandler!.handleMessage(message, sender, (response) => {

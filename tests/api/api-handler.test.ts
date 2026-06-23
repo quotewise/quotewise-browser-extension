@@ -15,7 +15,8 @@ jest.mock('../../src/api/quotewise-api', () => ({
     searchOriginators: jest.fn(),
     checkQuoteDuplicate: jest.fn(),
     submitQuote: jest.fn(),
-    listCollections: jest.fn()
+    listCollections: jest.fn(),
+    addQuoteToCollection: jest.fn()
   }))
 }));
 
@@ -37,6 +38,13 @@ const mockChrome = {
       addListener: jest.fn()
     }
   },
+  storage: {
+    local: {
+      get: jest.fn().mockResolvedValue({}),
+      set: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn().mockResolvedValue(undefined),
+    },
+  },
   tabs: {
     query: jest.fn(),
     sendMessage: jest.fn()
@@ -51,11 +59,18 @@ describe('ApiHandler', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockChrome.storage.local.get.mockResolvedValue({});
+    mockChrome.storage.local.set.mockResolvedValue(undefined);
+    mockChrome.storage.local.remove.mockResolvedValue(undefined);
 
     apiHandler = new ApiHandler();
 
     // Get the mocked API client instance
     mockApiClient = (QuotewiseApiClientImpl as jest.Mock).mock.results[0].value;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   describe('Initialization', () => {
@@ -186,6 +201,82 @@ describe('ApiHandler', () => {
 
       expect(mockApiClient.submitQuote).toHaveBeenCalledWith(quoteData);
       expect(mockSendResponse).toHaveBeenCalledWith(mockSubmissionResult);
+    });
+
+    test('handles ADD_QUOTE_TO_COLLECTION message', async () => {
+      mockApiClient.addQuoteToCollection.mockResolvedValue({ success: true });
+
+      const message: ExtensionMessage = {
+        type: 'ADD_QUOTE_TO_COLLECTION' as MessageType,
+        data: { collectionSlug: 'favorites', quoteId: 'quote-123' }
+      };
+
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
+
+      expect(mockApiClient.addQuoteToCollection).toHaveBeenCalledWith('favorites', 'quote-123');
+      expect(mockSendResponse).toHaveBeenCalledWith({ success: true });
+    });
+
+    test('serves LIST_COLLECTIONS from fresh local cache', async () => {
+      jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      mockChrome.storage.local.get.mockResolvedValue({
+        collectionsCache: {
+          collections: [{ id: '1', slug: 'favorites', name: 'Favorites' }],
+          default_collection_id: '1',
+          ts: 1_000_000 - 60_000,
+        },
+      });
+
+      const message: ExtensionMessage = {
+        type: 'LIST_COLLECTIONS' as MessageType,
+      };
+
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
+
+      expect(mockApiClient.listCollections).not.toHaveBeenCalled();
+      expect(mockSendResponse).toHaveBeenCalledWith({
+        success: true,
+        collections: [{ id: '1', slug: 'favorites', name: 'Favorites' }],
+        default_collection_id: '1',
+        fromCache: true,
+      });
+    });
+
+    test('bypasses LIST_COLLECTIONS cache when forceRefresh is true', async () => {
+      jest.spyOn(Date, 'now').mockReturnValue(2_000_000);
+      mockChrome.storage.local.get.mockResolvedValue({
+        collectionsCache: {
+          collections: [{ id: '1', slug: 'old', name: 'Old' }],
+          default_collection_id: '1',
+          ts: 2_000_000,
+        },
+      });
+      mockApiClient.listCollections.mockResolvedValue({
+        collections: [{ id: '2', slug: 'fresh', name: 'Fresh' }],
+        default_collection_id: '2',
+      } as never);
+
+      const message: ExtensionMessage = {
+        type: 'LIST_COLLECTIONS' as MessageType,
+        data: { forceRefresh: true },
+      };
+
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
+
+      expect(mockApiClient.listCollections).toHaveBeenCalledTimes(1);
+      expect(mockChrome.storage.local.set).toHaveBeenCalledWith({
+        collectionsCache: {
+          collections: [{ id: '2', slug: 'fresh', name: 'Fresh' }],
+          default_collection_id: '2',
+          ts: 2_000_000,
+        },
+      });
+      expect(mockSendResponse).toHaveBeenCalledWith({
+        success: true,
+        collections: [{ id: '2', slug: 'fresh', name: 'Fresh' }],
+        default_collection_id: '2',
+        fromCache: false,
+      });
     });
 
     test('handles unknown message type', async () => {

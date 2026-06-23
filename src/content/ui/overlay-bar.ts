@@ -1,18 +1,30 @@
 import type { CapturedPostData } from '../../types';
 import { DEFAULT_SETTINGS, MessageType, type Settings } from '../../types';
-import type { DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
+import type { Collection, DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
 import { AuthState } from '../../auth/auth-state-machine';
 import type { AuthStateData } from '../../auth/auth-state-machine';
 import { DuplicateBadge } from './components/duplicate-badge';
 import type { SubmitStateDirective } from './components/duplicate-badge';
+import { CollectionPicker } from './components/collection-picker';
+import type { CollectionAddOutcome } from './components/collection-seed';
+import { seedSelection, summarizeAdds } from './components/collection-seed';
 import { QuotePreview } from './components/quote-preview';
 import { OriginatorLookup } from './components/originator-lookup';
 import { ActionButton } from './components/action-button';
 import { CaptureProgressIndicator } from './components/progress-indicator';
 import { FirstRunNotice } from './components/first-run-notice';
 import { AccountMenu } from './components/account-menu';
-import { classifyDuplicateSighting, classifyMatchResolution } from '../../utils/duplicate-status';
-import { getSettings, onSettingsChanged, updateSettings } from '../../settings/settings-store';
+import {
+  classifyDuplicateSighting,
+  classifyMatchResolution,
+  getMatchForDuplicateSightingState,
+} from '../../utils/duplicate-status';
+import {
+  getSettings,
+  onSettingsChanged,
+  updateLastUsedCollectionSlugs,
+  updateSettings,
+} from '../../settings/settings-store';
 import {
   captureAuthorHandle,
   captureLikesCount,
@@ -64,6 +76,9 @@ export class OverlayBar {
   private currentData: CapturedPostData | null = null;
   private duplicateBadge: DuplicateBadge | null = null;
   private duplicateBadgeContainer: HTMLElement | null = null;
+  private collectionPicker: CollectionPicker | null = null;
+  private collectionPickerContainer: HTMLElement | null = null;
+  private existingQuoteTarget: { quoteId: string } | null = null;
   private quotePreview: QuotePreview | null = null;
   private originatorLookup: OriginatorLookup | null = null;
   private actionButton: ActionButton | null = null;
@@ -200,26 +215,43 @@ export class OverlayBar {
         }
         .quote-preview-row, .originator-row {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           gap: 12px;
           padding: 8px 12px;
         }
         .quote-preview-row {
+          background: rgba(15,23,42,0.26);
           border-bottom: 1px solid rgba(255,255,255,0.06);
         }
         .quote-preview {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           gap: 8px;
           flex: 1;
           min-width: 0;
         }
         .quote-text {
-          color: #94a3b8;
-          font-style: italic;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          flex: 1 1 auto;
+          min-width: 0;
+          max-height: calc(1.45em * 5);
+          padding: 7px 10px;
+          border-left: 3px solid #60a5fa;
+          border-radius: 6px;
+          background: rgba(15,23,42,0.56);
+          color: #f8fafc;
+          font-size: 14px;
+          font-style: normal;
+          font-weight: 500;
+          line-height: 20px;
+          overflow-y: auto;
+          overflow-x: hidden;
+          overflow-wrap: anywhere;
+          white-space: pre-line;
+        }
+        .quote-text-muted {
+          color: #cbd5e1;
+          font-size: 13px;
+          font-weight: 400;
         }
         .clear-selection {
           background: rgba(239,68,68,0.2);
@@ -230,6 +262,7 @@ export class OverlayBar {
           cursor: pointer;
           font-size: 11px;
           flex-shrink: 0;
+          margin-top: 2px;
         }
         .clear-selection:hover {
           background: rgba(239,68,68,0.3);
@@ -287,6 +320,12 @@ export class OverlayBar {
           max-height: calc(1.35em * 8);
           overflow-y: auto;
           overflow-x: hidden;
+        }
+        .source-text {
+          color: #cbd5e1;
+          font-size: 12px;
+          line-height: 17px;
+          overflow-wrap: anywhere;
         }
         button {
           border: none;
@@ -533,6 +572,53 @@ export class OverlayBar {
           font-size: 11px;
           padding: 3px 7px;
         }
+        .collection-picker-slot {
+          padding: 0 12px 8px 12px;
+        }
+        .collection-picker {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          color: #dbeafe;
+          font-size: 12px;
+          line-height: 16px;
+        }
+        .collection-picker-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+        .collection-picker-label {
+          font-weight: 650;
+        }
+        .collection-picker-list {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .collection-picker-option {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          min-height: 24px;
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: rgba(255,255,255,0.08);
+        }
+        .collection-picker-option input {
+          margin: 0;
+        }
+        .collection-picker-refresh {
+          padding: 3px 7px;
+          font-size: 11px;
+        }
+        .collection-picker-empty,
+        .collection-picker-status,
+        .collection-picker-already {
+          color: #bfdbfe;
+        }
         @media (prefers-contrast: more) {
           .diff-token.added,
           .diff-token.removed {
@@ -544,11 +630,12 @@ export class OverlayBar {
       <div class="container" aria-hidden="false">
         <div class="bar">
           <div class="section left">
+            <div class="badge info" id="source-badge">Source</div>
             <div class="badge" id="platform-badge">${this.currentPlatformLabel}</div>
             <div class="badge protected" id="protected-badge" style="display:none;">Protected</div>
           </div>
           <div class="section center">
-            <div class="text" id="tweet-preview">Collecting tweet data…</div>
+            <div class="text source-text" id="tweet-preview">Collecting source data…</div>
           </div>
           <div class="section right">
             <div class="account-menu-wrap" id="account-menu-wrap"></div>
@@ -581,6 +668,7 @@ export class OverlayBar {
                 <!-- Action button inserted dynamically by updateActionButton() -->
               </div>
             </div>
+            <div class="collection-picker-slot" id="collection-picker-slot" hidden></div>
           </div>
         </div>
       </div>
@@ -738,6 +826,8 @@ export class OverlayBar {
       return;
     }
 
+    await this.mountNewCaptureCollectionPicker();
+
     // On articles, watch for the user highlighting a passage after opening so
     // capture enables live without reopening the bar.
     if (captureRequiresSelection(this.currentData)) {
@@ -776,7 +866,134 @@ export class OverlayBar {
     this.settings = await updateSettings({ firstRunNoticeShown: true });
   }
 
+  private async mountNewCaptureCollectionPicker(): Promise<void> {
+    const container = this.shadow?.getElementById('collection-picker-slot') as HTMLElement | null;
+    if (!container) return;
+
+    container.hidden = false;
+    this.collectionPickerContainer = container;
+    this.existingQuoteTarget = null;
+    this.collectionPicker = new CollectionPicker(container, {
+      label: 'Add to collections',
+      loadCollections: (forceRefresh = false) => this.loadCollections(forceRefresh),
+      onSelectionChange: () => {
+        this.updateSubmitButton(!!this.captureState.originator);
+      },
+    });
+
+    await this.collectionPicker.mount();
+    const seeded = seedSelection(
+      this.settings.lastUsedCollectionSlugs,
+      this.settings.defaultCollectionSlug,
+      this.settings.autoAddToCollection,
+      this.collectionPicker.getAvailableCollections(),
+    );
+    this.collectionPicker.setSelectedSlugs(seeded);
+  }
+
+  private hideCollectionPicker(): void {
+    this.collectionPicker = null;
+    this.existingQuoteTarget = null;
+    if (this.collectionPickerContainer) {
+      this.collectionPickerContainer.hidden = true;
+      this.collectionPickerContainer.innerHTML = '';
+    }
+  }
+
+  private async loadCollections(forceRefresh = false): Promise<Collection[]> {
+    const response = await this.sendMessage({
+      type: MessageType.LIST_COLLECTIONS,
+      data: { forceRefresh },
+    });
+
+    if (!response.success) {
+      throw new Error(response.error || 'Unable to load collections');
+    }
+
+    return response.collections || [];
+  }
+
+  private selectedCollections(): Collection[] {
+    return this.collectionPicker?.getSelectedCollections() || [];
+  }
+
+  private fallbackCollectionFromSlug(slug: string): Collection {
+    return {
+      id: slug,
+      slug,
+      name: slug,
+      description: '',
+      is_default: false,
+      quote_count: 0,
+      created_at: '',
+      updated_at: '',
+    };
+  }
+
+  private async mountExistingQuoteCollectionPicker(
+    match: DuplicateCheckResult['matches'][number],
+  ): Promise<void> {
+    const container = this.shadow?.getElementById('collection-picker-slot') as HTMLElement | null;
+    if (!container || !match.quote_id) return;
+
+    container.hidden = false;
+    this.collectionPickerContainer = container;
+    this.existingQuoteTarget = { quoteId: String(match.quote_id) };
+    this.collectionPicker = new CollectionPicker(container, {
+      label: 'Add existing quote to collections',
+      alreadyIn: match.member_collections || [],
+      loadCollections: (forceRefresh = false) => this.loadCollections(forceRefresh),
+      onSelectionChange: (selected) => {
+        this.updateSubmitButton(selected.size > 0, selected.size > 0 ? 'Add to Collections' : 'Choose collection');
+      },
+    });
+
+    await this.collectionPicker.mount();
+    this.updateSubmitButton(false, this.collectionPicker.getAvailableCollections().length > 0
+      ? 'Choose collection'
+      : 'No collections');
+  }
+
+  private matchForExistingCollectionAdd(
+    result: DuplicateCheckResult,
+  ): DuplicateCheckResult['matches'][number] | null {
+    const sightingState = classifyDuplicateSighting(result);
+    if (sightingState === 'exact_sighting' || sightingState === 'same_platform_sighting') {
+      return getMatchForDuplicateSightingState(result, sightingState) || null;
+    }
+
+    if (
+      result.in_quotewise &&
+      classifyMatchResolution(result) !== 'conflict' &&
+      Array.isArray(result.matches) &&
+      result.matches.length > 0
+    ) {
+      return result.matches[0];
+    }
+
+    return null;
+  }
+
+  private syncCollectionPickerWithDuplicateState(
+    state: { checking: true } | { result: DuplicateCheckResult } | null,
+  ): void {
+    if (!state || 'checking' in state) {
+      return;
+    }
+
+    const match = this.matchForExistingCollectionAdd(state.result);
+    if (match?.quote_id) {
+      void this.mountExistingQuoteCollectionPicker(match);
+      return;
+    }
+
+    if (this.existingQuoteTarget) {
+      void this.mountNewCaptureCollectionPicker();
+    }
+  }
+
   private showPrivateModePaused(): void {
+    this.hideCollectionPicker();
     this.captureState.lookupResult = null;
     this.captureState.originator = null;
     this.captureState.createUrl = null;
@@ -896,6 +1113,7 @@ export class OverlayBar {
    * Show login required message with button to open popup for OAuth flow
    */
   private showLoginRequired(): void {
+    this.hideCollectionPicker();
     const captureRow = this.shadow?.getElementById('capture-row');
     captureRow?.classList.add('expanded');
     this.captureState.expanded = true;
@@ -1034,6 +1252,7 @@ export class OverlayBar {
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.progressIndicator?.reset();
     this.firstRunNotice?.hide();
+    this.hideCollectionPicker();
     this.updateSubmitButton(false);
     this.updateDuplicateInfo(null);
   }
@@ -1147,9 +1366,16 @@ export class OverlayBar {
     const settingsLoad = this.loadSettings();
     await this.waitForVisibleSubmitPhase();
     await settingsLoad;
-    const collectionId = this.settings.autoAddToCollection
-      ? this.settings.defaultCollectionId
-      : null;
+    let selectedCollections = this.selectedCollections();
+    if (
+      selectedCollections.length === 0 &&
+      !this.collectionPicker &&
+      this.settings.autoAddToCollection &&
+      this.settings.defaultCollectionSlug
+    ) {
+      selectedCollections = [this.fallbackCollectionFromSlug(this.settings.defaultCollectionSlug)];
+    }
+    const primaryCollection = selectedCollections[0] || null;
     const decisionFields = this.decisionFieldsForSubmit(opts);
 
     try {
@@ -1165,7 +1391,7 @@ export class OverlayBar {
           platform_code: capturePlatformCode(this.currentData),
           ...(likesCount !== undefined ? { likes_count: likesCount } : {}),
           quote_date: capturePostedAt(this.currentData) || undefined,
-          ...(collectionId ? { collection_id: collectionId } : {}),
+          ...(primaryCollection ? { collection_id: primaryCollection.slug } : {}),
           attribution_type: 'DIRECT',
           platform_data: capturePlatformData(this.currentData),
           ...decisionFields
@@ -1173,6 +1399,16 @@ export class OverlayBar {
       });
 
       if (response.success) {
+        const collectionResults = await this.addCollectionsAfterCapture(
+          response.quoteId || response.id || '',
+          selectedCollections,
+          response.collectionWarning,
+        );
+        const addSummary = summarizeAdds(collectionResults);
+        if (selectedCollections.length > 0) {
+          await this.persistLastUsedSelection(selectedCollections.map(collection => collection.slug));
+        }
+
         this.setSubmitProgressPhase('confirming');
         await this.waitForVisibleSubmitPhase();
         this.ensureProgressIndicator().setPhase('success');
@@ -1186,22 +1422,30 @@ export class OverlayBar {
         // Clear duplicate badge and show success in originator row
         this.updateDuplicateInfo(null);
         const successMessage = this.successMessageForSubmit(response, opts.userIntent);
+        const collectionMessage = this.collectionMessage(successMessage, addSummary);
         this.setOriginatorHtml(
-          response.collectionWarning
+          addSummary.failed.length > 0
             ? `<span class="badge warning">!</span>
-               <span>Quote added. Collection step didn't complete.</span>`
+               <span>${this.escapeHtml(collectionMessage)}</span>`
             : `<span class="badge success">✓</span>
-               <span>${this.escapeHtml(successMessage)}</span>`
+               <span>${this.escapeHtml(collectionMessage)}</span>`
         );
-        this.updateSubmitButton(false, 'Done!');
+        const hasCollectionSuccess = addSummary.succeeded.length > 0;
+        if (addSummary.failed.length > 0) {
+          this.existingQuoteTarget = response.quoteId || response.id
+            ? { quoteId: response.quoteId || response.id || '' }
+            : null;
+          this.collectionPicker?.setSelectedSlugs(addSummary.failed.map(result => result.collectionSlug));
+          this.updateSubmitButton(!!this.existingQuoteTarget, 'Retry failed');
+        } else {
+          this.updateSubmitButton(false, 'Done!');
+        }
 
-        // Update badge based on whether quote was added to a collection
-        // TODO: Once collection selector is added to overlay, update badge based on user's choice
-        // For now, show 'exists_not_collected' since we're not adding to collections yet
+        // Update badge based on whether quote was added to a collection.
         this.sendMessage({
           type: MessageType.UPDATE_COLLECTION_BADGE,
           data: {
-            state: 'exists_not_collected',
+            state: hasCollectionSuccess ? 'already_collected' : 'exists_not_collected',
             quoteText: quoteText,
             duplicateSightingState: 'exact_sighting'
           }
@@ -1211,8 +1455,10 @@ export class OverlayBar {
 
         const clearDuplicateCache = this.clearPreloadedDuplicateCheckForCurrentUrl();
 
-        // Auto-hide after success
-        setTimeout(() => this.hide(), 1000);
+        // Auto-hide after full success; partial failures stay open for retry.
+        if (addSummary.failed.length === 0) {
+          setTimeout(() => this.hide(), 1000);
+        }
         await clearDuplicateCache;
       } else {
         throw new Error(response.error || response.message || 'Submission failed');
@@ -1269,6 +1515,150 @@ export class OverlayBar {
     return 'Quote added successfully!';
   }
 
+  private async addCollectionsAfterCapture(
+    quoteId: string,
+    selectedCollections: Collection[],
+    primaryCollectionWarning?: string,
+  ): Promise<CollectionAddOutcome[]> {
+    if (selectedCollections.length === 0) {
+      return [];
+    }
+
+    const [primaryCollection, ...additionalCollections] = selectedCollections;
+    const results: CollectionAddOutcome[] = [{
+      collectionSlug: primaryCollection.slug,
+      collectionName: primaryCollection.name,
+      success: !primaryCollectionWarning,
+      error: primaryCollectionWarning,
+    }];
+
+    if (!quoteId) {
+      return [
+        ...results,
+        ...additionalCollections.map(collection => ({
+          collectionSlug: collection.slug,
+          collectionName: collection.name,
+          success: false,
+          error: 'Quote ID missing after capture',
+        })),
+      ];
+    }
+
+    for (const collection of additionalCollections) {
+      results.push(await this.addQuoteToCollection(collection, quoteId));
+    }
+
+    return results;
+  }
+
+  private async addQuoteToCollection(collection: Collection, quoteId: string): Promise<CollectionAddOutcome> {
+    const response = await this.sendMessage({
+      type: MessageType.ADD_QUOTE_TO_COLLECTION,
+      data: {
+        collectionSlug: collection.slug,
+        quoteId,
+      },
+    });
+
+    return {
+      collectionSlug: collection.slug,
+      collectionName: collection.name,
+      success: response.success === true,
+      alreadyMember: response.alreadyMember,
+      error: response.success ? undefined : response.error || 'Unable to add to collection',
+    };
+  }
+
+  private collectionMessage(baseMessage: string, summary: ReturnType<typeof summarizeAdds>): string {
+    if (summary.succeeded.length === 0 && summary.failed.length === 0) {
+      return baseMessage;
+    }
+
+    const succeededNames = summary.succeeded.map(result => result.collectionName).join(', ');
+    const failedNames = summary.failed.map(result => result.collectionName).join(', ');
+
+    if (summary.failed.length === 0) {
+      return `Quote added to ${succeededNames}.`;
+    }
+
+    if (summary.succeeded.length === 0) {
+      return `${baseMessage} Could not add to ${failedNames}.`;
+    }
+
+    return `Quote added to ${succeededNames}. Could not add to ${failedNames}.`;
+  }
+
+  private async persistLastUsedSelection(slugs: string[]): Promise<void> {
+    try {
+      this.settings = await updateLastUsedCollectionSlugs(slugs);
+    } catch {
+      // Last-used selection is a convenience; capture correctness does not depend on it.
+    }
+  }
+
+  private async addExistingQuoteToSelectedCollections(): Promise<void> {
+    if (this.captureState.isSubmitting || !this.existingQuoteTarget) return;
+    const selectedCollections = this.selectedCollections();
+    if (selectedCollections.length === 0) {
+      this.updateSubmitButton(false, 'Choose collection');
+      return;
+    }
+
+    this.captureState.isSubmitting = true;
+    this.setSubmitProgressPhase('submitting');
+    this.updateSubmitButton(false, 'Adding...');
+    this.actionButton?.setBusy(true);
+
+    try {
+      const results: CollectionAddOutcome[] = [];
+      for (const collection of selectedCollections) {
+        results.push(await this.addQuoteToCollection(collection, this.existingQuoteTarget.quoteId));
+      }
+
+      const summary = summarizeAdds(results);
+      if (summary.succeeded.length > 0) {
+        await this.persistLastUsedSelection(selectedCollections.map(collection => collection.slug));
+      }
+
+      this.ensureProgressIndicator().setPhase(summary.failed.length > 0 ? 'checking' : 'success');
+      const message = this.collectionMessage('Quote already exists.', summary);
+      this.setOriginatorHtml(
+        summary.failed.length > 0
+          ? `<span class="badge warning">!</span><span>${this.escapeHtml(message)}</span>`
+          : `<span class="badge success">✓</span><span>${this.escapeHtml(message)}</span>`
+      );
+
+      if (summary.succeeded.length > 0) {
+        void this.sendMessage({
+          type: MessageType.UPDATE_COLLECTION_BADGE,
+          data: {
+            state: 'already_collected',
+            quoteText: this.captureState.selectedText || this.currentData?.text || '',
+            duplicateSightingState: 'exact_sighting',
+          },
+        });
+      }
+
+      if (summary.failed.length > 0) {
+        this.collectionPicker?.setSelectedSlugs(summary.failed.map(result => result.collectionSlug));
+        this.updateSubmitButton(true, 'Retry failed');
+      } else {
+        this.updateSubmitButton(false, 'Added');
+        setTimeout(() => this.hide(), 1000);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to add to collection';
+      this.ensureProgressIndicator().setError(message);
+      this.setOriginatorHtml(
+        `<span class="badge error">!</span><span>${this.escapeHtml(message)}</span>`
+      );
+      this.updateSubmitButton(true, 'Retry');
+    } finally {
+      this.captureState.isSubmitting = false;
+      this.actionButton?.setBusy(false);
+    }
+  }
+
   /**
    * Set HTML directly on the originator-info element (for non-lookup states like submit success/error)
    */
@@ -1286,7 +1676,7 @@ export class OverlayBar {
   private updateSubmitButton(enabled: boolean, text?: string): void {
     if (!this.actionButton) return;
     if (this.requiresSelection()) {
-      this.actionButton.showSubmit(false, 'Select quote-text to submit');
+      this.actionButton.showSubmit(false, 'Select text to submit');
       return;
     }
     this.actionButton.showSubmit(enabled, text);
@@ -1298,7 +1688,7 @@ export class OverlayBar {
   private updateSubmitButtonWarning(enabled: boolean, text: string): void {
     if (!this.actionButton) return;
     if (this.requiresSelection()) {
-      this.actionButton.showSubmit(false, 'Select quote-text to submit');
+      this.actionButton.showSubmit(false, 'Select text to submit');
       return;
     }
     this.actionButton.showSubmitWarning(enabled, text);
@@ -1326,7 +1716,13 @@ export class OverlayBar {
     if (!this.actionButton) {
       const rightSection = this.shadow?.querySelector('.originator-row .section.right') as HTMLElement;
       this.actionButton = new ActionButton(rightSection, {
-        onSubmit: () => this.submitQuote(),
+        onSubmit: () => {
+          if (this.existingQuoteTarget) {
+            void this.addExistingQuoteToSelectedCollections();
+            return;
+          }
+          void this.submitQuote();
+        },
         onLogin: async () => {
           try {
             const response = await this.sendMessage({ type: MessageType.OAUTH_LOGIN });
@@ -1478,6 +1874,7 @@ export class OverlayBar {
       this.captureState.selectedText || this.currentData?.text,
       this.currentData ? capturePostedAt(this.currentData) : null,
     );
+    this.syncCollectionPickerWithDuplicateState(state);
   }
 
   private async clearPreloadedDuplicateCheckForCurrentUrl(): Promise<void> {
@@ -1504,8 +1901,13 @@ export class OverlayBar {
     message?: string;
     collectionWarning?: string;
     action?: 'created' | 'sighting_added';
+    id?: string;
+    quoteId?: string;
+    alreadyMember?: boolean;
     result?: DuplicateCheckResult;
     duplicate_check?: DuplicateCheckResult;
+    collections?: Collection[];
+    default_collection_id?: string | null;
     isAuthenticated?: boolean;
     scopes?: string[];
     data?: { state?: string; username?: string; error?: string };

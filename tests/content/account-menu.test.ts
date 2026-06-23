@@ -21,7 +21,8 @@ describe('AccountMenu', () => {
       settings: {
         privateMode: false,
         autoAddToCollection: false,
-        defaultCollectionId: null,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
       },
     });
@@ -60,7 +61,8 @@ describe('AccountMenu', () => {
       settings: {
         privateMode: true,
         autoAddToCollection: false,
-        defaultCollectionId: null,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
       },
     });
@@ -158,7 +160,8 @@ describe('AccountMenu', () => {
       settings: {
         privateMode: true,
         autoAddToCollection: false,
-        defaultCollectionId: null,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
       },
     });

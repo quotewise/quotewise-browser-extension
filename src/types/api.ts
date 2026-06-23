@@ -58,6 +58,7 @@ export interface DuplicateCheckResult {
     similarity: number;
     match_type: string;
     in_user_collections: boolean;
+    member_collections: MemberCollection[];
     originator: Originator;
     workflow_status: string;
     likes_count: number;
@@ -96,6 +97,21 @@ export interface QuoteSubmissionResult {
   id?: string; // For Django response format
   collectionWarning?: string;
   action?: 'created' | 'sighting_added';
+}
+
+export interface MemberCollection {
+  slug: string;
+  name: string;
+}
+
+export interface AddToCollectionRequest {
+  quote_id: string;
+}
+
+export interface AddToCollectionResult {
+  success: boolean;
+  alreadyMember?: boolean;
+  error?: string;
 }
 
 // Legacy interfaces for backwards compatibility
@@ -226,6 +242,7 @@ export interface QuotewiseApiClient {
   searchOriginators(query: string, limit?: number): Promise<OriginatorSearchResult[]>;
   checkQuoteDuplicate(text: string, originatorSlug?: string, sourceUrl?: string, socialHandle?: string): Promise<DuplicateCheckResult>;
   submitQuote(quoteData: QuoteSubmissionRequest): Promise<QuoteSubmissionResult>;
+  addQuoteToCollection(collectionSlug: string, quoteId: string): Promise<AddToCollectionResult>;
   checkAuthStatus(): Promise<AuthStatusResult>;
   listCollections(): Promise<CollectionsListResponse>;
   lookupOriginatorByHandle(handle: string, platform?: string): Promise<HandleLookupResult>;

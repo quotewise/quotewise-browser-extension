@@ -18,7 +18,8 @@ describe('options page', () => {
       settings: {
         privateMode: false,
         autoAddToCollection: false,
-        defaultCollectionId: null,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
       },
     });
@@ -203,7 +204,8 @@ describe('options page', () => {
       settings: {
         privateMode: true,
         autoAddToCollection: false,
-        defaultCollectionId: null,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
       },
     });
