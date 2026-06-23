@@ -17,15 +17,15 @@ interface Settings {
 - Validation/normalize: `lastUsedCollectionIds` coerced to `string[]` (drop non-strings); deduped. Reconciled against the live collection list at seed time, not at write time (R5).
 - Lifecycle: written once per completed add when the set changes (R2); wiped (→ `[]`) on logout/private/clear-data (FR-024).
 
-### Collection-list cache (`chrome.storage.local`, key `preloadedCollections`)
+### Collection-list cache (`chrome.storage.local`, key `collectionsCache`)
 ```ts
-interface PreloadedCollections {
+interface CollectionsCache {
   collections: Collection[];           // { id, name, slug, description, is_default, quote_count, ... } (existing type)
   default_collection_id: string | null;
   ts: number;                          // epoch ms; fresh if now - ts < ~5 min (FR-022)
 }
 ```
-- Rebuildable disposable cache (Article V). Preload gated by the preload-disable setting (FR-023). Wiped on logout/private/clear-data (FR-024).
+- Populated on explicit picker open (NOT page-load preload; Article II.1, FR-022/FR-023). Rebuildable disposable cache (Article V). Wiped on logout/private/clear-data (FR-024).
 
 ### Staged picker selection (in-memory, overlay only — not persisted)
 ```ts

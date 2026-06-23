@@ -23,8 +23,8 @@ bun run test
 8. **Idempotency (SC-009)** — Re-add a quote already in a collection → no duplicate, no error.
 
 ## Privacy check (Article II)
-- With "disable pre-action network calls" ON: confirm no `GET /v1/collections/` fires on tweet-page load; it only fires when you open the picker.
-- Log out / enter private mode / use clear-data: confirm `preloadedCollections` (storage.local) and `lastUsedCollectionIds` (storage.sync) are wiped.
+- Confirm `GET /v1/collections/` fires only when you open the picker — never on tweet-page load, in any setting state (Article II.1). The "disable pre-action network calls" setting governs the duplicate/originator preloads, not collections.
+- Log out / enter private mode / use clear-data: confirm `collectionsCache` (storage.local) and `lastUsedCollectionIds` (storage.sync) are wiped.
 
 ## Automated tests to add (test-first for deterministic logic)
 - `tests/content/ui/collection-seed.test.ts` — `seedSelection` precedence + stale reconcile; `partitionMembership`; `summarizeAdds`.

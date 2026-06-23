@@ -4,7 +4,7 @@ Phase 0. The spec + interview resolved most unknowns; this records the few that 
 
 ## R1. Where to store the last-used set vs the collection-list cache
 
-**Decision**: Last-used set + auto-add/default → `chrome.storage.sync` (extend existing `Settings`). Collection-list cache → `chrome.storage.local` with a ~5 min TTL (mirror `preloadedOriginator`/`preloadedDuplicateCheck`).
+**Decision**: Last-used set + auto-add/default → `chrome.storage.sync` (extend existing `Settings`). Collection-list cache → `chrome.storage.local` with a ~5 min TTL, populated on explicit picker open (NOT page-load preload — Article II.1 limits pre-action requests to `{tweet_id, handle, source_url}`).
 
 **Rationale**: `storage.sync` is the documented home for cross-device user *settings*; the last-used set is a preference and must sync (FR-018). The collection list is a *cache* of server state — disposable and rebuildable, so it belongs in `storage.local` (Article V), and putting a cache in sync would waste the sync quota and write budget.
 

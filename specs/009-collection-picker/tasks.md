@@ -39,7 +39,7 @@ Single existing extension project — `src/`, `tests/` at repo root (per plan.md
 - [ ] T005 [P] settings-store: normalize/get/update/clear for `lastUsedCollectionIds` (string[] coercion, dedupe, change-guarded write) in `src/settings/settings-store.ts`. Test-first in `tests/settings/settings-store.test.ts`. (deps: T003)
 - [ ] T006 [P] API client `addQuoteToCollection(collectionId, quoteId)` → `POST /v1/collections/{id}/quotes/` treating 201 and 200 both as success (idempotent), plus `member_collections`-safe parsing of the duplicate-check response, in `src/api/quotewise-api.ts`. Test-first in `tests/api/quotewise-api.test.ts`. (deps: T004)
 - [ ] T007 [P] [US1] Pure helpers in `src/content/ui/components/collection-seed.ts`: `seedSelection(lastUsed, defaultId, autoAddOn, available)` (precedence last-used → default → blank, drop ids not in `available`) and `summarizeAdds(results)` → `{ succeeded, failed }`. Test-first in `tests/content/ui/collection-seed.test.ts`. (deps: T003, T004)
-- [ ] T008 Background plumbing in `src/background/api-handler.ts` + `src/background/service-worker.ts`: route `ADD_QUOTE_TO_COLLECTION` to the client; preload collections into `chrome.storage.local` key `preloadedCollections` (`{ collections, default_collection_id, ts }`, ~5 min TTL) alongside existing preloads, **gated by the preload-disable setting** (FR-023); serve `LIST_COLLECTIONS` from cache when fresh, else fetch. (deps: T006)
+- [ ] T008 Background plumbing in `src/background/api-handler.ts`: route `ADD_QUOTE_TO_COLLECTION` to the client; handle `LIST_COLLECTIONS` by serving the `chrome.storage.local` cache (`collectionsCache` `{ collections, default_collection_id, ts }`, ~5 min TTL) when fresh, else fetching and caching. The collection list is fetched ONLY in response to an explicit picker-open `LIST_COLLECTIONS` request — **NEVER on tweet-page load** (Article II.1, FR-022/FR-023). Support a force-refresh (cache-bypass) variant for the picker's manual Refresh (FR-028). (deps: T006)
 
 **Checkpoint**: Types, storage, client, and routing ready — user stories can begin.
 
@@ -52,10 +52,10 @@ Single existing extension project — `src/`, `tests/` at repo root (per plan.md
 **Independent Test**: With ≥2 collections, capture a new quote, tick a non-default collection, confirm it lands only there and the default is unchanged next time.
 
 - [ ] T009 [P] [US1] Picker fixture/characterization test (multi-select render, empty state, staged selection, keyboard/ARIA) in `tests/content/ui/collection-picker.test.ts`.
-- [ ] T010 [US1] Create `CollectionPicker` component in `src/content/ui/components/collection-picker.ts`: multi-select checklist from the cached list, honest empty state (create in web app — FR-003), staged `Set`, ARIA labels + keyboard + glyph/text not color-alone, no host layout shift (FR-026), no inline-create. (deps: T008)
+- [ ] T010 [US1] Create `CollectionPicker` component in `src/content/ui/components/collection-picker.ts`: multi-select checklist from the collection list (served from cache when warm, else fetched on open with a brief loading state — FR-022/SC-004), honest empty state (create in web app — FR-003), staged `Set`, ARIA labels + keyboard + glyph/text not color-alone, no host layout shift (FR-026), no inline-create; include a Refresh control that force-refetches the list and reconciles staged selections against the new list (FR-028). (deps: T008)
 - [ ] T011 [US1] Render the picker for NEW quotes (authenticated + not private — FR-001/021) beside Capture in `src/content/ui/overlay-bar.ts`; seed via `seedSelection` (auto-add ON → default pre-checked, OFF → blank; last-used empty at this story); selections staged until explicit capture (FR-005). (deps: T010, T007)
-- [ ] T012 [US1] Capture submit path in `src/content/ui/overlay-bar.ts`: `submitQuote` with the first selected `collection_id`, then `addQuoteToCollection` for each remaining selected collection; the capture MUST survive any collection-add failure (FR-013, no rollback). (deps: T011, T006)
-- [ ] T013 [US1] Success/partial-failure UI in `src/content/ui/overlay-bar.ts` via `summarizeAdds`: full success → brief confirmation naming the collection(s) + auto-hide, no Undo (FR-015); partial → overlay stays open with per-collection retry (FR-012); selection overrides default for this capture only and does not mutate the stored default (FR-004). (deps: T012, T007)
+- [ ] T012 [US1] Capture submit path in `src/content/ui/overlay-bar.ts`: capture is allowed with **zero selected collections** (FR-002) — `submitQuote` with no `collection_id` and no membership calls. With ≥1 selected, `submitQuote` carries the first selected `collection_id`, then `addQuoteToCollection` for each remaining selected collection. The capture MUST survive any collection-add failure (FR-013, no rollback). (deps: T011, T006)
+- [ ] T013 [US1] Success/partial-failure UI in `src/content/ui/overlay-bar.ts` via `summarizeAdds`: full success → brief confirmation naming the collection(s) + auto-hide, no Undo (FR-015); partial → surface which collection(s) failed (never reported as added) — target is stay-open per-collection inline retry, with the defined warning+auto-hide fallback acceptable (FR-013/FR-015, spec Assumptions); selection overrides default for this capture only and does not mutate the stored default (FR-004). (deps: T012, T007)
 - [ ] T014 [US1] After a successful add, drive the toolbar badge to the existing `InCollection` (✓) state — replace the hardcoded `'exists_not_collected'` in the `UPDATE_COLLECTION_BADGE` path (FR-025) in `src/content/ui/overlay-bar.ts`; verify routing through `src/background/icon-state-resolver.ts`. (deps: T012)
 
 **Checkpoint**: New captures can be filed into chosen collections — MVP shippable.
@@ -71,7 +71,7 @@ Single existing extension project — `src/`, `tests/` at repo root (per plan.md
 - [ ] T015 [P] [US2] Add `partitionMembership(match, allCollections)` → `{ alreadyIn, addable }` to `src/content/ui/components/collection-seed.ts`; test-first in `tests/content/ui/collection-seed.test.ts`. (deps: T007)
 - [ ] T016 [US2] Render "✓ In your collection" naming `member_collections` (FR-007) in `src/content/ui/components/duplicate-badge.ts`. (deps: T004, T008)
 - [ ] T017 [US2] Already-captured picker: read-only "Already in: …" plus an editable list of only not-yet-member collections via `partitionMembership` (FR-008/010), wired in `src/content/ui/components/duplicate-badge.ts` + `src/content/ui/overlay-bar.ts`. (deps: T016, T015, T010)
-- [ ] T018 [US2] Add-existing action in `src/content/ui/overlay-bar.ts`: one `addQuoteToCollection` per checked collection — membership only, no sighting/source URL (FR-009); best-effort + per-collection retry (FR-012/013); badge → `InCollection` (reuse T014). (deps: T017, T006, T014)
+- [ ] T018 [US2] Add-existing action in `src/content/ui/overlay-bar.ts`: one `addQuoteToCollection` per checked collection — membership only, no sighting/source URL (FR-009); best-effort with honest per-collection outcome (retry target / warning fallback — FR-012/013/015); badge → `InCollection` (reuse T014). (deps: T017, T006, T014)
 
 **Checkpoint**: Already-captured quotes are no longer a dead end; US1 + US2 both work independently.
 
@@ -92,10 +92,11 @@ Single existing extension project — `src/`, `tests/` at repo root (per plan.md
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T021 [P] Wipe `preloadedCollections` (`storage.local`) and `lastUsedCollectionIds` (`storage.sync`) on logout, private mode, and manual clear-data in `src/background/privacy-cleanup.ts` (FR-024).
+- [ ] T021 [P] Wipe `collectionsCache` (`storage.local`) and `lastUsedCollectionIds` (`storage.sync`) on logout, private mode, and manual clear-data in `src/background/privacy-cleanup.ts` (FR-024).
 - [ ] T022 [P] Accessibility + honest-copy pass across the new picker, status, dropdown, and confirmation UI (FR-026/027): keyboard operation, visible focus, ARIA labels, glyph+text (not color alone), no fake urgency/overstated membership.
-- [ ] T023 Run `quickstart.md` manual validation (SC-001…SC-009), including: no `GET /v1/collections/` on page load when preload is disabled, and no collection fetch/UI when logged out or in private mode (SC-007). (Live paths require T002's backend shipped.)
+- [ ] T023 Run `quickstart.md` manual validation (SC-001…SC-009), including: `GET /v1/collections/` fires ONLY on explicit picker open and NEVER on tweet-page load (Article II.1); no collection fetch/UI when logged out or in private mode (SC-007); warm-cache picker renders synchronously while a cold open may show a brief loading state (SC-004). (Live paths require T002's backend shipped.)
 - [ ] T024 [P] Final gate: `bun run type-check && bun run lint && bun run test` green; confirm coverage on the new deterministic helpers (`collection-seed`, `settings-store`, API client).
+- [ ] T025 [P] Disclosure review (Article II.3): verify/update the Chrome Web Store listing + privacy policy to disclose the new collection-list fetch (on picker open), the `storage.local` collection cache, and the synced `lastUsedCollectionIds`; keep in sync with what is actually sent/stored. (Docs/policy, not extension code.)
 
 ---
 
@@ -110,11 +111,11 @@ Single existing extension project — `src/`, `tests/` at repo root (per plan.md
 - US1: T010←T008; T011←T010,T007; T012←T011,T006; T013←T012,T007; T014←T012.
 - US2: T015←T007; T016←T004,T008; T017←T016,T015,T010; T018←T017,T006,T014.
 - US3: T019←T005,T008; T020←T013,T018,T005.
-- Polish: T021/T022/T024 independent; T023 last (and needs T002 backend for live checks).
+- Polish: T021/T022/T024/T025 independent; T023 last for manual validation (needs T002 backend for live checks).
 
 ### Parallel opportunities
 - Foundational: T003, T004, T005, T006, T007 are all `[P]` (distinct files); T008 after T006.
-- US1 test T009 `[P]` alongside early US1 work. US2 T015 `[P]`. Polish T021/T022/T024 `[P]`.
+- US1 test T009 `[P]` alongside early US1 work. US2 T015 `[P]`. Polish T021/T022/T024/T025 `[P]`.
 - Within `overlay-bar.ts` (T011–T014, T018, T020) tasks are sequential — same file, not `[P]`.
 
 ---
