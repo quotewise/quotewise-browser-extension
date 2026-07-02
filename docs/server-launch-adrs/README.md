@@ -16,6 +16,7 @@ These ADRs capture the **backend changes the extension needs** for a solid publi
 | [ADR-0004](ADR-0004-oauth-production-redirect-readiness.md) | OAuth production redirect / client readiness | P1 | `qw-0psq.20` | **Yes** |
 | [ADR-0005](ADR-0005-privacy-policy-data-disclosure.md) | Privacy policy + data-handling disclosure update | P1 | `qw-0psq.15` | **Yes** (Chrome Web Store gate) |
 | [ADR-0006](ADR-0006-collections-membership.md) | Collections: add existing quote to a collection + membership in duplicate-check | P1 | `qw-si1t` | No — fast-follow feature |
+| [ADR-0007](ADR-0007-quotes-by-sighting-url.md) | Duplicate-check: return all distinct quotes for a sighting URL (text + link) | P2 | `qw-1jzc` | No — fast-follow feature |
 
 ## Launch-critical vs. fast-follow
 
@@ -23,6 +24,7 @@ These ADRs capture the **backend changes the extension needs** for a solid publi
 - **Strongly recommended at launch:** ADR-0003 (feedback intake) — cheap, and early bug reports are the highest-value signal post-launch.
 - **First post-launch feature:** ADR-0001 + ADR-0002 (the "Add another sighting vs. Add new variant" flow, `qw-hsly`). Current behavior — treating a similarity match as an additional sighting — is acceptable for v1.
 - **Also fast-follow:** ADR-0006 (collections membership — add an existing quote to a collection + per-collection membership in duplicate-check; extension spec 009, `qw-si1t`). Not launch-gating, but its data-disclosure surface (collection fetch/cache + synced last-used set) must be folded into ADR-0005's privacy-policy copy.
+- **Also fast-follow:** ADR-0007 (return all distinct quotes for a sighting URL — text + link — in `check_duplicate`; extension spec 010 multi-passage capture, `qw-1jzc`). Additive read-path only; unblocks the "N passages captured from this post" panel + toolbar count. The write path already supports multiple distinct quotes per URL.
 
 ## Conventions referenced
 
