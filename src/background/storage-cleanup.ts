@@ -17,6 +17,7 @@ export const USER_IDENTIFYING_CACHE_KEYS = [
   'currentTweet',
   'preloadedOriginator',
   'preloadedDuplicateCheck',
+  'collectionsCache',
   'lastAuthCheck',
   'originator_search_history',
 ] as const;

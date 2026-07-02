@@ -10,6 +10,7 @@ export function duplicateMatch(
     similarity: 0.92,
     match_type: 'similar',
     in_user_collections: false,
+    member_collections: [],
     originator: {
       id: 'originator-1',
       full_name: 'Existing Author',

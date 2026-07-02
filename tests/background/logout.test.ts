@@ -14,7 +14,8 @@ describe('logout privacy cleanup', () => {
       settings: {
         privateMode: true,
         autoAddToCollection: true,
-        defaultCollectionId: 'collection-1',
+        defaultCollectionSlug: 'favorites',
+        lastUsedCollectionSlugs: ['favorites'],
         firstRunNoticeShown: true,
       },
     });
@@ -29,7 +30,8 @@ describe('logout privacy cleanup', () => {
       settings: {
         privateMode: true,
         autoAddToCollection: true,
-        defaultCollectionId: null,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
       },
     });
@@ -41,11 +43,7 @@ describe('logout privacy cleanup', () => {
 
     await logoutAndClearUserData();
 
-    expect(chrome.storage.sync.set).toHaveBeenCalledWith({
-      settings: {
-        ...DEFAULT_SETTINGS,
-        defaultCollectionId: null,
-      },
-    });
+    expect(chrome.storage.local.remove).toHaveBeenCalledWith([...USER_IDENTIFYING_CACHE_KEYS]);
+    expect(chrome.storage.sync.set).not.toHaveBeenCalled();
   });
 });

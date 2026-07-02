@@ -76,9 +76,9 @@ export class DuplicateBadge {
       const quotePageUrl = this.getQuotePageUrl(match);
 
       if (sightingState === 'exact_sighting') {
-        this.renderExactSighting(quotePageUrl);
+        this.renderExactSighting(quotePageUrl, match);
       } else {
-        this.renderEarlierSighting(quotePageUrl);
+        this.renderEarlierSighting(quotePageUrl, match);
       }
       return;
     }
@@ -115,9 +115,9 @@ export class DuplicateBadge {
     const quotePageUrl = this.getQuotePageUrl(match);
 
     if (sightingState === 'exact_sighting') {
-      this.renderExactSighting(quotePageUrl);
+      this.renderExactSighting(quotePageUrl, match);
     } else if (sightingState === 'same_platform_sighting') {
-      this.renderEarlierSighting(quotePageUrl);
+      this.renderEarlierSighting(quotePageUrl, match);
     } else if (sightingState === 'other_platform_sighting') {
       this.renderBadge('info', '🔵', 'Add Twitter sighting', quotePageUrl);
       this.container.title = 'Quote exists in Quotewise, but this Twitter sighting has not been captured';
@@ -167,9 +167,12 @@ export class DuplicateBadge {
     this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: "Couldn't Verify" });
   }
 
-  private renderExactSighting(quotePageUrl?: string): void {
-    this.renderBadge('success', '🟢', 'Already captured', quotePageUrl);
-    this.container.title = 'This exact URL is already in Quotewise';
+  private renderExactSighting(
+    quotePageUrl?: string,
+    match?: DuplicateCheckResult['matches'][number],
+  ): void {
+    this.renderBadge('success', '🟢', this.membershipText(match) || 'Already captured', quotePageUrl);
+    this.container.title = this.membershipText(match) || 'This exact URL is already in Quotewise';
     if (quotePageUrl) {
       this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
     } else {
@@ -177,9 +180,13 @@ export class DuplicateBadge {
     }
   }
 
-  private renderEarlierSighting(quotePageUrl?: string): void {
-    this.renderBadge('success', '🟢', 'Earlier Sighting saved', quotePageUrl);
-    this.container.title = 'An earlier Sighting for this quote is already in Quotewise. We keep the earliest known source.';
+  private renderEarlierSighting(
+    quotePageUrl?: string,
+    match?: DuplicateCheckResult['matches'][number],
+  ): void {
+    this.renderBadge('success', '🟢', this.membershipText(match) || 'Earlier Sighting saved', quotePageUrl);
+    this.container.title = this.membershipText(match) ||
+      'An earlier Sighting for this quote is already in Quotewise. We keep the earliest known source.';
     if (quotePageUrl) {
       this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Sighting' });
     } else {
@@ -234,6 +241,15 @@ export class DuplicateBadge {
     } else {
       this.container.textContent = `${icon} ${text}`;
     }
+  }
+
+  private membershipText(match?: DuplicateCheckResult['matches'][number]): string | null {
+    const memberCollections = match?.member_collections || [];
+    if (memberCollections.length === 0) {
+      return null;
+    }
+
+    return `In your collection: ${memberCollections.map(collection => collection.name).join(', ')}`;
   }
 
   private getQuotePageUrl(match?: DuplicateCheckResult['matches'][number]): string | undefined {

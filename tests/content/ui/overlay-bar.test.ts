@@ -24,6 +24,7 @@ function makeDuplicateResult(
       similarity: 1,
       match_type: 'exact',
       in_user_collections: false,
+      member_collections: [],
       originator: { id: '1', full_name: 'Author', sort_name: null, birth_year: null, death_year: null },
       workflow_status: 'published',
       likes_count: 0,
@@ -138,6 +139,28 @@ describe('OverlayBar', () => {
 
     expect(chrome.storage.local.remove).toHaveBeenCalledWith(['preloadedDuplicateCheck']);
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
+  });
+
+  it('hides the duplicate top-bar source text only when the quote box shows the full source', () => {
+    const overlay = setupReadyOverlay();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const sourceText = shadow.getElementById('tweet-preview') as HTMLElement;
+
+    // Collapsed (pre-capture): the top bar is the only source display.
+    (overlay as any).captureState.expanded = false;
+    (overlay as any).captureState.selectedText = null;
+    (overlay as any).syncSourcePreview();
+    expect(sourceText.style.display).toBe('');
+
+    // Expanded, no selection: the quote box duplicates it, so hide the top copy.
+    (overlay as any).captureState.expanded = true;
+    (overlay as any).syncSourcePreview();
+    expect(sourceText.style.display).toBe('none');
+
+    // Expanded with a selection: top bar shows the full source alongside the selection.
+    (overlay as any).captureState.selectedText = 'just submitted';
+    (overlay as any).syncSourcePreview();
+    expect(sourceText.style.display).toBe('');
   });
 
   it('submits a similar match as a sighting with the linked quote id and confirmation copy', async () => {
@@ -482,6 +505,35 @@ describe('OverlayBar', () => {
     expect(dupCall).toBeDefined();
     expect(dupCall[0].data.originator_slug).toBe('kpaxs');
     expect(dupCall[0].data.originator_id).toBeUndefined();
+  });
+
+  it('forces a fresh duplicate check on tray refresh so collection membership is updated', async () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).captureState.expanded = true;
+    (overlay as any).collectionPicker = { refresh: jest.fn().mockResolvedValue(undefined) };
+
+    const collectedResult = makeDuplicateResult('exact_url');
+    collectedResult.matches[0].in_user_collections = true;
+    collectedResult.matches[0].member_collections = [{ slug: 'favorites', name: 'Favorites' }];
+
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.CHECK_DUPLICATE) {
+        callback({ success: true, result: collectedResult });
+        return;
+      }
+
+      callback({ success: true });
+    });
+
+    await (overlay as any).refreshFromTray();
+    await flushPromises();
+
+    const dupCall = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .find(c => c[0]?.type === MessageType.CHECK_DUPLICATE);
+    expect(dupCall?.[0].data.originator_slug).toBe('author');
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    expect(shadow.textContent).toContain('In your collection: Favorites');
   });
 
   it('live-updates the selection when the user highlights after opening (article)', () => {

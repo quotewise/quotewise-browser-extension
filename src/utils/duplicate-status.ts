@@ -112,7 +112,10 @@ export function mapRecommendationToQuoteStatus(result: DuplicateCheckResult | nu
     return 'None';
   }
 
-  if ((result.matches || []).some(match => match.in_user_collections === true)) {
+  if ((result.matches || []).some(match => (
+    match.in_user_collections === true ||
+    (Array.isArray(match.member_collections) && match.member_collections.length > 0)
+  ))) {
     return 'InCollection';
   }
 

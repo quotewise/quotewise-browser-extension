@@ -321,6 +321,7 @@ describe('QuotewiseApiClient', () => {
           similarity: 0.9,
           match_type: 'exact',
           in_user_collections: false,
+          member_collections: [{ slug: 'favorites', name: 'Favorites' }],
           originator: {
             id: '1',
             full_name: 'Einstein',
@@ -354,6 +355,77 @@ describe('QuotewiseApiClient', () => {
           })
         })
       );
+    });
+
+    test('normalizes absent member_collections to an empty array for older responses', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          recommendation: 'duplicate',
+          confidence: 0.95,
+          in_quotewise: true,
+          matches: [{
+            quote_id: '123',
+            version_id: 1,
+            text: 'Similar quote',
+            similarity: 0.9,
+            match_type: 'exact',
+            in_user_collections: false,
+            originator: {
+              id: '1',
+              full_name: 'Einstein',
+              sort_name: 'Einstein, Albert',
+              birth_year: 1879,
+              death_year: 1955
+            },
+            workflow_status: 'approved',
+            likes_count: 10
+          }],
+          reasoning: 'Exact duplicate found',
+          search_metadata: { total_matches: 1 }
+        }),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      const result = await client.checkQuoteDuplicate('Test quote');
+
+      expect(result.matches[0].member_collections).toEqual([]);
+    });
+
+    test('drops membership rows that do not match the canonical slug/name shape', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          recommendation: 'duplicate',
+          confidence: 0.95,
+          in_quotewise: true,
+          matches: [{
+            quote_id: '123',
+            version_id: 1,
+            text: 'Similar quote',
+            similarity: 0.9,
+            match_type: 'exact',
+            in_user_collections: true,
+            member_collections: [{ id: 'collection-uuid', name: 'Favorites' }],
+            originator: {
+              id: '1',
+              full_name: 'Einstein',
+              sort_name: 'Einstein, Albert',
+              birth_year: 1879,
+              death_year: 1955
+            },
+            workflow_status: 'approved',
+            likes_count: 10
+          }],
+          reasoning: 'Exact duplicate found',
+          search_metadata: { total_matches: 1 }
+        }),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      const result = await client.checkQuoteDuplicate('Test quote');
+
+      expect(result.matches[0].member_collections).toEqual([]);
     });
 
     test('returns no duplicates for empty text', async () => {
@@ -424,6 +496,52 @@ describe('QuotewiseApiClient', () => {
       const body = JSON.parse((call![1] as RequestInit).body as string);
       expect(body.text).toBe('short quote');
     });
+
+    test('normalizes canonical member_collections inside the preflight duplicate result', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          originator: { found: true },
+          duplicate_check: {
+            recommendation: 'duplicate',
+            confidence: 0.95,
+            in_quotewise: true,
+            matches: [{
+              quote_id: '123',
+              version_id: 1,
+              text: 'Known quote',
+              similarity: 0.9,
+              match_type: 'exact',
+              in_user_collections: false,
+              member_collections: [{ slug: 'favorites', name: 'Favorites' }],
+              originator: {
+                id: '1',
+                full_name: 'Einstein',
+                sort_name: 'Einstein, Albert',
+                birth_year: 1879,
+                death_year: 1955
+              },
+              workflow_status: 'approved',
+              likes_count: 10
+            }],
+            reasoning: 'Exact duplicate found',
+            search_metadata: { total_matches: 1 }
+          }
+        }),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      const result = await client.preflightCheck(
+        'kpaxs',
+        'twitter',
+        'Known quote',
+        'https://x.com/kpaxs/status/1'
+      );
+
+      expect(result.duplicate_check.matches[0].member_collections).toEqual([
+        { slug: 'favorites', name: 'Favorites' },
+      ]);
+    });
   });
 
   describe('submitQuote', () => {
@@ -447,7 +565,8 @@ describe('QuotewiseApiClient', () => {
 
     test('submits quote successfully', async () => {
       const mockResponse = {
-        id: 'quote-123',
+        quote: { short_code: 'abc123' },
+        version_id: 'quote-123',
         message: 'Quote created successfully'
       };
 
@@ -477,9 +596,41 @@ describe('QuotewiseApiClient', () => {
       );
     });
 
+    test('extracts the submitted quote id from canonical version_id', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          quote: { short_code: 'abc123', url: 'https://quotewise.io/q/abc123/' },
+          version_id: 482932,
+          message: 'Quote created successfully',
+        }),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      const result = await client.submitQuote(validQuoteData);
+
+      expect(result.quoteId).toBe('482932');
+    });
+
+    test('does not treat quote.id as the submitted quote id', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          quote: { id: 482932, short_code: 'abc123' },
+          message: 'Quote created successfully',
+        }),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      const result = await client.submitQuote(validQuoteData);
+
+      expect(result.quoteId).toBeUndefined();
+    });
+
     test('threads sighting/variant decision fields and surfaces response action', async () => {
       const mockResponse = {
-        id: 'quote-123',
+        quote: { short_code: 'abc123' },
+        version_id: 'quote-123',
         message: 'Sighting added',
         action: 'sighting_added'
       };
@@ -505,7 +656,11 @@ describe('QuotewiseApiClient', () => {
     test('omits sighting/variant decision fields when not provided', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ id: 'quote-123', message: 'Quote created successfully' }),
+        json: () => Promise.resolve({
+          quote: { short_code: 'abc123' },
+          version_id: 'quote-123',
+          message: 'Quote created successfully',
+        }),
         headers: new Headers({ 'content-type': 'application/json' })
       } as Response);
 
@@ -514,6 +669,26 @@ describe('QuotewiseApiClient', () => {
       const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
       expect(body).not.toHaveProperty('link_to_quote_id');
       expect(body).not.toHaveProperty('user_intent');
+    });
+
+    test('strips legacy collection_id before posting a quote', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          quote: { short_code: 'abc123' },
+          version_id: 'quote-123',
+          message: 'Quote created successfully',
+        }),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      await client.submitQuote({
+        ...validQuoteData,
+        collection_id: 'emojislug',
+      } as QuoteSubmissionRequest & { collection_id: string });
+
+      const body = JSON.parse((mockFetch.mock.calls[0][1] as RequestInit).body as string);
+      expect(body).not.toHaveProperty('collection_id');
     });
 
     test('validates required fields', async () => {
@@ -541,6 +716,146 @@ describe('QuotewiseApiClient', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
+    });
+  });
+
+  describe('addQuoteToCollection', () => {
+    test.each([201, 200])('treats %i as a successful idempotent add', async (status) => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status,
+        json: () => Promise.resolve({ success: true })
+      } as Response);
+
+      const result = await client.addQuoteToCollection('favorites', 'quote-123');
+
+      expect(result.success).toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://api.quotewise.test:8000/v1/collections/favorites/quotes/',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ quote_id: 'quote-123' }),
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer test-access-token'
+          })
+        })
+      );
+    });
+
+    test('maps collection membership failures into non-throwing result objects', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        json: () => Promise.resolve({ detail: 'Not found.' })
+      } as Response);
+
+      await expect(client.addQuoteToCollection('missing', 'quote-123')).resolves.toEqual({
+        success: false,
+        error: 'Not found.',
+      });
+    });
+  });
+
+  describe('listCollections', () => {
+    test('normalizes the deployed collections response envelope', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [{
+            id: 'default-id',
+            name: "Chris's Default Collection",
+            slug: 'chriss-default-collection',
+            description: '',
+            quote_count: 531,
+            is_default: true,
+            created_at: '2026-06-22T00:00:00Z',
+            updated_at: '2026-06-22T00:00:00Z',
+          }],
+          meta: { request_id: 'request-123' },
+          links: { next: null, previous: null },
+        })
+      } as Response);
+
+      await expect(client.listCollections()).resolves.toEqual({
+        collections: [{
+          id: 'default-id',
+          name: "Chris's Default Collection",
+          slug: 'chriss-default-collection',
+          description: '',
+          quote_count: 531,
+          is_default: true,
+          created_at: '2026-06-22T00:00:00Z',
+          updated_at: '2026-06-22T00:00:00Z',
+        }],
+        default_collection_id: 'default-id',
+      });
+    });
+
+    test('does not accept top-level collections payloads at the API boundary', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          collections: [{
+            id: 'top-level-id',
+            name: 'Top Level',
+            slug: 'top-level',
+            is_default: true,
+          }],
+          default_collection_id: 'top-level-id',
+        })
+      } as Response);
+
+      await expect(client.listCollections()).resolves.toEqual({
+        collections: [],
+        default_collection_id: null,
+      });
+    });
+
+    test('requires usable slugs while preserving emoji-named collections with canonical slugs', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          data: [
+            {
+              id: 'emoji-id',
+              name: '😀😍🎉🌈🐶🍕🚀🎸🌺🦄',
+              slug: ' emojislug ',
+              description: '',
+              quote_count: 3,
+              is_default: false,
+              created_at: '2026-06-22T00:00:00Z',
+              updated_at: '2026-06-22T00:00:00Z',
+            },
+            {
+              id: 'bad-id',
+              name: 'Missing Slug',
+              slug: '   ',
+              description: '',
+              quote_count: 0,
+              is_default: false,
+              created_at: '2026-06-22T00:00:00Z',
+              updated_at: '2026-06-22T00:00:00Z',
+            },
+          ],
+          meta: { request_id: 'request-123' },
+          links: { next: null, previous: null },
+        })
+      } as Response);
+
+      await expect(client.listCollections()).resolves.toEqual({
+        collections: [{
+          id: 'emoji-id',
+          name: '😀😍🎉🌈🐶🍕🚀🎸🌺🦄',
+          slug: 'emojislug',
+          description: '',
+          quote_count: 3,
+          is_default: false,
+          created_at: '2026-06-22T00:00:00Z',
+          updated_at: '2026-06-22T00:00:00Z',
+        }],
+        default_collection_id: null,
+      });
     });
   });
 
