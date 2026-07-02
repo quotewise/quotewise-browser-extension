@@ -98,6 +98,7 @@ describe('resolveIconPresentation', () => {
           similarity: 100,
           match_type: 'exact_same_originator',
           in_user_collections: true,
+          member_collections: [],
           originator: {
             id: 'o1',
             full_name: 'Author',
@@ -305,6 +306,7 @@ describe('resolveIconPresentation', () => {
                         similarity: 100,
                         match_type: 'exact_same_originator',
                         in_user_collections: true,
+                        member_collections: [],
                         originator: {
                           id: 'o1',
                           full_name: 'Author',

@@ -8,7 +8,8 @@ describe('clear user data privacy cleanup', () => {
       settings: {
         privateMode: true,
         autoAddToCollection: true,
-        defaultCollectionId: 'collection-1',
+        defaultCollectionSlug: 'favorites',
+        lastUsedCollectionSlugs: ['favorites', 'research'],
         firstRunNoticeShown: false,
       },
     });
@@ -26,7 +27,8 @@ describe('clear user data privacy cleanup', () => {
       settings: {
         privateMode: true,
         autoAddToCollection: true,
-        defaultCollectionId: null,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
       },
     });

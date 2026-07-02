@@ -58,6 +58,7 @@ export interface DuplicateCheckResult {
     similarity: number;
     match_type: string;
     in_user_collections: boolean;
+    member_collections: MemberCollection[];
     originator: Originator;
     workflow_status: string;
     likes_count: number;
@@ -93,9 +94,23 @@ export interface QuoteSubmissionResult {
   message: string;
   quoteId?: string;
   error?: string;
-  id?: string; // For Django response format
   collectionWarning?: string;
   action?: 'created' | 'sighting_added';
+}
+
+export interface MemberCollection {
+  slug: string;
+  name: string;
+}
+
+export interface AddToCollectionRequest {
+  quote_id: string;
+}
+
+export interface AddToCollectionResult {
+  success: boolean;
+  alreadyMember?: boolean;
+  error?: string;
 }
 
 // Legacy interfaces for backwards compatibility
@@ -120,7 +135,6 @@ export interface QuoteSubmissionRequest {
   platform_code: PlatformCode;
   likes_count?: number;
   quote_date?: string;
-  collection_id?: string;
   attribution_type: AttributionType;
   context?: string;
   image_urls?: string[];
@@ -130,12 +144,16 @@ export interface QuoteSubmissionRequest {
 }
 
 export interface QuoteSubmissionResponse {
-  status: 'created' | 'sighting_added' | 'version_created';
-  quote_id: string;
-  version_id: number;
-  sighting_id?: number;
-  similarity?: number;
-  message?: string;
+  action: 'created' | 'sighting_added' | 'version_added';
+  message: string;
+  quote: {
+    short_code?: string;
+    web_url?: string | null;
+  };
+  version_id?: string | number | null;
+  sighting_id?: number | null;
+  similarity_score?: number;
+  language_detection?: Record<string, unknown>;
 }
 
 export interface DuplicateCheckRequest {
@@ -226,6 +244,7 @@ export interface QuotewiseApiClient {
   searchOriginators(query: string, limit?: number): Promise<OriginatorSearchResult[]>;
   checkQuoteDuplicate(text: string, originatorSlug?: string, sourceUrl?: string, socialHandle?: string): Promise<DuplicateCheckResult>;
   submitQuote(quoteData: QuoteSubmissionRequest): Promise<QuoteSubmissionResult>;
+  addQuoteToCollection(collectionSlug: string, quoteId: string): Promise<AddToCollectionResult>;
   checkAuthStatus(): Promise<AuthStatusResult>;
   listCollections(): Promise<CollectionsListResponse>;
   lookupOriginatorByHandle(handle: string, platform?: string): Promise<HandleLookupResult>;

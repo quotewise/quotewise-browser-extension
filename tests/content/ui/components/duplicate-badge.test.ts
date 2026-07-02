@@ -31,6 +31,7 @@ function makeMatch(
     similarity: 1,
     match_type: 'exact',
     in_user_collections: false,
+    member_collections: [],
     originator: { id: '1', full_name: 'Test', sort_name: null, birth_year: null, death_year: null },
     workflow_status: 'published',
     likes_count: 0,
@@ -86,6 +87,21 @@ describe('DuplicateBadge', () => {
     expect(directives).toEqual([
       { type: 'view_quote', url: 'https://quotewise.io/quotes/q1', text: 'View Quote' },
     ]);
+  });
+
+  it('names member collections for already-captured quotes', () => {
+    badge.update({
+      result: makeResult({
+        matches: [makeMatch({
+          sighting_status: 'exact_url',
+          url: 'https://quotewise.io/quotes/q1',
+          in_user_collections: true,
+          member_collections: [{ slug: 'favorites', name: 'Favorites' }],
+        })],
+      }),
+    });
+
+    expect(container.textContent).toContain('In your collection: Favorites');
   });
 
   it('shows "Earlier Sighting saved" link for has_platform_sighting', () => {

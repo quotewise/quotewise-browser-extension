@@ -50,6 +50,11 @@
   - Do **not** pass `--repo`. It triggers auto-routing this DB isn't configured for — creates appear successful but silently fail to persist. Filter via `bd list --label chrome-ext` instead.
 - See the main `quotewise/AGENTS.md` for the broader bd workflow (`bd ready`, `bd show`, `bd update --claim`, `bd close`).
 
+## Quotewise API Contract Verification
+- Before changing code that consumes Quotewise.io API request or response shapes, verify against the current sibling backend repo, not memory or stale local files.
+- Fetch and verify current main in `../quotewise`: `git -C ../quotewise fetch origin main`, confirm the checkout is `main`, then fast-forward with `git -C ../quotewise merge --ff-only origin/main` when it will not overwrite local work. If the sibling repo is dirty or cannot be fast-forwarded safely, inspect `origin/main:<path>` with `git -C ../quotewise show ...` instead.
+- Treat the backend serializer/viewset/tests as the source of truth for extension contracts. Do not guess API shapes, add optional compatibility formats, or normalize alternate envelopes unless the current backend contract explicitly documents those alternates or the user asks for backwards compatibility.
+
 ## Security & Configuration Tips
 - Environments are defined in `src/config/environment.ts`; avoid hardcoding secrets or domains outside that map.
 - Validate Chrome permissions remain minimal; update `manifest.prod.json` deliberately and document rationale in PRs.

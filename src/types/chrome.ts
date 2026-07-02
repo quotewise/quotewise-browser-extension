@@ -45,6 +45,7 @@ export enum MessageType {
   SUBMIT_QUOTE = 'SUBMIT_QUOTE',
   SEARCH_ORIGINATORS = 'SEARCH_ORIGINATORS',
   CHECK_DUPLICATE = 'CHECK_DUPLICATE',
+  ADD_QUOTE_TO_COLLECTION = 'ADD_QUOTE_TO_COLLECTION',
   LOOKUP_ORIGINATOR_BY_HANDLE = 'LOOKUP_ORIGINATOR_BY_HANDLE',
   PREFLIGHT_CHECK = 'PREFLIGHT_CHECK',
   
@@ -92,14 +93,16 @@ export interface ExtensionMessage {
 export interface Settings {
   privateMode: boolean;
   autoAddToCollection: boolean;
-  defaultCollectionId: string | null;
+  defaultCollectionSlug: string | null;
+  lastUsedCollectionSlugs: string[];
   firstRunNoticeShown: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   privateMode: false,
   autoAddToCollection: false,
-  defaultCollectionId: null,
+  defaultCollectionSlug: null,
+  lastUsedCollectionSlugs: [],
   firstRunNoticeShown: false,
 };
 

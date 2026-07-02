@@ -13,6 +13,7 @@ function result(matchOverrides: Partial<DuplicateCheckResult['matches'][number]>
       similarity: 0.9,
       match_type: 'near',
       in_user_collections: false,
+      member_collections: [],
       originator: { id: 'o1', full_name: 'Author', sort_name: null, birth_year: null, death_year: null },
       workflow_status: 'published',
       likes_count: 0,

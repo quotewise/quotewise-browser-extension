@@ -112,6 +112,7 @@ describe('quote-status recommendation mapping', () => {
         similarity: 0.55,
         match_type: 'similar',
         in_user_collections: false,
+        member_collections: [],
         originator: {
           id: 'o1',
           full_name: 'Author',
@@ -139,6 +140,28 @@ describe('quote-status recommendation mapping', () => {
         similarity: 100,
         match_type: 'exact_same_originator',
         in_user_collections: true,
+        member_collections: [],
+        originator: {
+          id: 'o1',
+          full_name: 'Author',
+          sort_name: null,
+          birth_year: null,
+          death_year: null,
+        },
+        workflow_status: 'published',
+        likes_count: 0,
+      }],
+    }))).toBe('InCollection');
+
+    expect(mapRecommendationToQuoteStatus(duplicate('duplicate', {
+      matches: [{
+        quote_id: 'q1',
+        version_id: 1,
+        text: 'Quote',
+        similarity: 100,
+        match_type: 'exact_same_originator',
+        in_user_collections: false,
+        member_collections: [{ slug: 'favorites', name: 'Favorites' }],
         originator: {
           id: 'o1',
           full_name: 'Author',
