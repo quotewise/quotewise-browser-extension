@@ -47,13 +47,19 @@ export function partitionMembership(
   match: Pick<DuplicateCheckResult['matches'][number], 'member_collections'>,
   allCollections: Collection[],
 ): { alreadyIn: MemberCollection[]; addable: Collection[] } {
-  const availableSlugs = new Set(allCollections.map(collection => collection.slug));
-  const alreadyIn = match.member_collections.filter(collection => availableSlugs.has(collection.slug));
-  const alreadySlugs = new Set(alreadyIn.map(collection => collection.slug));
+  const isMember = (collection: Collection, member: MemberCollection): boolean => (
+    collection.slug === member.slug
+  );
+
+  const alreadyIn = match.member_collections.filter(member =>
+    allCollections.some(collection => isMember(collection, member))
+  );
 
   return {
     alreadyIn,
-    addable: allCollections.filter(collection => !alreadySlugs.has(collection.slug)),
+    addable: allCollections.filter(collection =>
+      !alreadyIn.some(member => isMember(collection, member))
+    ),
   };
 }
 
@@ -62,4 +68,21 @@ export function summarizeAdds(results: CollectionAddOutcome[]): CollectionAddSum
     succeeded: results.filter(result => result.success),
     failed: results.filter(result => !result.success),
   };
+}
+
+/**
+ * One-line summary of the collections a capture will be added to, shown under
+ * the Submit button. Caps at two named collections, then "+N more".
+ */
+export function describeSelection(names: string[]): string {
+  if (names.length === 0) {
+    return '';
+  }
+  if (names.length === 1) {
+    return `Adding to: ${names[0]}`;
+  }
+  if (names.length === 2) {
+    return `Adding to: ${names[0]}, ${names[1]}`;
+  }
+  return `Adding to: ${names[0]}, ${names[1]} +${names.length - 2} more`;
 }

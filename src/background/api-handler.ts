@@ -131,6 +131,11 @@ export class ApiHandler {
         const cache = value as Partial<CollectionsCache>;
         return (
             Array.isArray(cache.collections) &&
+            cache.collections.every(collection => (
+                !!collection &&
+                typeof collection.slug === 'string' &&
+                collection.slug.trim().length > 0
+            )) &&
             typeof cache.ts === 'number' &&
             Date.now() - cache.ts < COLLECTIONS_CACHE_TTL_MS
         );

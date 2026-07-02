@@ -49,7 +49,7 @@ interface CollectionAddResult { collectionSlug: string; ok: boolean; error?: str
 
 ## Message type (`src/types/chrome.ts`)
 - `MessageType.ADD_QUOTE_TO_COLLECTION` — content → background → `addQuoteToCollection(collectionSlug, quoteId)` → `POST /v1/collections/{slug}/quotes/`.
-- Reuses existing `LIST_COLLECTIONS` (served from cache when fresh) and `SUBMIT_QUOTE` (new captures; `collection_id` carries the chosen **slug**).
+- Reuses existing `LIST_COLLECTIONS` (served from cache when fresh), `SUBMIT_QUOTE` (new captures; no `collection_id` is sent), and `ADD_QUOTE_TO_COLLECTION` for all selected collection memberships after the quote ID is returned.
 
 ## State transitions (already-captured quote → membership)
 ```

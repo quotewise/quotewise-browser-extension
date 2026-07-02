@@ -1,5 +1,6 @@
 import type { Collection, DuplicateCheckResult } from '../../../src/types/api';
 import {
+  describeSelection,
   partitionMembership,
   seedSelection,
   summarizeAdds,
@@ -38,6 +39,34 @@ describe('collection-seed helpers', () => {
         alreadyIn: [{ slug: 'favorites', name: 'Favorites' }],
         addable: [collections[1], collections[2]],
       });
+    });
+
+    it('does not guess membership by id or name when the slug differs', () => {
+      const match = duplicateMatch([
+        { slug: 'id-research', name: 'Research' },
+        { slug: 'missing-slug', name: 'Archive' },
+      ]);
+
+      expect(partitionMembership(match, collections)).toEqual({
+        alreadyIn: [],
+        addable: collections,
+      });
+    });
+  });
+
+  describe('describeSelection', () => {
+    it('is blank when nothing is selected', () => {
+      expect(describeSelection([])).toBe('');
+    });
+
+    it('lists one or two collections in full', () => {
+      expect(describeSelection(['Favorites'])).toBe('Adding to: Favorites');
+      expect(describeSelection(['Favorites', 'Research'])).toBe('Adding to: Favorites, Research');
+    });
+
+    it('caps at two names and counts the rest', () => {
+      expect(describeSelection(['Favorites', 'Research', 'Archive', 'Inbox']))
+        .toBe('Adding to: Favorites, Research +2 more');
     });
   });
 

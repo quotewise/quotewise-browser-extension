@@ -31,12 +31,12 @@ function normalizeMemberCollections(value: unknown): { slug: string; name: strin
 
   return value
     .filter((item): item is { slug: string; name: string } => (
-      !!item &&
-      typeof item === 'object' &&
-      typeof (item as { slug?: unknown }).slug === 'string' &&
-      typeof (item as { name?: unknown }).name === 'string'
+      isRecord(item) &&
+      typeof item.slug === 'string' &&
+      item.slug.trim().length > 0 &&
+      typeof item.name === 'string'
     ))
-    .map(item => ({ slug: item.slug, name: item.name }));
+    .map(item => ({ slug: item.slug.trim(), name: item.name }));
 }
 
 function normalizeDuplicateCheckResult(result: DuplicateCheckResult): DuplicateCheckResult {
@@ -57,6 +57,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object';
 }
 
+function coerceId(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return undefined;
+}
+
+function extractSubmittedQuoteId(result: unknown): string | undefined {
+  if (!isRecord(result)) {
+    return undefined;
+  }
+
+  return coerceId(result.version_id);
+}
+
 function normalizeCollection(value: unknown): CollectionsListResponse['collections'][number] | null {
   if (!isRecord(value)) {
     return null;
@@ -65,14 +85,19 @@ function normalizeCollection(value: unknown): CollectionsListResponse['collectio
   const id = value.id;
   const name = value.name;
   const slug = value.slug;
-  if (typeof id !== 'string' || typeof name !== 'string' || typeof slug !== 'string') {
+  if (
+    typeof id !== 'string' ||
+    typeof name !== 'string' ||
+    typeof slug !== 'string' ||
+    !slug.trim()
+  ) {
     return null;
   }
 
   return {
     id,
     name,
-    slug,
+    slug: slug.trim(),
     description: typeof value.description === 'string' ? value.description : '',
     is_default: value.is_default === true,
     quote_count: typeof value.quote_count === 'number' ? value.quote_count : 0,
@@ -381,8 +406,11 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         };
       }
 
+      const submitPayload = { ...quoteData } as Record<string, unknown>;
+      delete submitPayload.collection_id;
+
       const result = await this.makeRequest<{
-        id: string;
+        version_id?: string | number | null;
         message?: string;
         collection_warning?: string;
         action?: QuoteSubmissionResult['action'];
@@ -390,14 +418,14 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         '/v1/quotes/',
         {
           method: 'POST',
-          body: JSON.stringify(quoteData)
+          body: JSON.stringify(submitPayload)
         }
       );
       
       return {
         success: true,
         message: result.message || 'Quote submitted successfully',
-        quoteId: result.id,
+        quoteId: extractSubmittedQuoteId(result),
         collectionWarning: result.collection_warning,
         action: result.action
       };
@@ -611,7 +639,12 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         recommendation: result.duplicate_check?.recommendation
       });
 
-      return result;
+      return {
+        ...result,
+        duplicate_check: result.duplicate_check
+          ? normalizeDuplicateCheckResult(result.duplicate_check)
+          : result.duplicate_check,
+      };
     } catch (error) {
       console.error('Error in preflight check:', error);
 
