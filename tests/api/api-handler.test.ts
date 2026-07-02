@@ -242,6 +242,45 @@ describe('ApiHandler', () => {
       });
     });
 
+    test('does not serve LIST_COLLECTIONS from a fresh cache containing blank slugs', async () => {
+      jest.spyOn(Date, 'now').mockReturnValue(1_500_000);
+      mockChrome.storage.local.get.mockResolvedValue({
+        collectionsCache: {
+          collections: [
+            { id: '1', slug: 'favorites', name: 'Favorites' },
+            { id: '2', slug: '', name: 'Stale Collection' },
+          ],
+          default_collection_id: '1',
+          ts: 1_500_000 - 60_000,
+        },
+      });
+      mockApiClient.listCollections.mockResolvedValue({
+        collections: [{ id: '3', slug: 'fresh', name: 'Fresh' }],
+        default_collection_id: '3',
+      } as never);
+
+      const message: ExtensionMessage = {
+        type: 'LIST_COLLECTIONS' as MessageType,
+      };
+
+      await apiHandler.handleMessage(message, {} as chrome.runtime.MessageSender, mockSendResponse);
+
+      expect(mockApiClient.listCollections).toHaveBeenCalledTimes(1);
+      expect(mockChrome.storage.local.set).toHaveBeenCalledWith({
+        collectionsCache: {
+          collections: [{ id: '3', slug: 'fresh', name: 'Fresh' }],
+          default_collection_id: '3',
+          ts: 1_500_000,
+        },
+      });
+      expect(mockSendResponse).toHaveBeenCalledWith({
+        success: true,
+        collections: [{ id: '3', slug: 'fresh', name: 'Fresh' }],
+        default_collection_id: '3',
+        fromCache: false,
+      });
+    });
+
     test('bypasses LIST_COLLECTIONS cache when forceRefresh is true', async () => {
       jest.spyOn(Date, 'now').mockReturnValue(2_000_000);
       mockChrome.storage.local.get.mockResolvedValue({

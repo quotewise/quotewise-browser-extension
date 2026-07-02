@@ -42,6 +42,20 @@ describe('CollectionPicker', () => {
     );
   });
 
+  it('renders checked collections first and gives each option a hover title', async () => {
+    const picker = new CollectionPicker(container, {
+      loadCollections,
+      initialSelectedSlugs: ['research'],
+    });
+
+    await picker.mount();
+
+    const inputs = [...container.querySelectorAll('input[type="checkbox"]')] as HTMLInputElement[];
+    expect(inputs.map(input => input.value)).toEqual(['research', 'favorites']);
+    const firstSpan = container.querySelector('.collection-picker-option span') as HTMLElement;
+    expect(firstSpan.title).toBe('Research');
+  });
+
   it('shows an honest empty state when there are no collections', async () => {
     loadCollections.mockResolvedValue([]);
     const picker = new CollectionPicker(container, { loadCollections });
@@ -67,9 +81,7 @@ describe('CollectionPicker', () => {
     });
 
     await picker.mount();
-    (container.querySelector('.collection-picker-refresh') as HTMLButtonElement).click();
-    await Promise.resolve();
-    await Promise.resolve();
+    await picker.refresh();
 
     expect(loadCollections).toHaveBeenLastCalledWith(true);
     expect([...picker.getSelectedSlugs()]).toEqual(['research']);

@@ -52,7 +52,7 @@ The existing duplicate-check response (`CHECK_DUPLICATE` → `GET`/`POST` duplic
 ## REUSED — no contract change
 
 - `GET /v1/collections/` (`listCollections()`) — list the user's collections (each carries `slug`). Served from the extension's `storage.local` cache when fresh (FR-022).
-- `POST /v1/quotes/` (`submitQuote()`) — new-capture path. Its optional `collection_id` **accepts a collection slug**; a new capture passes the chosen slug there for the first selected collection and adds any others via the slug membership endpoint above. Zero selected → no `collection_id`.
+- `POST /v1/quotes/` (`submitQuote()`) — new-capture path. The extension does **not** send `collection_id`; the field is UUID-validated by the backend. After submit returns the quote identifier as `version_id`, the extension adds the quote to every selected collection via the slug membership endpoint above. Zero selected → no membership calls.
 
 ## Out of scope (this contract)
 - Create-collection endpoint (inline-create deferred — spec Clarifications).

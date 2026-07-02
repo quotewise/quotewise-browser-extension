@@ -20,7 +20,7 @@ Phase 0. The spec + interview resolved most unknowns; this records the few that 
 
 ## R3. Membership endpoint (resolved by backend — ADR-0006)
 
-**Decision**: Reuse the **existing** slug-keyed `POST /v1/collections/{slug}/quotes/` (no new endpoint), one call per target collection. For new captures, `POST /v1/quotes/` accepts a collection **slug** in `collection_id`: file the first selected collection there and the rest via the slug endpoint. `listCollections()` already exists.
+**Decision**: Reuse the **existing** slug-keyed `POST /v1/collections/{slug}/quotes/` (no new endpoint), one call per target collection. For new captures, submit the quote first with no `collection_id`, then add the returned quote ID to every selected collection via the slug endpoint. `listCollections()` already exists.
 
 **Rationale**: ADR-0006's backend resolution confirmed the add endpoint already exists, is idempotent and membership-only, and is keyed by **slug** (the canonical public identifier); the UUID `id` is ignored. One call per collection enables best-effort per-collection feedback (FR-012/013). The extension still needs a new client method `addQuoteToCollection(slug, quoteId)`.
 

@@ -7,7 +7,7 @@ import { DuplicateBadge } from './components/duplicate-badge';
 import type { SubmitStateDirective } from './components/duplicate-badge';
 import { CollectionPicker } from './components/collection-picker';
 import type { CollectionAddOutcome } from './components/collection-seed';
-import { seedSelection, summarizeAdds } from './components/collection-seed';
+import { describeSelection, seedSelection, summarizeAdds } from './components/collection-seed';
 import { QuotePreview } from './components/quote-preview';
 import { OriginatorLookup } from './components/originator-lookup';
 import { ActionButton } from './components/action-button';
@@ -314,6 +314,12 @@ export class OverlayBar {
         .badge.warning { background: rgba(251,146,60,0.2); color: #fb923c; }
         .badge.error { background: rgba(239,68,68,0.2); color: #f87171; }
         .badge.info { background: rgba(59,130,246,0.2); color: #60a5fa; }
+        .badge.label {
+          background: transparent;
+          padding: 0;
+          color: #94a3b8;
+          font-weight: 600;
+        }
         .text {
           min-width: 0;
           white-space: pre-line;
@@ -597,6 +603,8 @@ export class OverlayBar {
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
+          max-height: 96px;
+          overflow-y: auto;
         }
         .collection-picker-option {
           display: inline-flex;
@@ -609,10 +617,22 @@ export class OverlayBar {
         }
         .collection-picker-option input {
           margin: 0;
+          accent-color: #2563eb;
         }
-        .collection-picker-refresh {
-          padding: 3px 7px;
+        .collection-picker-option span {
+          max-width: 180px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .collection-summary {
+          order: 2;
+          color: #94a3b8;
           font-size: 11px;
+          line-height: 15px;
+        }
+        .collection-summary[hidden] {
+          display: none;
         }
         .collection-picker-empty,
         .collection-picker-status,
@@ -630,7 +650,7 @@ export class OverlayBar {
       <div class="container" aria-hidden="false">
         <div class="bar">
           <div class="section left">
-            <div class="badge info" id="source-badge">Source</div>
+            <div class="badge label" id="source-badge">Source</div>
             <div class="badge" id="platform-badge">${this.currentPlatformLabel}</div>
             <div class="badge protected" id="protected-badge" style="display:none;">Protected</div>
           </div>
@@ -639,8 +659,8 @@ export class OverlayBar {
           </div>
           <div class="section right">
             <div class="account-menu-wrap" id="account-menu-wrap"></div>
-            <button id="refresh-btn" aria-label="Refresh tweet capture">Refresh</button>
-            <button class="toggle" id="close-btn" aria-label="Close capture tray">×</button>
+            <button id="refresh-btn" aria-label="Refresh capture and collections" title="Refresh capture and collections">Refresh</button>
+            <button class="toggle" id="close-btn" aria-label="Close capture tray (Esc)" title="Close (Esc)">×</button>
           </div>
         </div>
         <div class="capture-row" id="capture-row">
@@ -648,7 +668,7 @@ export class OverlayBar {
             <div id="first-run-notice-container"></div>
             <div class="quote-preview-row">
               <div class="section left">
-                <div class="badge info">Quote</div>
+                <div class="badge label">Quote</div>
               </div>
               <div class="section center">
                 <div class="quote-preview" id="quote-preview"></div>
@@ -656,7 +676,7 @@ export class OverlayBar {
             </div>
             <div class="originator-row">
               <div class="section left">
-                <div class="badge info">Originator</div>
+                <div class="badge label">Originator</div>
               </div>
               <div class="section center">
                 <div class="originator-info" id="originator-info">
@@ -666,6 +686,7 @@ export class OverlayBar {
               <div class="section right">
                 <div class="progress-indicator" id="progress-indicator"></div>
                 <!-- Action button inserted dynamically by updateActionButton() -->
+                <div id="collection-summary" class="collection-summary" aria-live="polite" hidden></div>
               </div>
             </div>
             <div class="collection-picker-slot" id="collection-picker-slot" hidden></div>
@@ -699,6 +720,24 @@ export class OverlayBar {
 
     const snippet = (data.text || '').trim();
     previewEl.textContent = snippet || 'Post text unavailable';
+    this.syncSourcePreview();
+  }
+
+  /**
+   * The expandable QuotePreview box (next to Submit) shows the full source when
+   * there's no selection, so the always-visible top-bar copy would be a literal
+   * duplicate. Hide it in that case; keep it when collapsed (pre-capture), when a
+   * selection exists (top = full source, box = the selection), or on articles
+   * that still require a selection (the box shows a prompt, not the source).
+   */
+  private syncSourcePreview(): void {
+    const previewEl = this.shadow?.getElementById('tweet-preview');
+    if (!previewEl) return;
+    const boxShowsFullSource =
+      this.captureState.expanded &&
+      !this.captureState.selectedText &&
+      !this.requiresSelection();
+    previewEl.style.display = boxShowsFullSource ? 'none' : '';
   }
 
   private wireInteractions(): void {
@@ -706,7 +745,9 @@ export class OverlayBar {
     const refreshBtn = this.shadow.getElementById('refresh-btn');
     const closeBtn = this.shadow.getElementById('close-btn');
 
-    refreshBtn?.addEventListener('click', () => this.refresh());
+    refreshBtn?.addEventListener('click', () => {
+      void this.refreshFromTray();
+    });
     closeBtn?.addEventListener('click', () => this.hide());
 
     // Escape dismisses the tray, mirroring the × button. Lower-risk than
@@ -766,6 +807,19 @@ export class OverlayBar {
       this.settings = await getSettings();
     } catch {
       this.settings = { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  private async refreshFromTray(): Promise<void> {
+    await this.refresh();
+    await this.collectionPicker?.refresh();
+
+    if (
+      this.captureState.expanded &&
+      this.captureState.originator?.unique_id &&
+      !this.requiresSelection()
+    ) {
+      await this.checkDuplicate(this.captureState.originator.unique_id);
     }
   }
 
@@ -878,6 +932,7 @@ export class OverlayBar {
       loadCollections: (forceRefresh = false) => this.loadCollections(forceRefresh),
       onSelectionChange: () => {
         this.updateSubmitButton(!!this.captureState.originator);
+        this.updateCollectionSummary();
       },
     });
 
@@ -898,6 +953,20 @@ export class OverlayBar {
       this.collectionPickerContainer.hidden = true;
       this.collectionPickerContainer.innerHTML = '';
     }
+    this.updateCollectionSummary();
+  }
+
+  /**
+   * Reflect the picked collections in a one-line caption under the Submit button,
+   * so the check-collections → submit relationship is explicit. Hidden when none.
+   */
+  private updateCollectionSummary(): void {
+    const el = this.shadow?.getElementById('collection-summary');
+    if (!el) return;
+    const names = this.selectedCollections().map(collection => collection.name);
+    const text = describeSelection(names);
+    el.textContent = text;
+    el.hidden = text.length === 0;
   }
 
   private async loadCollections(forceRefresh = false): Promise<Collection[]> {
@@ -945,6 +1014,7 @@ export class OverlayBar {
       loadCollections: (forceRefresh = false) => this.loadCollections(forceRefresh),
       onSelectionChange: (selected) => {
         this.updateSubmitButton(selected.size > 0, selected.size > 0 ? 'Add to Collections' : 'Choose collection');
+        this.updateCollectionSummary();
       },
     });
 
@@ -1210,11 +1280,13 @@ export class OverlayBar {
 
     if (this.requiresSelection()) {
       this.quotePreview.showSelectionRequired();
+      this.syncSourcePreview();
       return;
     }
 
     const textToSubmit = this.captureState.selectedText || this.currentData?.text || '';
     this.quotePreview.update(textToSubmit, this.captureState.selectedText);
+    this.syncSourcePreview();
   }
 
   /**
@@ -1255,6 +1327,7 @@ export class OverlayBar {
     this.hideCollectionPicker();
     this.updateSubmitButton(false);
     this.updateDuplicateInfo(null);
+    this.syncSourcePreview();
   }
 
   private async lookupOriginator(handle: string): Promise<void> {
@@ -1375,7 +1448,6 @@ export class OverlayBar {
     ) {
       selectedCollections = [this.fallbackCollectionFromSlug(this.settings.defaultCollectionSlug)];
     }
-    const primaryCollection = selectedCollections[0] || null;
     const decisionFields = this.decisionFieldsForSubmit(opts);
 
     try {
@@ -1391,7 +1463,6 @@ export class OverlayBar {
           platform_code: capturePlatformCode(this.currentData),
           ...(likesCount !== undefined ? { likes_count: likesCount } : {}),
           quote_date: capturePostedAt(this.currentData) || undefined,
-          ...(primaryCollection ? { collection_id: primaryCollection.slug } : {}),
           attribution_type: 'DIRECT',
           platform_data: capturePlatformData(this.currentData),
           ...decisionFields
@@ -1399,14 +1470,21 @@ export class OverlayBar {
       });
 
       if (response.success) {
+        const submittedQuoteId = selectedCollections.length > 0
+          ? this.resolveSubmittedQuoteIdForCollections(response)
+          : { quoteId: response.quoteId || '' };
         const collectionResults = await this.addCollectionsAfterCapture(
-          response.quoteId || response.id || '',
+          submittedQuoteId.quoteId,
           selectedCollections,
-          response.collectionWarning,
+          submittedQuoteId.error,
         );
         const addSummary = summarizeAdds(collectionResults);
-        if (selectedCollections.length > 0) {
-          await this.persistLastUsedSelection(selectedCollections.map(collection => collection.slug));
+        const slugsToRemember = collectionResults
+          .filter(result => result.success)
+          .map(result => result.collectionSlug)
+          .filter(slug => slug.trim().length > 0);
+        if (slugsToRemember.length > 0) {
+          await this.persistLastUsedSelection(slugsToRemember);
         }
 
         this.setSubmitProgressPhase('confirming');
@@ -1432,8 +1510,8 @@ export class OverlayBar {
         );
         const hasCollectionSuccess = addSummary.succeeded.length > 0;
         if (addSummary.failed.length > 0) {
-          this.existingQuoteTarget = response.quoteId || response.id
-            ? { quoteId: response.quoteId || response.id || '' }
+          this.existingQuoteTarget = submittedQuoteId.quoteId
+            ? { quoteId: submittedQuoteId.quoteId }
             : null;
           this.collectionPicker?.setSelectedSlugs(addSummary.failed.map(result => result.collectionSlug));
           this.updateSubmitButton(!!this.existingQuoteTarget, 'Retry failed');
@@ -1518,33 +1596,23 @@ export class OverlayBar {
   private async addCollectionsAfterCapture(
     quoteId: string,
     selectedCollections: Collection[],
-    primaryCollectionWarning?: string,
+    missingQuoteIdError = 'Quote ID missing after capture',
   ): Promise<CollectionAddOutcome[]> {
     if (selectedCollections.length === 0) {
       return [];
     }
 
-    const [primaryCollection, ...additionalCollections] = selectedCollections;
-    const results: CollectionAddOutcome[] = [{
-      collectionSlug: primaryCollection.slug,
-      collectionName: primaryCollection.name,
-      success: !primaryCollectionWarning,
-      error: primaryCollectionWarning,
-    }];
-
     if (!quoteId) {
-      return [
-        ...results,
-        ...additionalCollections.map(collection => ({
-          collectionSlug: collection.slug,
-          collectionName: collection.name,
-          success: false,
-          error: 'Quote ID missing after capture',
-        })),
-      ];
+      return selectedCollections.map(collection => ({
+        collectionSlug: collection.slug,
+        collectionName: collection.name,
+        success: false,
+        error: missingQuoteIdError,
+      }));
     }
 
-    for (const collection of additionalCollections) {
+    const results: CollectionAddOutcome[] = [];
+    for (const collection of selectedCollections) {
       results.push(await this.addQuoteToCollection(collection, quoteId));
     }
 
@@ -1552,21 +1620,48 @@ export class OverlayBar {
   }
 
   private async addQuoteToCollection(collection: Collection, quoteId: string): Promise<CollectionAddOutcome> {
+    const targetCollection = await this.resolveCollectionForAdd(collection);
+    const collectionSlug = targetCollection.slug.trim();
+    if (!collectionSlug) {
+      return {
+        collectionSlug,
+        collectionName: collection.name,
+        success: false,
+        error: 'Collection is missing an API slug. Refresh collections and try again.',
+      };
+    }
+
     const response = await this.sendMessage({
       type: MessageType.ADD_QUOTE_TO_COLLECTION,
       data: {
-        collectionSlug: collection.slug,
+        collectionSlug,
         quoteId,
       },
     });
 
     return {
-      collectionSlug: collection.slug,
-      collectionName: collection.name,
+      collectionSlug,
+      collectionName: targetCollection.name || collection.name,
       success: response.success === true,
       alreadyMember: response.alreadyMember,
       error: response.success ? undefined : response.error || 'Unable to add to collection',
     };
+  }
+
+  private async resolveCollectionForAdd(collection: Collection): Promise<Collection> {
+    if (collection.slug.trim()) {
+      return collection;
+    }
+
+    try {
+      const freshCollections = await this.loadCollections(true);
+      return freshCollections.find(candidate =>
+        candidate.id === collection.id ||
+        candidate.name === collection.name
+      ) || collection;
+    } catch {
+      return collection;
+    }
   }
 
   private collectionMessage(baseMessage: string, summary: ReturnType<typeof summarizeAdds>): string {
@@ -1575,7 +1670,11 @@ export class OverlayBar {
     }
 
     const succeededNames = summary.succeeded.map(result => result.collectionName).join(', ');
-    const failedNames = summary.failed.map(result => result.collectionName).join(', ');
+    const failedNames = summary.failed
+      .map(result => result.error
+        ? `${result.collectionName}: ${result.error}`
+        : result.collectionName)
+      .join('; ');
 
     if (summary.failed.length === 0) {
       return `Quote added to ${succeededNames}.`;
@@ -1617,7 +1716,12 @@ export class OverlayBar {
 
       const summary = summarizeAdds(results);
       if (summary.succeeded.length > 0) {
-        await this.persistLastUsedSelection(selectedCollections.map(collection => collection.slug));
+        const slugsToRemember = summary.succeeded
+          .map(result => result.collectionSlug)
+          .filter(slug => slug.trim().length > 0);
+        if (slugsToRemember.length > 0) {
+          await this.persistLastUsedSelection(slugsToRemember);
+        }
       }
 
       this.ensureProgressIndicator().setPhase(summary.failed.length > 0 ? 'checking' : 'success');
@@ -1657,6 +1761,20 @@ export class OverlayBar {
       this.captureState.isSubmitting = false;
       this.actionButton?.setBusy(false);
     }
+  }
+
+  private resolveSubmittedQuoteIdForCollections(
+    response: { quoteId?: string },
+  ): { quoteId: string; error?: string } {
+    const quoteId = response.quoteId?.trim();
+    if (quoteId) {
+      return { quoteId };
+    }
+
+    return {
+      quoteId: '',
+      error: 'API response omitted version_id.',
+    };
   }
 
   /**

@@ -94,7 +94,6 @@ export interface QuoteSubmissionResult {
   message: string;
   quoteId?: string;
   error?: string;
-  id?: string; // For Django response format
   collectionWarning?: string;
   action?: 'created' | 'sighting_added';
 }
@@ -136,7 +135,6 @@ export interface QuoteSubmissionRequest {
   platform_code: PlatformCode;
   likes_count?: number;
   quote_date?: string;
-  collection_id?: string;
   attribution_type: AttributionType;
   context?: string;
   image_urls?: string[];
@@ -146,12 +144,16 @@ export interface QuoteSubmissionRequest {
 }
 
 export interface QuoteSubmissionResponse {
-  status: 'created' | 'sighting_added' | 'version_created';
-  quote_id: string;
-  version_id: number;
-  sighting_id?: number;
-  similarity?: number;
-  message?: string;
+  action: 'created' | 'sighting_added' | 'version_added';
+  message: string;
+  quote: {
+    short_code?: string;
+    web_url?: string | null;
+  };
+  version_id?: string | number | null;
+  sighting_id?: number | null;
+  similarity_score?: number;
+  language_detection?: Record<string, unknown>;
 }
 
 export interface DuplicateCheckRequest {

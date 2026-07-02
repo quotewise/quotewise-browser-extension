@@ -45,9 +45,9 @@ describe('overlay controls', () => {
     expect(styleText).toContain('button:focus-visible');
 
     expect(refresh?.tagName).toBe('BUTTON');
-    expect(refresh?.getAttribute('aria-label')).toBe('Refresh tweet capture');
+    expect(refresh?.getAttribute('aria-label')).toBe('Refresh capture and collections');
     expect(close?.tagName).toBe('BUTTON');
-    expect(close?.getAttribute('aria-label')).toBe('Close capture tray');
+    expect(close?.getAttribute('aria-label')).toBe('Close capture tray (Esc)');
 
     close?.focus();
     expect(shadow?.activeElement).toBe(close);

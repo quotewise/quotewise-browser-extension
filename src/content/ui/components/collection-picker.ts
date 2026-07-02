@@ -89,9 +89,8 @@ export class CollectionPicker {
     const wrapper = this.createWrapper();
     const status = document.createElement('span');
     status.className = 'collection-picker-status';
-    status.textContent = "Couldn't load your collections.";
+    status.textContent = "Couldn't load your collections. Use Refresh above.";
     wrapper.appendChild(status);
-    wrapper.appendChild(this.createRefreshButton());
     this.container.appendChild(wrapper);
   }
 
@@ -105,7 +104,6 @@ export class CollectionPicker {
     label.className = 'collection-picker-label';
     label.textContent = this.label;
     header.appendChild(label);
-    header.appendChild(this.createRefreshButton());
     wrapper.appendChild(header);
 
     if (this.alreadyIn.length > 0) {
@@ -131,7 +129,14 @@ export class CollectionPicker {
     list.setAttribute('role', 'group');
     list.setAttribute('aria-label', this.label);
 
-    for (const collection of this.available) {
+    // Checked collections (seeded last-used/default) render first so they stay
+    // visible at the top of the capped, scrollable list. Render-time only — the
+    // checkbox change handler does not reorder, to avoid jarring reflow on click.
+    const ordered = [
+      ...this.available.filter(collection => this.selected.has(collection.slug)),
+      ...this.available.filter(collection => !this.selected.has(collection.slug)),
+    ];
+    for (const collection of ordered) {
       list.appendChild(this.renderCollectionRow(collection));
     }
 
@@ -143,18 +148,6 @@ export class CollectionPicker {
     const wrapper = document.createElement('div');
     wrapper.className = 'collection-picker';
     return wrapper;
-  }
-
-  private createRefreshButton(): HTMLButtonElement {
-    const refresh = document.createElement('button');
-    refresh.type = 'button';
-    refresh.className = 'collection-picker-refresh';
-    refresh.textContent = 'Refresh';
-    refresh.setAttribute('aria-label', 'Refresh collections');
-    refresh.addEventListener('click', () => {
-      void this.refresh();
-    });
-    return refresh;
   }
 
   private renderCollectionRow(collection: Collection): HTMLElement {
@@ -177,6 +170,7 @@ export class CollectionPicker {
 
     const text = document.createElement('span');
     text.textContent = collection.name;
+    text.title = collection.name;
 
     label.appendChild(input);
     label.appendChild(text);
