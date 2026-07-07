@@ -257,5 +257,5 @@ Fight entropy. Leave the codebase better than you found it.
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:
-`specs/009-collection-picker/plan.md`
+`specs/010-multi-passage-capture/plan.md`
 <!-- SPECKIT END -->

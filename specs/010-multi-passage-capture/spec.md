@@ -8,6 +8,14 @@
 
 **Input**: User description: "Once we have captured a full-post quote, or a section of a longer post, we no longer have the option to capture a different section in the same post. Consider how to add this, what workflows/notifications/edge-case checks are needed, and what we show the user when a Sighting URL has multiple different captured quotes within it."
 
+## Clarifications
+
+### Session 2026-07-02
+
+- Q: Scope of the "passages captured from this post" panel + toolbar badge count (US2) — the shared corpus (all users' captures at the URL) or the current user's captures only? → A: **Global** (shared corpus). The panel and count show every distinct passage captured at the URL by any user, using the shipped ADR-0007 response as-is. Per-user ownership labeling ("N passages, M yours") is deferred to a future enhancement (bead `qw-fcqd`, needs an additive backend ownership field).
+- Q: How does the client decide the current selection is "already captured this passage" (block) vs a new passage (allow)? → A: **Normalized text match** — compare the selection against each returned passage after trimming, collapsing internal whitespace, and applying Unicode NFKC (mirrors the backend's `text_hash` normalization). Block on normalized equality; otherwise treat it as a new passage. The backend stays idempotent if a true duplicate slips through.
+- Q: How does a user initiate capturing another passage — a persistent "capture another" button after each capture, or selection-driven? → A: **Selection-driven and contextual** (not a persistent button — that would disrupt the ~99% single-capture case). A new selection on a post whose URL already has a capture is the trigger: once the tray runs its logic it (1) notifies the user the post already has a captured quote, and (2) frames the action as adding another passage. Posts with no prior captures keep the current single-capture flow unchanged.
+
 ## User Scenarios & Testing *(mandatory)*
 
 A single post — a long tweet, a thread, or an X Article — often contains more than one
@@ -27,8 +35,10 @@ A user has already captured one passage (or the full text) from a post. They not
 quotable line in the same post, open the overlay again (or stay in it), highlight the new line,
 and submit it as its own quote. The overlay recognizes that this selection is *new text* — even
 though the post's URL already has a capture — and lets them submit, rather than blocking with
-"Already Captured." After submitting, they can immediately capture yet another passage without
-leaving the page.
+"Already Captured." Because most posts yield only a single quote, the extension adds no persistent
+"capture another" control to that common flow; instead, a new selection on a post that already has
+a capture is what surfaces a notice ("this post already has a captured quote") and reframes the
+action as adding another passage.
 
 **Why this priority**: This is the core gap and the entire reason for the feature — without it,
 the multi-passage story does not exist. It is independently valuable and ships against the live
@@ -45,10 +55,10 @@ this passage."
 1. **Given** a post whose URL already has one captured passage, **When** the user selects a
    different, non-overlapping line of the same post, **Then** the overlay treats it as a new
    quote and enables Submit (not "Already Captured").
-2. **Given** the user has just submitted a passage, **When** they choose "Capture another
-   passage," **Then** the overlay stays open, clears the previous selection and its submit/
-   preview/duplicate state, keeps the already-resolved originator, and prompts for a new
-   selection.
+2. **Given** a post whose URL already has a captured passage, **When** the user makes a new,
+   distinct selection, **Then** the overlay notifies them that the post already has a captured
+   quote and frames the submit action as adding another passage (e.g. "Capture another passage"),
+   reusing the already-resolved author without a reload.
 3. **Given** the user re-selects text that exactly matches a passage already captured from this
    post, **When** the duplicate check resolves, **Then** the overlay shows "Already captured
    this passage" with a link to view that quote, and Submit is disabled for that selection.
@@ -114,8 +124,10 @@ toolbar icon shows the count.
 - **Unauthenticated / low-confidence extraction / unreadable post**: existing gates apply first;
   multi-passage capture never overrides the login requirement or the "couldn't read this reliably"
   refusal.
-- **Collection destinations (spec 009)**: each passage is its own new quote and gets its own
-  per-capture collection picker; choosing collections for one passage does not carry to the next.
+- **Collection destinations (spec 009)**: each passage is its own new quote with its own per-capture
+  collection picker, seeded by spec 009's normal precedence (last-used → default → blank) — so a
+  second passage in the same session is pre-seeded with the last-used set and remains editable per
+  passage. No multi-passage-specific collection behavior is added.
 
 ## Requirements *(mandatory)*
 
@@ -129,17 +141,22 @@ toolbar icon shows the count.
 - **FR-002**: The extension MUST treat the "already captured" block as **text-scoped** (this exact
   passage is already captured) rather than **URL-scoped** (this post has any prior capture). A
   post having prior captures MUST NOT by itself disable submission of a new, distinct selection.
-- **FR-003**: When the current selection exactly matches a passage already captured at this URL,
-  the extension MUST indicate "already captured this passage," offer a link to view that quote,
-  and MUST NOT submit it as a new quote.
-- **FR-004**: After a passage is submitted, the extension MUST offer a way to capture another
-  passage from the same post without reloading the page or losing the resolved author. Choosing it
-  MUST reset only the selection and its submit/preview/duplicate state, preserving the
-  already-resolved originator for the post.
-- **FR-005**: While the overlay is open on a post, changing the on-page text selection MUST update
-  the previewed passage and its duplicate status live, so the user can move between passages
-  without reopening the overlay. This live behavior MUST apply to ordinary posts, not only long
-  articles.
+- **FR-003**: When the current selection matches a passage already captured at this URL — compared
+  after **normalization** (trim, collapse internal whitespace, Unicode NFKC; mirroring the backend's
+  `text_hash`) — the extension MUST indicate "already captured this passage," offer a link to view
+  that quote, and MUST NOT submit it as a new quote.
+- **FR-004**: Capturing an additional passage MUST be **selection-driven**, not a persistent
+  control: the extension MUST NOT add a "capture another" affordance to the normal flow, and a post
+  with **no** prior captures MUST keep the current single-capture experience unchanged. When the
+  user makes a new selection on a post whose URL already has one or more captured passages, and that
+  selection is a new passage (normalized-distinct per FR-003), the extension MUST (a) notify the
+  user that the post already has a captured quote, and (b) present the submit action with
+  intent-revealing copy (e.g. "Capture another passage" / "Add this passage"). Capturing another
+  MUST reuse the already-resolved author and MUST NOT require reloading the page.
+- **FR-005**: A change in the on-page text selection MUST re-run the passage/duplicate check for the
+  new selection and update the notice and submit-action label accordingly — whether the selection is
+  first evaluated when the overlay opens or changed while the overlay is open. This selection-driven
+  re-check MUST apply to ordinary posts, not only long articles.
 - **FR-006**: The exact text of each passage MUST be shown to the user before submission, and the
   extension MUST NOT expose an editable quote-text field (capture integrity is unchanged; a
   passage is a verbatim excerpt only).
@@ -151,8 +168,11 @@ toolbar icon shows the count.
 
 - **FR-008**: When a post's URL has one or more captured passages, the overlay MUST show how many
   passages exist and MUST list each as a short verbatim snippet linked to its quote on Quotewise.
+  The count and list are **global** — every distinct passage captured at the URL by any user (the
+  shared corpus), not scoped to the current user. Per-user ownership labeling ("N passages, M yours")
+  is out of scope here (future enhancement — bead `qw-fcqd`).
 - **FR-009**: The toolbar action icon MUST convey that a post has captured passages and reflect the
-  count, distinct from the "new quote" and single-capture presentations.
+  **global** distinct-passage count, distinct from the "new quote" and single-capture presentations.
 - **FR-010**: After a successful capture, the extension MUST refresh (not reuse stale) the cached
   duplicate/passage status for the post so the count, the passages panel, and the toolbar icon
   reflect the newly added passage.
@@ -171,13 +191,15 @@ toolbar icon shows the count.
 ### Key Entities *(include if feature involves data)*
 
 - **Passage**: A contiguous, verbatim excerpt of a post's text selected by the user (or the whole
-  post text when nothing is selected). Identity is the passage's text; there are no offsets or
-  anchors. A passage becomes one quote.
+  post text when nothing is selected). Identity is the passage's text compared **normalized** (trim,
+  collapsed whitespace, NFKC — matching the backend's dedup); there are no offsets or anchors. A
+  passage becomes one quote.
 - **Post / Sighting URL**: The source URL where passages are observed. One URL may hold many
   distinct passages (quotes); one quote may be sighted at many URLs. The URL is not a unique key
   for a quote.
-- **Passage set for a URL**: The collection of distinct quotes recorded at a given source URL,
-  each with its text and a link — the basis for the count, the passages panel, and the icon badge.
+- **Passage set for a URL**: The collection of **all** distinct quotes recorded at a given source
+  URL (the shared corpus — any user's captures), each with its text and a link — the basis for the
+  count, the passages panel, and the icon badge.
 
 ## Success Criteria *(mandatory)*
 
@@ -202,10 +224,10 @@ toolbar icon shows the count.
 - **Backend write path is ready as-is**: submitting distinct text at an already-captured URL (with
   no explicit link-to-existing intent) already creates a distinct quote + sighting; identical text
   is idempotent. No backend write change is assumed (verified against the sibling backend).
-- **Backend read path requires an additive change (ADR-0007)**: the current duplicate-check
-  response returns at most one prior sighting for a URL and no quote text, which is insufficient to
-  render an accurate passages panel/count. US2 assumes a backend change that delivers *all* distinct
-  quotes for a sighting URL (each with text + link). US1 does not depend on this.
+- **Backend read path delivered (ADR-0007)**: `check_duplicate` now returns *all* distinct quotes
+  for a sighting URL — each with text and a `short_code`/`web_url` link — plus a top-level
+  `existing_sightings_total` (list capped at 50). Implemented and deploying to production 2026-07-02
+  (bead `qw-1jzc`). US2 consumes this; the list is global (not user-scoped). US1 does not depend on it.
 - **A passage is verbatim excerpt text only** — no start/end offsets or DOM anchors are stored;
   text identity is sufficient because the backend deduplicates on normalized text + originator.
 - **Same author across passages**: all passages from one post share the post's originator, so the
@@ -215,9 +237,10 @@ toolbar icon shows the count.
 
 ## Dependencies
 
-- **ADR-0007 (new)** — backend read path: deliver all distinct quotes for a given sighting URL
-  (each with text + link). Blocks US2 only. To be authored under `docs/server-launch-adrs/` and
-  tracked as a bead labeled `chrome-ext,django-api`.
+- **ADR-0007** — backend read path: deliver all distinct quotes for a given sighting URL (each with
+  text + link + `existing_sightings_total`). **Implemented and deploying to production (2026-07-02;
+  bead `qw-1jzc`)** — US2 is no longer backend-blocked. The list is global (all users' captures);
+  per-user ownership labeling is a future enhancement (bead `qw-fcqd`).
 - **Spec 009 (collection picker)** — composes per passage; must remain functional per-capture.
 - **Spec 006 / ADR-0002 (sighting vs variant)** — the near-match path a near-identical passage
   routes through.
@@ -227,6 +250,9 @@ toolbar icon shows the count.
 
 - Editing, merging, splitting, or deleting existing passages/quotes from the overlay.
 - Any offset/anchor/highlight-persistence model for passages (text identity only).
+- Per-user ownership labeling of the passages panel/count ("M of N are yours") — the panel is global
+  for this spec; ownership labeling is a future enhancement (bead `qw-fcqd`, needs an additive
+  backend ownership field).
 - Capturing passages across *different* posts/URLs in one action.
 - Backend changes to the write/dedup path (none are needed).
 - Cross-device or historical listing of a user's passages beyond what a post's URL surfaces.
