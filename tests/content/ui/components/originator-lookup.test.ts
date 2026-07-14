@@ -349,6 +349,39 @@ describe('OriginatorLookup', () => {
     expect(outcome.createUrl).toBe('https://quotewise.io/create?handle=nobody');
   });
 
+  it('bypasses a fresh preloaded not-found result when force-refreshing', async () => {
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue({
+      preloadedOriginator: {
+        handle: 'nobody',
+        originator: null,
+        create_url: 'https://quotewise.io/create?handle=nobody',
+        timestamp: Date.now() - 5000,
+      },
+    });
+    sendMessage.mockResolvedValue({
+      success: true,
+      found: true,
+      originator: mockOriginator,
+    });
+
+    const outcome = await lookup.lookup(
+      'Nobody',
+      'https://x.com/nobody/status/123',
+      'twitter',
+      true,
+    );
+
+    expect(sendMessage).toHaveBeenCalledWith({
+      type: 'LOOKUP_ORIGINATOR_BY_HANDLE',
+      data: {
+        handle: 'Nobody',
+        platform: 'twitter',
+        source_url: 'https://x.com/nobody/status/123',
+      },
+    });
+    expect(outcome).toMatchObject({ status: 'found', originator: mockOriginator });
+  });
+
   it('renders a fallback create link when preloaded not-found omits create_url', async () => {
     (chrome.storage.local.get as jest.Mock).mockResolvedValue({
       preloadedOriginator: {

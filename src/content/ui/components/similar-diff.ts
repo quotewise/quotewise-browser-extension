@@ -28,7 +28,7 @@ export function buildSimilarMatchView(
   capturedText: string,
   tweetDate?: string | null,
 ): SimilarMatchView | null {
-  if (classifyMatchResolution(result) !== 'similar') {
+  if (classifyMatchResolution(result, capturedText) !== 'similar') {
     return null;
   }
 

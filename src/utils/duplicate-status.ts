@@ -1,4 +1,5 @@
 import type { DuplicateCheckResult } from '../types/api';
+import { normalizeQuoteText } from './quote-text';
 
 type SightingStatus = 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
 
@@ -19,25 +20,63 @@ export interface DuplicateSightingMatch {
 }
 
 export interface DuplicateSightingInput {
-  existing_sightings_for_url?: Array<unknown>;
+  existing_sightings_for_url?: unknown;
   matches?: DuplicateSightingMatch[];
 }
 
-export function classifyDuplicateSighting(result?: DuplicateSightingInput | null): DuplicateSightingState {
+export interface MatchedUrlSighting {
+  text: string;
+  short_code?: string | null;
+  web_url?: string | null;
+  [key: string]: unknown;
+}
+
+export function matchedSightingForText(
+  result?: { existing_sightings_for_url?: unknown } | null,
+  currentText?: string,
+): MatchedUrlSighting | undefined {
+  const normalizedText = typeof currentText === 'string' ? normalizeQuoteText(currentText) : '';
+  if (!normalizedText || !Array.isArray(result?.existing_sightings_for_url)) return undefined;
+
+  return result.existing_sightings_for_url.find((entry): entry is MatchedUrlSighting => (
+    typeof entry === 'object' &&
+    entry !== null &&
+    typeof (entry as { text?: unknown }).text === 'string' &&
+    normalizeQuoteText((entry as { text: string }).text) === normalizedText
+  ));
+}
+
+export function passageCountForUrl(result?: DuplicateCheckResult | null): number | 'unknown' {
+  if (!result || typeof result !== 'object' || result.search_metadata?.error === true) {
+    return 'unknown';
+  }
+
+  if (Object.prototype.hasOwnProperty.call(result, 'existing_sightings_total')) {
+    return Number.isInteger(result.existing_sightings_total) && result.existing_sightings_total! >= 0
+      ? result.existing_sightings_total!
+      : 'unknown';
+  }
+
+  if (Object.prototype.hasOwnProperty.call(result, 'existing_sightings_for_url')) {
+    return Array.isArray(result.existing_sightings_for_url) && result.existing_sightings_for_url.length < 50
+      ? result.existing_sightings_for_url.length
+      : 'unknown';
+  }
+
+  return 0;
+}
+
+export function classifyDuplicateSighting(
+  result?: DuplicateSightingInput | null,
+  currentText?: string,
+): DuplicateSightingState {
   if (!result) return 'unknown';
 
-  if ((result.existing_sightings_for_url || []).length > 0) {
+  if (matchedSightingForText(result, currentText)) {
     return 'exact_sighting';
   }
 
-  const matches = result.matches || [];
-  if (matches.some(match => (
-    match.sighting_status === 'exact_url' ||
-    match.existing_sighting_for_this_url === true ||
-    match.match_source === 'url'
-  ))) {
-    return 'exact_sighting';
-  }
+  const matches = Array.isArray(result.matches) ? result.matches : [];
 
   if (matches.some(match => match.sighting_status === 'has_platform_sighting')) {
     return 'same_platform_sighting';
@@ -69,7 +108,10 @@ export function getMatchForDuplicateSightingState<T extends DuplicateSightingMat
   }
 }
 
-export function classifyMatchResolution(result?: DuplicateCheckResult | null): MatchResolution {
+export function classifyMatchResolution(
+  result?: DuplicateCheckResult | null,
+  currentText?: string,
+): MatchResolution {
   if (!result) return 'none';
 
   if (result.search_metadata?.error === true) {
@@ -77,15 +119,8 @@ export function classifyMatchResolution(result?: DuplicateCheckResult | null): M
   }
 
   const match = Array.isArray(result.matches) ? result.matches[0] : undefined;
-  const hasExactUrlSighting = (result.existing_sightings_for_url || []).length > 0;
 
-  if (
-    hasExactUrlSighting ||
-    match?.existing_sighting_for_this_url === true ||
-    match?.match_source === 'url' ||
-    match?.match_class === 'exact' ||
-    match?.sighting_status === 'exact_url'
-  ) {
+  if (matchedSightingForText(result, currentText)) {
     return 'exact';
   }
 

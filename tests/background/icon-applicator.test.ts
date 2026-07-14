@@ -74,10 +74,25 @@ describe('applyIconPresentation', () => {
     });
   });
 
-  it('never calls setBadgeTextColor', async () => {
-    await applyIconPresentation(presentation({ badgeText: '★', scope: 'tab' }), 3);
+  it('applies a saturated count badge with exact accessible title and contrast colors', async () => {
+    const countPresentation = {
+      ...presentation({
+        badgeColor: '#009E73',
+        scope: 'tab',
+      }),
+      badgeTextColor: '#FFFFFF',
+      passageCount: 12,
+    } as IconPresentation;
 
-    expect(chrome.action.setBadgeTextColor).not.toHaveBeenCalled();
+    await applyIconPresentation(countPresentation, 3);
+
+    expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 3, text: '9+' });
+    expect(chrome.action.setBadgeTextColor).toHaveBeenCalledWith({ tabId: 3, color: '#FFFFFF' });
+    expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({ tabId: 3, color: '#009E73' });
+    expect(chrome.action.setTitle).toHaveBeenCalledWith({
+      tabId: 3,
+      title: 'Quotewise — 12 passages captured from this post',
+    });
   });
 
   it('still applies the badge and title when Chrome cannot fetch icon artwork', async () => {

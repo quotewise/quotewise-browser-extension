@@ -89,6 +89,7 @@ export class OverlayBar {
   private unsubscribeSettings: (() => void) | null = null;
   private selectionChangeHandler: (() => void) | null = null;
   private selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private duplicateCheckSequence = 0;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private captureState: CaptureState = {
     expanded: false,
@@ -318,6 +319,43 @@ export class OverlayBar {
           background: transparent;
           padding: 0;
           color: #94a3b8;
+          font-weight: 600;
+        }
+        .duplicate-badge.has-passages {
+          display: flex;
+          flex-wrap: wrap;
+          max-width: min(520px, 48vw);
+          border-radius: 8px;
+          white-space: normal;
+        }
+        .passages-panel {
+          flex: 1 0 100%;
+          min-width: 0;
+          color: #dbeafe;
+          font-size: 11px;
+          font-weight: 400;
+          line-height: 15px;
+        }
+        .passages-heading {
+          margin-top: 2px;
+          font-weight: 700;
+        }
+        .passages-list {
+          display: grid;
+          gap: 2px;
+          margin: 4px 0 0;
+          padding-left: 18px;
+        }
+        .passages-list li,
+        .passages-list a {
+          overflow-wrap: anywhere;
+        }
+        .passages-list a {
+          color: #bfdbfe;
+        }
+        .passages-more {
+          margin-top: 3px;
+          color: #bfdbfe;
           font-weight: 600;
         }
         .text {
@@ -560,10 +598,15 @@ export class OverlayBar {
           text-decoration: line-through;
           opacity: 0.86;
         }
-        .similar-diff a {
-          color: #93c5fd;
-          white-space: nowrap;
-        }
+            .similar-diff a {
+              color: #93c5fd;
+              white-space: nowrap;
+            }
+            .duplicate-badge a:focus-visible,
+            .similar-diff a:focus-visible {
+              outline: 2px solid #93c5fd;
+              outline-offset: 2px;
+            }
         .sighting-hint {
           color: #facc15;
           font-size: 12px;
@@ -816,6 +859,17 @@ export class OverlayBar {
 
     if (
       this.captureState.expanded &&
+      this.captureState.lookupResult === 'not_found'
+    ) {
+      const handle = this.currentData ? captureAuthorHandle(this.currentData) : null;
+      if (handle) {
+        await this.lookupOriginator(handle, true);
+      }
+      return;
+    }
+
+    if (
+      this.captureState.expanded &&
       this.captureState.originator?.unique_id &&
       !this.requiresSelection()
     ) {
@@ -882,11 +936,8 @@ export class OverlayBar {
 
     await this.mountNewCaptureCollectionPicker();
 
-    // On articles, watch for the user highlighting a passage after opening so
-    // capture enables live without reopening the bar.
-    if (captureRequiresSelection(this.currentData)) {
-      this.startSelectionWatcher();
-    }
+    // A new in-post selection can start another passage on any post type.
+    this.startSelectionWatcher();
 
     // Start originator lookup by handle
     const handle = captureAuthorHandle(this.currentData);
@@ -1027,14 +1078,15 @@ export class OverlayBar {
   private matchForExistingCollectionAdd(
     result: DuplicateCheckResult,
   ): DuplicateCheckResult['matches'][number] | null {
-    const sightingState = classifyDuplicateSighting(result);
+    const currentText = this.captureState.selectedText || this.currentData?.text;
+    const sightingState = classifyDuplicateSighting(result, currentText);
     if (sightingState === 'exact_sighting' || sightingState === 'same_platform_sighting') {
       return getMatchForDuplicateSightingState(result, sightingState) || null;
     }
 
     if (
       result.in_quotewise &&
-      classifyMatchResolution(result) !== 'conflict' &&
+      classifyMatchResolution(result, currentText) !== 'conflict' &&
       Array.isArray(result.matches) &&
       result.matches.length > 0
     ) {
@@ -1221,7 +1273,7 @@ export class OverlayBar {
   }
 
   /**
-   * Watch the page selection while the bar is open on an article, so a quote
+   * Watch the page selection while the bar is open, so a quote
    * captured by highlighting after opening fills in live (no reopen needed).
    * Debounced because selectionchange fires continuously during a drag.
    */
@@ -1255,7 +1307,20 @@ export class OverlayBar {
     if (!selection || selection === this.captureState.selectedText) return;
     this.captureState.selectedText = selection;
     this.updateQuotePreview();
-    this.updateSubmitButton(!!this.captureState.originator);
+    this.recheckCurrentSelection();
+  }
+
+  private recheckCurrentSelection(): void {
+    if (this.captureState.duplicateResult) {
+      this.updateDuplicateInfo({ result: this.captureState.duplicateResult });
+    } else {
+      this.updateSubmitButton(!!this.captureState.originator);
+    }
+
+    const originatorSlug = this.captureState.originator?.unique_id;
+    if (originatorSlug && !this.requiresSelection()) {
+      void this.checkDuplicate(originatorSlug);
+    }
   }
 
   /**
@@ -1273,6 +1338,8 @@ export class OverlayBar {
           // On articles, clearing the selection re-blocks submit.
           if (this.requiresSelection()) {
             this.updateSubmitButton(false);
+          } else {
+            this.recheckCurrentSelection();
           }
         },
       });
@@ -1302,6 +1369,7 @@ export class OverlayBar {
 
   private collapseCapture(): void {
     this.stopSelectionWatcher();
+    this.duplicateCheckSequence += 1;
     if (!this.shadow) return;
 
     const captureRow = this.shadow.getElementById('capture-row');
@@ -1330,7 +1398,7 @@ export class OverlayBar {
     this.syncSourcePreview();
   }
 
-  private async lookupOriginator(handle: string): Promise<void> {
+  private async lookupOriginator(handle: string, forceRefresh = false): Promise<void> {
     // Lazily create the OriginatorLookup component
     if (!this.originatorLookup) {
       const infoEl = this.shadow?.getElementById('originator-info');
@@ -1345,7 +1413,7 @@ export class OverlayBar {
     try {
       const sourceUrl = this.currentData ? captureSourceUrl(this.currentData) : undefined;
       const platform = this.currentData ? capturePlatform(this.currentData) : 'twitter';
-      const outcome = await this.originatorLookup.lookup(handle, sourceUrl, platform);
+      const outcome = await this.originatorLookup.lookup(handle, sourceUrl, platform, forceRefresh);
 
       this.captureState.lookupResult = outcome.status;
 
@@ -1366,6 +1434,7 @@ export class OverlayBar {
             this.captureState.isCheckingDuplicate = false;
             this.captureState.duplicateResult = result;
             this.updateDuplicateInfo({ result });
+            void this.checkDuplicate(outcome.originator.unique_id);
           } else {
             this.checkDuplicate(outcome.originator.unique_id);
           }
@@ -1402,7 +1471,8 @@ export class OverlayBar {
 
     // Block submission when this URL or another sighting on the same platform is already captured.
     const duplicateResult = this.captureState.duplicateResult;
-    const matchResolution = classifyMatchResolution(duplicateResult);
+    const quoteText = this.captureState.selectedText || this.currentData.text;
+    const matchResolution = classifyMatchResolution(duplicateResult, quoteText);
     if (matchResolution === 'couldnt_verify') {
       this.updateSubmitButton(false, "Couldn't Verify");
       return;
@@ -1412,7 +1482,7 @@ export class OverlayBar {
       return;
     }
 
-    const sightingState = classifyDuplicateSighting(duplicateResult);
+    const sightingState = classifyDuplicateSighting(duplicateResult, quoteText);
     if (sightingState === 'exact_sighting') {
       // Submission should already be blocked via UI, but double-check here
       this.updateSubmitButton(false, 'Already Captured');
@@ -1434,8 +1504,6 @@ export class OverlayBar {
     this.updateSubmitButton(false, 'Submitting...');
     this.actionButton?.setBusy(true);
 
-    // Use selected text if available, otherwise full tweet text
-    const quoteText = this.captureState.selectedText || this.currentData.text;
     const settingsLoad = this.loadSettings();
     await this.waitForVisibleSubmitPhase();
     await settingsLoad;
@@ -1903,9 +1971,12 @@ export class OverlayBar {
   private async checkDuplicate(originatorSlug: string): Promise<void> {
     if (!this.currentData?.text) return;
 
+    const checkSequence = ++this.duplicateCheckSequence;
+    const hasCurrentResult = this.captureState.duplicateResult !== null;
     this.captureState.isCheckingDuplicate = true;
-    this.captureState.duplicateResult = null;
-    this.updateDuplicateInfo({ checking: true });
+    if (!hasCurrentResult) {
+      this.updateDuplicateInfo({ checking: true });
+    }
 
     const quoteText = this.captureState.selectedText || this.currentData.text;
     const sourceUrl = captureSourceUrl(this.currentData);
@@ -1922,6 +1993,12 @@ export class OverlayBar {
         }
       });
 
+      const currentText = this.captureState.selectedText || this.currentData?.text || '';
+      const currentUrl = this.currentData ? captureSourceUrl(this.currentData) : '';
+      if (checkSequence !== this.duplicateCheckSequence || quoteText !== currentText || sourceUrl !== currentUrl) {
+        return;
+      }
+
       if (response.success && response.result) {
         this.captureState.duplicateResult = response.result as DuplicateCheckResult;
         this.updateDuplicateInfo({ result: this.captureState.duplicateResult });
@@ -1930,11 +2007,14 @@ export class OverlayBar {
         this.updateDuplicateInfo(null);
       }
     } catch (error) {
+      if (checkSequence !== this.duplicateCheckSequence) return;
       // Silently fail - duplicate check is informational only
       console.warn('Duplicate check failed:', error);
       this.updateDuplicateInfo(null);
     } finally {
-      this.captureState.isCheckingDuplicate = false;
+      if (checkSequence === this.duplicateCheckSequence) {
+        this.captureState.isCheckingDuplicate = false;
+      }
     }
   }
 
@@ -1948,7 +2028,7 @@ export class OverlayBar {
 
     // Lazily create the badge container and component
     if (!this.duplicateBadgeContainer) {
-      this.duplicateBadgeContainer = document.createElement('span');
+      this.duplicateBadgeContainer = document.createElement('div');
       this.duplicateBadgeContainer.className = 'duplicate-badge';
       quotePreviewRow.querySelector('.section.center')?.appendChild(this.duplicateBadgeContainer);
     }

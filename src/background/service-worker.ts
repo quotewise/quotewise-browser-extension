@@ -3555,7 +3555,6 @@ async function checkQuoteCollectionStatus(
           data: {
             handle,
             platform,
-            text: postData.text,
             source_url: sourceUrl
           }
         },

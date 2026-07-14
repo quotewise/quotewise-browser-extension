@@ -76,6 +76,8 @@ Quotes you capture go into the public Quotewise database, not a private personal
 
 A free Quotewise account is required. Sign-in is handled through OAuth — no passwords are entered into the extension, and the extension does not read your browser cookies or access any page content outside the specific post you choose to capture.
 
+To preload duplicate status on a supported X post before you click the toolbar, the extension sends only the public author handle and source post URL (which contains the tweet ID), plus the fixed platform value "twitter." It does not send quote text, display name, engagement counts, or other post content during this automatic check.
+
 When you open the collection picker or collection settings, the extension fetches your existing Quotewise collection names so you can choose where to file a quote. That list is cached briefly in Chrome local storage for speed, and the slugs for your most recently used collection set are stored in synced extension settings so future captures can be pre-selected. These collection caches/settings are cleared when you log out, enable Private mode, or choose Clear my data.
 
 For full details on how data is handled, see quotewise.io/privacy.
@@ -150,3 +152,6 @@ disclose public publication + AWS sub-processors + curation).
 | Homepage URL | ⚙️ quotewise.io now; dedicated page later |
 | Support URL | ✅ |
 | Privacy policy URL | ✅ |
+
+**External dashboard sync required:** the store-listing maintainer must copy the automatic-preflight
+disclosure above into the live Chrome Web Store listing when this version is submitted.

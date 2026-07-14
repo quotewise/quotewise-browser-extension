@@ -76,7 +76,11 @@ export interface DuplicateCheckResult {
     id: number;
     quote_id: string;
     source_url: string;
+    text?: string;
+    short_code?: string | null;
+    web_url?: string | null;
   }>;
+  existing_sightings_total?: number;
   reasoning: string;
   search_metadata: {
     originator_scoped?: boolean;
