@@ -2,6 +2,7 @@ import { cleanUrl, debugLog, extractTextContent, parseNumber, sendMessageToBackg
 import type { ExtensionMessage, TwitterData } from '../../types';
 import { MessageType } from '../../types';
 import type { PlatformAdapter } from '../types';
+import { TWITTER_DOM_SELECTORS } from './selectors';
 
 const TWEET_PATH_REGEX = /\/status\/\d+/;
 
@@ -259,16 +260,9 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     // Get the tweet ID from the current URL - this is the tweet we want to capture
     const urlTweetId = this.extractTweetIdFromUrl(urlOverride ?? window.location.href);
 
-    const selectors = [
-      'article[data-testid="tweet"]',
-      'article[role="article"]',
-      'div[data-testid="tweet"]',
-      '[data-testid="primaryColumn"] article'
-    ];
-
     // Collect all unique candidate articles
     const allArticles: HTMLElement[] = [];
-    for (const selector of selectors) {
+    for (const selector of TWITTER_DOM_SELECTORS.articleCandidates) {
       document.querySelectorAll(selector).forEach(el => {
         if (!allArticles.includes(el as HTMLElement)) {
           allArticles.push(el as HTMLElement);
@@ -361,14 +355,14 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
    */
   private extractTweetIdFromArticleElement(article: Element): string | null {
     // Try to get tweet ID from the timestamp link within the article
-    const timeLink = article.querySelector('a[href*="/status/"] time')?.parentElement as HTMLAnchorElement | null;
+    const timeLink = article.querySelector(TWITTER_DOM_SELECTORS.statusTimeLink)?.parentElement as HTMLAnchorElement | null;
     if (timeLink?.href) {
       const match = timeLink.href.match(/status\/(\d+)/);
       if (match) return match[1];
     }
 
     // Also try other links that might contain the tweet status URL
-    const statusLinks = article.querySelectorAll('a[href*="/status/"]');
+    const statusLinks = article.querySelectorAll(TWITTER_DOM_SELECTORS.statusLink);
     for (const link of statusLinks) {
       const href = (link as HTMLAnchorElement).href;
       // Skip links to quoted tweets or other embedded content
@@ -382,7 +376,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
 
   private extractTweetText(article: Element): string | null {
     // Canonical tweet-text container (normal tweets): trust it when present.
-    const primary = article.querySelector('[data-testid="tweetText"]');
+    const primary = article.querySelector(TWITTER_DOM_SELECTORS.tweetText);
     if (primary) {
       const text = extractTextContent(primary);
       if (text) return text;
@@ -393,9 +387,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     // the generic fallbacks below cannot reach it. The rich-text view is an
     // ancestor of the per-block longform component, so it is matched first in
     // document order and yields the full body.
-    const articleBody = article.querySelector(
-      '[data-testid="twitterArticleRichTextView"], [data-testid="longformRichTextComponent"]'
-    );
+    const articleBody = article.querySelector(TWITTER_DOM_SELECTORS.articleBody);
     if (articleBody) {
       const text = extractTextContent(articleBody);
       if (text) return text;
@@ -454,7 +446,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
       avatarUrl: undefined as string | undefined
     };
 
-    const userLink = article.querySelector('[data-testid="User-Name"] a[href*="/"]') as HTMLAnchorElement | null;
+    const userLink = article.querySelector(TWITTER_DOM_SELECTORS.authorLink) as HTMLAnchorElement | null;
     if (userLink?.href) {
       const handle = this.extractHandleFromHref(userLink.href);
       if (handle) {
@@ -647,8 +639,6 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
    * should require an explicit text selection instead of grabbing the whole body.
    */
   private detectArticle(article: Element): boolean {
-    return !!article.querySelector(
-      '[data-testid="twitterArticleReadView"], [data-testid="twitterArticleRichTextView"], [data-testid="longformRichTextComponent"]'
-    );
+    return !!article.querySelector(TWITTER_DOM_SELECTORS.articleMarkers);
   }
 }

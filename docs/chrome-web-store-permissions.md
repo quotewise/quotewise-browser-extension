@@ -9,7 +9,9 @@ Relates: pre-ship review item #2 (`README-pre-ship-review.md`), beads `qw-o6aj`,
 ## Single purpose
 
 Capture a quote from a social post the user is viewing and save it to their Quotewise library
-with attribution. The extension acts only when the user explicitly triggers a capture.
+with attribution. Saving happens only after explicit user confirmation. On supported X post pages,
+an automatic duplicate-status preload sends only `{handle, source_url, platform: "twitter"}` (the
+tweet ID is contained in `source_url`) and sends no quote text or other post content.
 
 ## Permission justifications
 
@@ -26,7 +28,7 @@ with attribution. The extension acts only when the user explicitly triggers a ca
 | Host pattern | Justification |
 |---|---|
 | `https://*.quotewise.io/*` | Call the Quotewise API to authenticate, run duplicate checks, and submit the captured quote/sighting. |
-| `https://twitter.com/*`, `https://x.com/*` | Read the focal tweet the user chose to capture (text, author, link, public engagement counts). |
+| `https://twitter.com/*`, `https://x.com/*` | Read the focal tweet. Before toolbar action, transmit only its public author handle and source URL/tweet ID plus fixed platform value for duplicate status; transmit quote text and public engagement counts only during confirmed capture. |
 | `https://threads.com/*`, `https://*.threads.com/*`, `https://threads.net/*`, `https://*.threads.net/*` | Read the focal Threads post. Subdomain patterns cover the `www.threads.com` host that live permalinks redirect to. |
 | `https://bsky.app/*` | Read the focal Bluesky post. |
 | `https://substack.com/*`, `https://*.substack.com/*` | Read the focal Substack Note. |
@@ -34,7 +36,8 @@ with attribution. The extension acts only when the user explicitly triggers a ca
 ## Data use (must match the hosted privacy policy at https://quotewise.io/privacy/)
 
 - **Website content** — the quote text, author/handle, link, and public engagement counts of the
-  post the user chooses to capture.
+  post the user chooses to capture. Automatic X duplicate preflight is bounded to the handle,
+  source URL/tweet ID, and fixed `twitter` platform value; it sends no quote text.
 - **Authentication information** — OAuth tokens stored locally to keep the user signed in.
 - **Not collected:** "user activity" in the CWS sense (no clickstream, scroll, or keystroke
   monitoring). Limited Use applies: data is not sold, not used for ads, and not used for any

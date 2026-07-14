@@ -3,6 +3,8 @@ import {
   classifyDuplicateSighting,
   getMatchForDuplicateSightingState,
   mapRecommendationToQuoteStatus,
+  matchedSightingForText,
+  passageCountForUrl,
 } from '../../src/utils/duplicate-status';
 import type { DuplicateCheckResult } from '../../src/types/api';
 import {
@@ -31,26 +33,28 @@ function duplicate(
 }
 
 describe('duplicate sighting status', () => {
-  it('classifies existing URL sightings as exact sighting', () => {
+  it('classifies only the normalized matching URL passage as exact sighting', () => {
     expect(classifyDuplicateSighting({
-      existing_sightings_for_url: [{ id: 1 }],
+      existing_sightings_for_url: [{ text: '  Same\npassage ' }],
       matches: [],
-    })).toBe('exact_sighting');
+    }, 'Same passage')).toBe('exact_sighting');
+
+    expect(classifyDuplicateSighting({
+      existing_sightings_for_url: [{ text: 'Existing passage' }],
+      matches: [],
+    }, 'Different passage')).not.toBe('exact_sighting');
   });
 
-  it('classifies exact_url matches as exact sighting', () => {
+  it('does not block from URL-only signals without matching text', () => {
     expect(classifyDuplicateSighting({
       matches: [{ sighting_status: 'exact_url' }],
-    })).toBe('exact_sighting');
-  });
-
-  it('classifies URL-source matches as exact sighting', () => {
+    }, 'Different passage')).not.toBe('exact_sighting');
     expect(classifyDuplicateSighting({
       matches: [{ match_source: 'url' }],
-    })).toBe('exact_sighting');
+    }, 'Different passage')).not.toBe('exact_sighting');
     expect(classifyDuplicateSighting({
       matches: [{ existing_sighting_for_this_url: true }],
-    })).toBe('exact_sighting');
+    }, 'Different passage')).not.toBe('exact_sighting');
   });
 
   it('classifies has_platform_sighting matches as same-platform sighting', () => {
@@ -65,14 +69,60 @@ describe('duplicate sighting status', () => {
     })).toBe('other_platform_sighting');
   });
 
-  it('prioritizes exact over same-platform and other-platform matches', () => {
+  it('prioritizes a matching passage over same-platform and other-platform matches', () => {
     expect(classifyDuplicateSighting({
+      existing_sightings_for_url: [{ text: 'Exact passage' }],
       matches: [
         { sighting_status: 'no_platform_sighting' },
         { sighting_status: 'has_platform_sighting' },
         { sighting_status: 'exact_url' },
       ],
-    })).toBe('exact_sighting');
+    }, 'Exact passage')).toBe('exact_sighting');
+  });
+
+  it('keeps omitted and empty current text non-blocking', () => {
+    const result = { existing_sightings_for_url: [{ text: 'Existing passage' }] };
+
+    expect(classifyDuplicateSighting(result)).not.toBe('exact_sighting');
+    expect(classifyDuplicateSighting(result, '   ')).not.toBe('exact_sighting');
+  });
+
+  it('resolves the matching passage rather than the first URL entry', () => {
+    const result = duplicate('duplicate', {
+      existing_sightings_for_url: [
+        {
+          id: 1,
+          quote_id: 'first',
+          source_url: 'https://x.com/test/status/1',
+          text: 'First passage',
+          web_url: 'https://quotewise.io/q/first/',
+        },
+        {
+          id: 2,
+          quote_id: 'matched',
+          source_url: 'https://x.com/test/status/1',
+          text: '  Matched\n passage ',
+          web_url: 'https://quotewise.io/q/matched/',
+        },
+      ],
+    });
+
+    expect(matchedSightingForText(result, 'Matched passage')?.web_url)
+      .toBe('https://quotewise.io/q/matched/');
+  });
+
+  it('ignores malformed passage lists and non-string text', () => {
+    const malformedList = duplicate('duplicate', {
+      existing_sightings_for_url: 'not-an-array' as never,
+    });
+    const malformedEntry = duplicate('duplicate', {
+      existing_sightings_for_url: [{ text: 42 }] as never,
+    });
+
+    expect(() => matchedSightingForText(malformedList, '42')).not.toThrow();
+    expect(() => matchedSightingForText(malformedEntry, '42')).not.toThrow();
+    expect(matchedSightingForText(malformedList, '42')).toBeUndefined();
+    expect(matchedSightingForText(malformedEntry, '42')).toBeUndefined();
   });
 
   it('returns unknown when no explicit sighting status is available', () => {
@@ -199,31 +249,52 @@ describe('match resolution classifier', () => {
     }))).toBe('couldnt_verify');
 
     expect(classifyMatchResolution(exactDuplicateResult({
+      existing_sightings_for_url: [{
+        id: 1,
+        quote_id: '101',
+        source_url: 'https://x.com/test/status/1',
+        text: 'Exact passage',
+      }],
       matches: [duplicateMatch({
         match_source: 'url',
         match_class: 'conflict',
         existing_sighting_for_this_url: true,
       })],
-    }))).toBe('exact');
+    }), 'Exact passage')).toBe('exact');
 
     expect(classifyMatchResolution(conflictDuplicateResult())).toBe('conflict');
     expect(classifyMatchResolution(similarDuplicateResult())).toBe('similar');
     expect(classifyMatchResolution(duplicateResult())).toBe('none');
   });
 
-  it('treats URL and exact sighting signals as exact', () => {
+  it('does not treat URL-only signals as exact without a matching passage', () => {
     expect(classifyMatchResolution(duplicateResult({
       matches: [duplicateMatch({ match_source: 'url' })],
-    }))).toBe('exact');
+    }), 'Different passage')).toBe('none');
     expect(classifyMatchResolution(duplicateResult({
       matches: [duplicateMatch({ match_class: 'exact' })],
-    }))).toBe('exact');
+    }), 'Different passage')).toBe('none');
     expect(classifyMatchResolution(duplicateResult({
       matches: [duplicateMatch({ sighting_status: 'exact_url' })],
-    }))).toBe('exact');
+    }), 'Different passage')).toBe('none');
     expect(classifyMatchResolution(duplicateResult({
       matches: [duplicateMatch({ existing_sighting_for_this_url: true })],
-    }))).toBe('exact');
+    }), 'Different passage')).toBe('none');
+  });
+
+  it('requires current text before returning exact', () => {
+    const result = duplicateResult({
+      existing_sightings_for_url: [{
+        id: 1,
+        quote_id: '101',
+        source_url: 'https://x.com/test/status/1',
+        text: 'Exact passage',
+      }],
+    });
+
+    expect(classifyMatchResolution(result, ' Exact\npassage ')).toBe('exact');
+    expect(classifyMatchResolution(result)).not.toBe('exact');
+    expect(classifyMatchResolution(result, '   ')).not.toBe('exact');
   });
 
   it('maps legacy near-match recommendations to similar when match_class is absent', () => {
@@ -247,5 +318,44 @@ describe('match resolution classifier', () => {
       recommendation: 'banana',
       search_metadata: null,
     } as unknown as DuplicateCheckResult)).toBe('none');
+  });
+});
+
+describe('passage count for URL', () => {
+  const entries = (count: number) => Array.from({ length: count }, (_, index) => ({
+    id: index,
+    quote_id: String(index),
+    source_url: 'https://x.com/test/status/1',
+  }));
+
+  it('implements the canonical count truth table', () => {
+    expect(passageCountForUrl(null)).toBe('unknown');
+    expect(passageCountForUrl(duplicate('new_quote', {
+      search_metadata: { error: true },
+    }))).toBe('unknown');
+    expect(passageCountForUrl(duplicate('duplicate', {
+      existing_sightings_total: 12,
+      existing_sightings_for_url: 'malformed' as never,
+    }))).toBe(12);
+
+    for (const malformedTotal of [-1, 1.5, Number.NaN, '2']) {
+      expect(passageCountForUrl(duplicate('duplicate', {
+        existing_sightings_total: malformedTotal as never,
+      }))).toBe('unknown');
+    }
+
+    expect(passageCountForUrl(duplicate('duplicate', {
+      existing_sightings_for_url: entries(0),
+    }))).toBe(0);
+    expect(passageCountForUrl(duplicate('duplicate', {
+      existing_sightings_for_url: entries(49),
+    }))).toBe(49);
+    expect(passageCountForUrl(duplicate('duplicate', {
+      existing_sightings_for_url: entries(50),
+    }))).toBe('unknown');
+    expect(passageCountForUrl(duplicate('duplicate', {
+      existing_sightings_for_url: {} as never,
+    }))).toBe('unknown');
+    expect(passageCountForUrl(duplicate('new_quote'))).toBe(0);
   });
 });

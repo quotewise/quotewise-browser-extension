@@ -401,6 +401,7 @@ export class ApiHandler {
     ): Promise<void> {
         try {
             const { handle, platform, text, source_url } = message.data || {};
+            const duplicateProbe = typeof text === 'string' ? text : source_url;
 
             if (!handle || typeof handle !== 'string') {
                 sendResponse({
@@ -410,7 +411,7 @@ export class ApiHandler {
                 return;
             }
 
-            if (!text || typeof text !== 'string') {
+            if (!duplicateProbe || typeof duplicateProbe !== 'string') {
                 sendResponse({
                     success: false,
                     error: 'Quote text is required'
@@ -421,7 +422,7 @@ export class ApiHandler {
             const result = await this.apiClient.preflightCheck(
                 handle,
                 typeof platform === 'string' ? platform : 'twitter',
-                text,
+                duplicateProbe,
                 typeof source_url === 'string' ? source_url : ''
             );
 

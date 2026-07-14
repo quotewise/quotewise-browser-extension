@@ -5,6 +5,7 @@ export interface IconStateConfig {
   iconVariant: IconVariant;
   badgeText: string;
   badgeColor: string;
+  badgeTextColor?: string;
   title: string;
   scope: IconScope;
 }
@@ -92,6 +93,21 @@ export const ICON_STATES = {
     badgeText: '=',
     badgeColor: '#009E73',
     title: 'Exact match already in Quotewise',
+    scope: 'tab',
+  },
+  Count: {
+    iconVariant: 'color',
+    badgeText: '2',
+    badgeColor: '#009E73',
+    badgeTextColor: '#FFFFFF',
+    title: 'Quotewise — 2 passages captured from this post',
+    scope: 'tab',
+  },
+  HasCaptures: {
+    iconVariant: 'color',
+    badgeText: '=',
+    badgeColor: '#009E73',
+    title: 'Quotewise — this post has captured passages',
     scope: 'tab',
   },
   Similar: {

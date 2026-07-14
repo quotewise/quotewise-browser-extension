@@ -1,0 +1,58 @@
+name: X DOM drift check
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run live or verify the drift-reporting path
+        type: choice
+        options: [live, simulate-drift]
+        default: live
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
+      - id: drift
+        continue-on-error: true
+        env:
+          DRIFT_MODE: ${{ inputs.mode }}
+        run: bun scripts/drift-check.mjs
+      - name: Open or update DOM drift issue
+        if: steps.drift.outputs.classification == 'drift'
+        uses: actions/github-script@v7
+        env:
+          DRIFT_REPORT: ${{ steps.drift.outputs.report }}
+        with:
+          script: |
+            const title = 'X DOM selectors have drifted';
+            const label = 'dom-drift';
+            const { owner, repo } = context.repo;
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: label });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.issues.createLabel({ owner, repo, name: label, color: 'D93F0B' });
+            }
+            const open = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: label, per_page: 100,
+            });
+            const existing = open.find(issue => !issue.pull_request && issue.title === title);
+            const body = `Scheduled selector check reported drift.\n\n${process.env.DRIFT_REPORT}`;
+            if (existing) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
+            } else {
+              await github.rest.issues.create({ owner, repo, title, body, labels: [label] });
+            }

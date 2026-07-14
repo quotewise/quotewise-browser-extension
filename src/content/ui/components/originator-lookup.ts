@@ -30,12 +30,17 @@ export class OriginatorLookup {
     private sendMessage: MessageSender
   ) {}
 
-  async lookup(handle: string, currentUrl?: string, platform: CapturePlatform = 'twitter'): Promise<LookupOutcome> {
+  async lookup(
+    handle: string,
+    currentUrl?: string,
+    platform: CapturePlatform = 'twitter',
+    forceRefresh = false,
+  ): Promise<LookupOutcome> {
     const normalizedHandle = handle.toLowerCase();
     const cacheKey = `${platform}:${normalizedHandle}`;
 
     // 1. Check in-memory cache (only successful lookups are cached)
-    const cached = this.cache.get(cacheKey);
+    const cached = forceRefresh ? undefined : this.cache.get(cacheKey);
     if (cached) {
       this.notifyLookupStatus(handle, currentUrl, platform, true);
       this.renderFound(cached, handle, true);
@@ -60,6 +65,7 @@ export class OriginatorLookup {
       const preloadedHandleMatches = preloaded?.handle === normalizedHandle || preloaded?.handle === cacheKey;
       const preloadedPlatformMatches = !preloaded?.platform || preloaded.platform === platform;
       if (
+        !forceRefresh &&
         preloaded &&
         preloadedHandleMatches &&
         preloadedPlatformMatches &&

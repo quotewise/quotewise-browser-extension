@@ -15,6 +15,7 @@ jest.mock('../../src/api/quotewise-api', () => ({
     searchOriginators: jest.fn(),
     checkQuoteDuplicate: jest.fn(),
     submitQuote: jest.fn(),
+    preflightCheck: jest.fn(),
     listCollections: jest.fn(),
     addQuoteToCollection: jest.fn()
   }))
@@ -164,6 +165,34 @@ describe('ApiHandler', () => {
         result: mockDuplicateResult,
         ...mockDuplicateResult
       });
+    });
+
+    test('uses source_url as the identifier-only automatic preflight probe', async () => {
+      mockApiClient.preflightCheck.mockResolvedValue({
+        originator: { found: false, handle: 'test', platform: 'twitter' },
+        duplicate_check: {
+          recommendation: 'new_quote',
+          confidence: 1,
+          in_quotewise: false,
+          matches: [],
+          reasoning: 'No match',
+          search_metadata: {},
+        },
+      });
+      const sourceUrl = 'https://x.com/test/status/123';
+
+      await apiHandler.handleMessage({
+        type: 'PREFLIGHT_CHECK' as MessageType,
+        data: { handle: 'test', platform: 'twitter', source_url: sourceUrl },
+      }, {} as chrome.runtime.MessageSender, mockSendResponse);
+
+      expect(mockApiClient.preflightCheck).toHaveBeenCalledWith(
+        'test',
+        'twitter',
+        sourceUrl,
+        sourceUrl,
+      );
+      expect(mockSendResponse).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     });
 
     test('handles SUBMIT_QUOTE message', async () => {

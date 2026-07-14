@@ -104,6 +104,7 @@ function resetChromeMocks(): void {
   chrome.action.setIcon = jest.fn().mockResolvedValue(undefined);
   chrome.action.setTitle = jest.fn().mockResolvedValue(undefined);
   chrome.action.setBadgeText = jest.fn().mockResolvedValue(undefined);
+  chrome.action.setBadgeTextColor = jest.fn().mockResolvedValue(undefined);
   chrome.action.setBadgeBackgroundColor = jest.fn().mockResolvedValue(undefined);
   chrome.alarms.create = jest.fn();
   chrome.alarms.clear = jest.fn().mockResolvedValue(true);
@@ -292,6 +293,105 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         inQuotewise: true,
       }),
     }));
+  });
+
+  it('applies the cached URL passage count from automatic preflight to the tab icon', async () => {
+    const countedResult: DuplicateCheckResult = {
+      ...duplicateResult,
+      existing_sightings_total: 12,
+      existing_sightings_for_url: [],
+    };
+    mockServiceWorkerDependencies({
+      handleMessage: jest.fn(async (message, _sender, sendResponse) => {
+        if (message.type === 'PREFLIGHT_CHECK') {
+          sendResponse({
+            success: true,
+            originator: { found: false },
+            duplicate_check: countedResult,
+          });
+        }
+      }),
+    });
+    chrome.tabs.sendMessage = jest.fn().mockResolvedValue({ success: true, data: tweetData });
+
+    await import('../../src/background/service-worker');
+
+    const listener = (chrome.tabs.onUpdated.addListener as jest.Mock).mock.calls[0][0];
+    await listener(22, { status: 'complete' }, { id: 22, url: tweetData.url });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '9+' });
+    expect(chrome.action.setBadgeTextColor).toHaveBeenLastCalledWith({
+      tabId: 22,
+      color: '#FFFFFF',
+    });
+    expect(chrome.action.setBadgeBackgroundColor).toHaveBeenLastCalledWith({
+      tabId: 22,
+      color: '#009E73',
+    });
+    expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
+      tabId: 22,
+      title: 'Quotewise — 12 passages captured from this post',
+    });
+  });
+
+  it('keeps automatic preflight identifier-only and explicit preflight text-bearing', async () => {
+    const handleMessage = jest.fn(async (message, _sender, sendResponse) => {
+      if (message.type === 'PREFLIGHT_CHECK') {
+        sendResponse({
+          success: true,
+          originator: { found: false },
+          duplicate_check: newQuoteResult,
+        });
+      }
+    });
+    mockServiceWorkerDependencies({ handleMessage });
+    chrome.tabs.sendMessage = jest.fn().mockResolvedValue({ success: true, data: tweetData });
+    chrome.tabs.get = jest.fn().mockResolvedValue({ id: 22, url: tweetData.url });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const tabListener = (chrome.tabs.onUpdated.addListener as jest.Mock).mock.calls[0][0];
+    await tabListener(22, { status: 'complete' }, { id: 22, url: tweetData.url });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const automatic = handleMessage.mock.calls
+      .map(([message]) => message)
+      .find(message => message.type === MessageType.PREFLIGHT_CHECK);
+    expect(automatic?.data).toEqual({
+      handle: 'test',
+      platform: 'twitter',
+      source_url: tweetData.url,
+    });
+
+    const runtimeListener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+    runtimeListener(
+      {
+        type: MessageType.CHECK_NOW,
+        data: {
+          handle: 'test',
+          platform: 'twitter',
+          source_url: tweetData.url,
+          text: 'Explicit selection',
+        },
+      },
+      { tab: { id: 22, url: tweetData.url } },
+      jest.fn(),
+    );
+    await flushPromises(10);
+
+    const explicit = handleMessage.mock.calls
+      .map(([message]) => message)
+      .filter(message => message.type === MessageType.PREFLIGHT_CHECK)[1];
+    expect(explicit?.data).toEqual({
+      handle: 'test',
+      platform: 'twitter',
+      source_url: tweetData.url,
+      text: 'Explicit selection',
+    });
   });
 
   it('dedupes same-tweet automatic extraction from tab update and history navigation bursts', async () => {
