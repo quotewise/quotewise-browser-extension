@@ -16,6 +16,14 @@
 - Q: How does the client decide the current selection is "already captured this passage" (block) vs a new passage (allow)? → A: **Normalized text match** — compare the selection against each returned passage after trimming, collapsing internal whitespace, and applying Unicode NFKC (mirrors the backend's `text_hash` normalization). Block on normalized equality; otherwise treat it as a new passage. The backend stays idempotent if a true duplicate slips through.
 - Q: How does a user initiate capturing another passage — a persistent "capture another" button after each capture, or selection-driven? → A: **Selection-driven and contextual** (not a persistent button — that would disrupt the ~99% single-capture case). A new selection on a post whose URL already has a capture is the trigger: once the tray runs its logic it (1) notifies the user the post already has a captured quote, and (2) frames the action as adding another passage. Posts with no prior captures keep the current single-capture flow unchanged.
 
+### Session 2026-07-13 (analyze remediation)
+
+- Q: The automatic (page-load) preflight currently sends the full quote text before any explicit user action — outside Article II's identifier-only pre-action bound. Fix in this feature or defer? → A: **Fix here.** The passive preflight becomes **identifier-only** — tweet/user data within the `{tweet_id, handle, source_url}` allowlist (implemented as `{handle, source_url}` plus the fixed non-identifying `platform` constant); the quote-text send is removed. Exact per-passage identity is resolved **locally** by comparing the normalized selection against the URL-keyed `existing_sightings_for_url[]` list (returned from `source_url` alone). Text-bearing fuzzy/similar matching moves to **explicit selection** (an allowed explicit action). This **corrects a pre-existing Article II violation**; accepted tradeoff — the passive icon no longer shows pre-click fuzzy "similar" state (only URL-exact), resolving the moment the overlay opens or the user selects.
+- Q: At exactly one captured passage, does the toolbar badge show "1" or a generic glyph? → A: **Numeric badge only at ≥ 2.** A single captured passage keeps today's generic collected/exists glyph; the number means "more than one passage here."
+- Q: The backend returns at most 50 passages per URL; how do the panel and match behave beyond that? → A: **Qualify to the returned set.** Local exact-match runs against the full returned set (≤ 50); a match beyond it falls through to submit and is idempotently deduped by the backend. The panel **displays up to 5** snippets + a "+N more" indicator (from `existing_sightings_total`) — the display cap (5) is distinct from the backend return cap (50).
+- Q: How is the new selection-watcher-on-all-posts behavior tested (Constitution VI.2)? → A: **Captured-HTML fixtures** for an ordinary post and an X Article characterize the in-post-content selection guard and the Shadow-DOM passages panel — not jsdom stubs alone.
+- Q: The server kill-switch/min-version signal (V.2) and the scheduled live-X drift-check workflow (VI.3) don't exist in the repo. In scope? → A (revised 2026-07-13, analyze pass 2): **Split.** VI.3 (drift check) is **built here** (plan Phase 6; bead `qw-5j5nj`). V.2 (kill-switch) is deferred as a **standing tracked requirement** via **constitution amendment v1.1.0** (bead `qw-g4s31`) — not a per-feature gate until first shipped.
+
 ## User Scenarios & Testing *(mandatory)*
 
 A single post — a long tweet, a thread, or an X Article — often contains more than one
@@ -89,11 +97,13 @@ toolbar icon shows the count.
 **Acceptance Scenarios**:
 
 1. **Given** a post whose URL has multiple captured passages, **When** the overlay opens, **Then**
-   it shows a "N passages captured from this post" panel listing each passage as a short snippet
-   linked to its quote on Quotewise.
-2. **Given** a post whose URL has one or more captured passages, **When** the toolbar action icon
+   it shows a "N passages captured from this post" panel listing **up to five** passages as short
+   snippets, each linked to its quote on Quotewise when the link is valid, plus a "+N more" indicator
+   when more passages exist than are shown.
+2. **Given** a post whose URL has **two or more** captured passages, **When** the toolbar action icon
    resolves, **Then** it conveys the count (e.g. a small number on the badge) rather than a single
-   generic "captured" glyph.
+   generic "captured" glyph. A post with **exactly one** captured passage keeps the existing generic
+   "captured" glyph (no number); the numeric badge starts at 2.
 3. **Given** the user captures an additional passage, **When** the capture succeeds, **Then** the
    passage count and the panel update to include it (the previously cached duplicate status is
    refreshed, not stale) on the next open.
@@ -109,7 +119,10 @@ toolbar icon shows the count.
   is idempotent (re-confirms the sighting; no duplicate quote is created), so no data is corrupted.
 - **Overlapping / near-identical selection** (e.g. the new selection contains or overlaps an
   existing passage but is not identical): treated as a *similar* match and routed through the
-  existing sighting-vs-variant choice (spec 006), not silently duplicated or silently blocked.
+  existing sighting-vs-variant choice (spec 006), not silently duplicated or silently blocked. The
+  near-match classifier MUST receive the current selection text so a near-identical selection at an
+  **already-known URL** reaches the similar/variant path rather than being pre-empted as URL-exact
+  (the short-circuit removed in FR-002).
 - **Full post first, then a sub-section** (and the reverse): different text → a distinct new
   passage. Capturing a sub-section of an already-captured full post is allowed.
 - **Empty or whitespace-only selection**: falls back to the full post text (existing selection
@@ -135,16 +148,23 @@ toolbar icon shows the count.
 
 #### Capturing additional passages (US1)
 
-- **FR-001**: The extension MUST allow a user to capture a passage whose text differs from every
-  passage already captured at the same source URL, even when that URL already has one or more
-  captures.
-- **FR-002**: The extension MUST treat the "already captured" block as **text-scoped** (this exact
-  passage is already captured) rather than **URL-scoped** (this post has any prior capture). A
-  post having prior captures MUST NOT by itself disable submission of a new, distinct selection.
-- **FR-003**: When the current selection matches a passage already captured at this URL — compared
-  after **normalization** (trim, collapse internal whitespace, Unicode NFKC; mirroring the backend's
-  `text_hash`) — the extension MUST indicate "already captured this passage," offer a link to view
-  that quote, and MUST NOT submit it as a new quote.
+- **FR-001**: The extension MUST allow a user to capture a passage whose normalized text differs
+  from every passage already captured at the same source URL, even when that URL already has one or
+  more captures.
+- **FR-002** *(anti-regression to FR-001)*: The "already captured" block is **text-scoped**, never
+  **URL-scoped** — a post merely having prior captures MUST NOT disable a new, distinct selection. A
+  blocking decision MUST use the **resolved current text** — the selected excerpt, or the extracted
+  full-post text when nothing is selected — and is non-blocking **only when no text can be resolved at
+  all** (extraction unavailable/invalid), never merely because the URL has prior captures. The
+  URL-presence short-circuit that returned `exact_sighting` for any prior capture is removed.
+- **FR-003**: When the current selection matches a passage in the **returned set** of passages
+  captured at this URL — compared after **normalization** (trim, collapse internal whitespace,
+  Unicode NFKC; mirroring the backend's `text_hash`) — the extension MUST indicate "already captured
+  this passage," offer a link to view **that specific matched quote** (the `existing_sightings_for_url[]`
+  entry whose normalized text equals the selection — its validated `web_url`, not the first list
+  entry), and MUST NOT submit it as a new quote. The returned set is capped (see FR-008); a passage
+  beyond the returned set is not detectable client-side and falls through to submit, where the
+  backend deduplicates idempotently.
 - **FR-004**: Capturing an additional passage MUST be **selection-driven**, not a persistent
   control: the extension MUST NOT add a "capture another" affordance to the normal flow, and a post
   with **no** prior captures MUST keep the current single-capture experience unchanged. When the
@@ -156,7 +176,9 @@ toolbar icon shows the count.
 - **FR-005**: A change in the on-page text selection MUST re-run the passage/duplicate check for the
   new selection and update the notice and submit-action label accordingly — whether the selection is
   first evaluated when the overlay opens or changed while the overlay is open. This selection-driven
-  re-check MUST apply to ordinary posts, not only long articles.
+  re-check MUST apply to ordinary posts, not only long articles. Because the text-bearing fuzzy/similar
+  lookup is non-blocking, a response for a **superseded** selection MUST NOT overwrite the current
+  selection's state — the **newest selection wins** and stale responses are dropped.
 - **FR-006**: The exact text of each passage MUST be shown to the user before submission, and the
   extension MUST NOT expose an editable quote-text field (capture integrity is unchanged; a
   passage is a verbatim excerpt only).
@@ -167,18 +189,31 @@ toolbar icon shows the count.
 #### Surfacing multiple passages per post (US2)
 
 - **FR-008**: When a post's URL has one or more captured passages, the overlay MUST show how many
-  passages exist and MUST list each as a short verbatim snippet linked to its quote on Quotewise.
-  The count and list are **global** — every distinct passage captured at the URL by any user (the
-  shared corpus), not scoped to the current user. Per-user ownership labeling ("N passages, M yours")
-  is out of scope here (future enhancement — bead `qw-fcqd`).
-- **FR-009**: The toolbar action icon MUST convey that a post has captured passages and reflect the
-  **global** distinct-passage count, distinct from the "new quote" and single-capture presentations.
+  passages exist (from `existing_sightings_total`), **independent of the current selection's
+  new/already-captured classification** — the panel appears whenever the URL has captures. It MUST
+  display **up to 5** passages from the **returned set** (capped at 50 by the backend) as short
+  **verbatim** snippets (the original `text`; normalization is used only for identity matching, never
+  for display) — each **truncated to ~100 characters (by character count) with an ellipsis** and **linked to its
+  quote on Quotewise when the link is valid** — plus a **"+N more"** indicator when more passages
+  exist than are shown (N from `existing_sightings_total` minus the number shown). The count and list
+  are **global** — every distinct passage captured at the URL by any user (the shared corpus), not
+  scoped to the current user. Per-user ownership labeling ("N passages, M yours") is out of scope here
+  (future enhancement — bead `qw-fcqd`).
+- **FR-009**: The toolbar action icon MUST convey the **global** distinct-passage count as a numeric
+  badge **only when the count is ≥ 2**, distinct from the "new quote" and single-capture
+  presentations. A count of exactly **1** keeps the existing single-capture glyph (no number); a
+  count of **0** shows the "new" state. The badge **MAY saturate** (e.g. "9+") given its ~4-character
+  limit, **provided the accessible action title always states the exact count** in words. If the count
+  cannot be validated, the icon shows a neutral "has captures" state with **no number** (never a wrong
+  count).
 - **FR-010**: After a successful capture, the extension MUST refresh (not reuse stale) the cached
   duplicate/passage status for the post so the count, the passages panel, and the toolbar icon
   reflect the newly added passage.
 - **FR-011**: The passages panel and count MUST be accurate to the distinct quotes actually
-  recorded at the URL; if the underlying data cannot be obtained, the extension MUST degrade to a
-  neutral state (e.g. "this post already has captures") rather than showing a wrong count.
+  recorded at the URL. All consumed fields MUST be validated at runtime — arrays checked as arrays,
+  `existing_sightings_total` accepted only as a non-negative integer — and if the underlying data is
+  missing, malformed, or cannot be obtained, the extension MUST degrade to a **neutral state**
+  (e.g. "this post already has captures") rather than showing a wrong count or throwing.
 
 #### Cross-cutting
 
@@ -187,6 +222,18 @@ toolbar icon shows the count.
   controls MUST be keyboard-operable with ARIA labels.
 - **FR-013**: Multi-passage behavior MUST NOT override the login requirement, the low-confidence
   "couldn't read this reliably" refusal, or the privacy boundary on pre-action network calls.
+- **FR-014**: The **passive (page-load) preflight** MUST NOT include quote text or any tweet/user data
+  **beyond** `{handle, source_url}` (⊆ the Article II allowlist `{tweet_id, handle, source_url}`) —
+  that set is its entire tweet/user-data egress. The request also carries the fixed non-identifying `platform`
+  client constant (`"twitter"`), permitted per Art. II.1 (amendment v1.1.0) as a build constant that
+  carries no user information beyond what `source_url` already encodes. Exact per-passage
+  identification is performed **locally** against the URL-keyed `existing_sightings_for_url[]` list
+  (retrieved from `source_url` alone). Any **text-bearing** lookup (fuzzy/similar matching) MUST
+  occur only on an **explicit user action** (a text selection or the overlay opening), never during
+  passive preload. This **restores Article II compliance**: the automatic preflight previously sent
+  quote text (`text: postData.text`) before any explicit action; this feature removes it. Accepted
+  tradeoff — the passive toolbar icon reflects only URL-exact state (not fuzzy "similar") until the
+  user acts.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -210,10 +257,12 @@ toolbar icon shows the count.
 - **SC-002**: Re-selecting an already-captured passage results in a "already captured this passage"
   outcome 100% of the time it is detectable, and never silently creates a duplicate quote (the
   worst case is an idempotent no-op).
-- **SC-003**: When a post has multiple captured passages, the overlay shows the correct count and a
-  link to each passage; the toolbar icon reflects the count.
-- **SC-004**: Capturing an additional passage takes no more user steps than capturing the first
-  (select → submit → optionally "capture another").
+- **SC-003**: When a post has multiple captured passages, the overlay shows the correct count and
+  links to the **displayed** passages (up to five, each linked when valid, plus "+N more"); the
+  toolbar icon reflects the count (saturating at "9+", with the exact count in its accessible title).
+- **SC-004**: Capturing an additional passage takes no more user steps than capturing the first:
+  **select → submit**, where the submit button is relabeled "Capture another passage." No extra
+  interaction is added — there is no persistent "capture another" control (per FR-004).
 - **SC-005**: After adding a passage, the reflected count and passages panel are up to date on the
   next open (no stale "one fewer" state).
 - **SC-006**: No regression to first-capture behavior, capture-integrity gates, or the existing
@@ -227,7 +276,10 @@ toolbar icon shows the count.
 - **Backend read path delivered (ADR-0007)**: `check_duplicate` now returns *all* distinct quotes
   for a sighting URL — each with text and a `short_code`/`web_url` link — plus a top-level
   `existing_sightings_total` (list capped at 50). Implemented and deploying to production 2026-07-02
-  (bead `qw-1jzc`). US2 consumes this; the list is global (not user-scoped). US1 does not depend on it.
+  (bead `qw-1jzc`). The list is global (not user-scoped). **US1 depends on ADR-0007's response *text*
+  shape** — `existing_sightings_for_url[].text` is exactly what US1's local text-scoping compares the
+  selection against — but US1 does **not** depend on US2's presentation (panel/count/badge). US2
+  additionally consumes the count and link fields for its panel and badge.
 - **A passage is verbatim excerpt text only** — no start/end offsets or DOM anchors are stored;
   text identity is sufficient because the backend deduplicates on normalized text + originator.
 - **Same author across passages**: all passages from one post share the post's originator, so the
@@ -239,8 +291,10 @@ toolbar icon shows the count.
 
 - **ADR-0007** — backend read path: deliver all distinct quotes for a given sighting URL (each with
   text + link + `existing_sightings_total`). **Implemented and deploying to production (2026-07-02;
-  bead `qw-1jzc`)** — US2 is no longer backend-blocked. The list is global (all users' captures);
-  per-user ownership labeling is a future enhancement (bead `qw-fcqd`).
+  bead `qw-1jzc`)** — neither story is backend-blocked. **US1 depends on the `text` field** (its local
+  text-scoping compares the selection against `existing_sightings_for_url[].text`); **US2 depends on
+  the count and link fields** (panel + badge). The list is global (all users' captures); per-user
+  ownership labeling is a future enhancement (bead `qw-fcqd`).
 - **Spec 009 (collection picker)** — composes per passage; must remain functional per-capture.
 - **Spec 006 / ADR-0002 (sighting vs variant)** — the near-match path a near-identical passage
   routes through.
@@ -256,6 +310,10 @@ toolbar icon shows the count.
 - Capturing passages across *different* posts/URLs in one action.
 - Backend changes to the write/dedup path (none are needed).
 - Cross-device or historical listing of a user's passages beyond what a post's URL surfaces.
+- **Server kill-switch / minimum-version signal (Constitution V.2)** — a **standing tracked
+  requirement** per constitution amendment v1.1.0 (bead `qw-g4s31`); deferred, not built here.
+  *(The scheduled live-X drift check, Constitution VI.3, **is** built by this feature — see the plan's
+  Phase 6, bead `qw-5j5nj`.)*
 
 ## Constitution Notes
 
@@ -265,7 +323,22 @@ toolbar icon shows the count.
 - **Article VII (User Experience)**: New copy must be honest (no overstated counts/verification),
   status conveyed by glyph/text not color alone, controls keyboard-operable with ARIA labels; the
   overlay remains invited-only.
-- **Article II (Privacy)**: Refreshing passage status after a capture stays within the existing
-  pre-action egress bound; quote text still leaves only on explicit submit.
-- **Article V (Resilience)**: The passages panel/count MUST degrade to a neutral state on
-  unexpected or missing data rather than throwing.
+- **Article II (Privacy)**: **Strengthened.** The passive (page-load) preflight's tweet/user-data
+  egress becomes `{handle, source_url}` (⊆ the allowlist), plus the fixed non-identifying `platform`
+  client constant permitted per Art. II.1 (amendment v1.1.0); the quote-text send in the automatic
+  preflight is removed (FR-014). Exact per-passage matching runs **locally** against the URL-keyed
+  passage list; text-bearing (fuzzy) lookups occur only on explicit action. This **corrects a
+  pre-existing Article II violation** — the automatic preflight previously sent quote text before any
+  explicit action. Refreshing passage status after a capture stays within this pre-action bound; quote
+  text still leaves only on explicit action.
+- **Article V (Resilience)**: The passages panel/count MUST validate consumed fields at runtime
+  (arrays as arrays, `existing_sightings_total` as a non-negative integer) and degrade to a neutral
+  state on unexpected or missing data rather than throwing (FR-011).
+- **Article VI (Quality & Testing)**: Deterministic logic (normalize / classify / count /
+  badge-resolve) is developed test-first. The new selection-watcher-on-all-posts behavior and the
+  Shadow-DOM passages panel are characterized against **captured-HTML fixtures** — an ordinary post
+  and an X Article — per §2, not jsdom stubs alone.
+- **Article V.2 (kill-switch)**: deferred as a **standing tracked requirement** per constitution
+  amendment v1.1.0 (bead `qw-g4s31`) — not a per-feature gate until first shipped.
+- **Article VI.3 (live-X drift check)**: **built by this feature** (plan Phase 6, bead `qw-5j5nj`) —
+  a scheduled, non-blocking workflow that files a tracked issue on selector drift.

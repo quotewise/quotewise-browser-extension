@@ -19,6 +19,7 @@ bun run dev           # webpack watch build to dist/
 bun run test -- tests/utils/quote-text.test.ts            # normalizeQuoteText (NFKC + collapse + trim)
 bun run test -- tests/utils/duplicate-status.test.ts      # text-scoped classifier
 bun run test -- tests/background/icon-state-resolver.test.ts   # count badge state (≥2)
+bun run test -- tests/content/ui/components/duplicate-badge.test.ts  # panel (≤5 + "+N more"), fixture-backed
 bun run test                                              # full suite (regression)
 bun run type-check && bun run lint
 ```
@@ -30,7 +31,9 @@ Key unit assertions:
   regression that proves the URL-scoped short-circuit is gone.
 - **icon resolver**: `existing_sightings_total >= 2` ⇒ count badge state; `1` ⇒ single-capture glyph;
   `0` ⇒ new. Missing total ⇒ falls back to list length.
-- Selection-driven overlay tests use the existing `window.getSelection()` stub (see `tests/setup.ts`).
+- Selection-*value* tests use the existing `window.getSelection()` stub (`tests/setup.ts`); the
+  **in-post-content guard** (now on ordinary posts) and the passages **panel** are characterized
+  against **captured-HTML fixtures** in `tests/fixtures/` (ordinary post + X Article) — Art. VI.2 (C3).
 
 ## End-to-end (manual) — on a long tweet / thread / X Article
 
@@ -40,8 +43,9 @@ Key unit assertions:
    backend `action="created"` (a second distinct quote at the same URL).
 3. **Reopen, re-highlight passage #2.** ⇒ "Already captured this passage" + View; submit disabled.
    (Even if it slipped through, the backend returns idempotent `sighting_added` — no duplicate.)
-4. **US2 panel:** the overlay shows "N passages captured from this post" listing each passage
-   (snippet + working link to `web_url`).
+4. **US2 panel:** the overlay shows "N passages captured from this post" listing **up to 5** passages
+   (snippet + working link to `web_url`), with a "+N more" indicator when the URL has more than shown.
+   The "already captured this passage" View link opens the **matched** passage (not the first).
 5. **US2 badge:** the toolbar icon shows the count (e.g. `2`) once the post has ≥2 passages; hovering
    the icon reads "… N passages captured from this post" (screen-reader accessible title).
 6. **Common case unchanged:** on a post with **no** prior captures, the overlay behaves exactly as
@@ -52,5 +56,10 @@ Key unit assertions:
 - First-capture flow, similar/variant (spec 006) and attribution-conflict paths unchanged for
   single/zero-capture posts.
 - No new manifest permissions; `git diff manifest*.json` empty.
-- No new pre-action network call; badge count reads an existing preload response field.
+- **Passive preflight — no quote text, no tweet/user data beyond `{handle, source_url}` (Art. II fix):** capture the automatic (page-load)
+  preflight request (DevTools Network / preflight diagnostics) and confirm its body carries **no quote
+  text and no tweet/user data beyond `{handle, source_url}`**; the only other field is the fixed
+  `platform` constant (`"twitter"`), permitted per Art. II.1 (amendment v1.1.0). The badge
+  count reads a URL-derived field on the existing preload; the text-bearing fuzzy/similar lookup fires
+  only on explicit overlay open / selection (non-blocking — never delays the overlay).
 - `web_url` links only navigate on http/https (`safeHref`).

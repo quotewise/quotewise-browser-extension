@@ -15,6 +15,11 @@ selection text into `classifyDuplicateSighting` / `classifyMatchResolution`
 returned in `existing_sightings_for_url[]`. Block as `exact_sighting` only when the current
 selection normalizes-equal to an existing passage; when the URL has captures but the selection is
 new, return a non-blocking state that allows submit and drives the "adding another passage" copy.
+For an exact match, resolve the "view quote" link from **that matched entry's** validated `web_url`
+(the `existing_sightings_for_url[]` entry whose normalized text equals the selection), **not**
+`matches[0]` (G2). Matching runs against the **returned set** (backend-capped at 50); a selection
+matching a passage beyond the cap is not detectable client-side and falls through to submit, where
+the backend deduplicates idempotently.
 
 **Rationale:** The current block is the `existing_sightings_for_url.length > 0 → exact_sighting`
 short-circuit (`duplicate-status.ts:29`) and the mirror at `:80`. The backend write path already
@@ -79,17 +84,35 @@ and auto-resets when the tab closes.
 existing ✓/= state, so the count only adds information at ≥2. Longer badge text (e.g. "3 quotes") —
 rejected; ~4-char limit.
 
-## D5 — No new pre-action network egress (Privacy / Art. II)
+## D5 — Identifier-only passive preflight (Privacy / Art. II fix)
 
-**Decision:** Reuse the existing preflight/duplicate-check preload; the badge count and passages
-panel read the **new response fields** (`existing_sightings_total`, per-entry `text`/`web_url`)
-from calls the extension already makes. Add **no** new pre-action request and **no** new data to
-egress. After a successful capture, invalidate `preloadedDuplicateCheck` so the count/panel refresh
-on next resolution (FR-010).
+**Decision:** Make the **automatic (page-load) preflight** identifier-only. Remove
+`text: postData.text` from the `automatic-preflight` `PREFLIGHT_CHECK` payload
+(`service-worker.ts` ~L3558) so passive egress carries **no quote text / user content** — limited to
+`handle` + `source_url` plus the non-identifying `platform` constant (redundant with `source_url`),
+a subset of the Article II allowlist `{tweet_id, handle, source_url}`. The
+badge count and passages panel read the URL-derived response fields (`existing_sightings_total`,
+per-entry `text`/`web_url`) — these come back from `source_url` alone (ADR-0007), no text needed.
+US1's per-passage exact match runs **locally** against the returned `existing_sightings_for_url[]`.
+The **text-bearing** fuzzy/similarity lookup stays on the **explicit** overlay path
+(`overlay-bar.ts checkDuplicate` → `CHECK_DUPLICATE`, which already sends `text` at L1918) and the
+`explicit-duplicate-check` preflight site (~L3369, keeps `text`) — both are explicit user actions.
+After a successful capture, invalidate `preloadedDuplicateCheck` so the count/panel refresh (FR-010).
 
-**Rationale:** Art. II.1 bounds pre-action egress to `{tweet_id, handle, source_url}` + the existing
-preflight text; `existing_sightings_total` is URL-derived and independent of the text sent, so the
-count is correct regardless. No new egress means no privacy-policy delta for this feature.
+**Rationale:** Art. II.1 (line 112) bounds pre-action egress to `{tweet_id, handle, source_url}` and
+states quote **text** MUST leave only on an explicit action. The automatic preflight previously sent
+`postData.text` on page load — a **pre-existing Article II violation**. Since `existing_sightings_total`
+and the passage list are URL-derived, dropping the text costs nothing for US1's exact matching; it
+only removes passive **fuzzy** ("similar") state from the toolbar icon before the user acts —
+accepted tradeoff, and the fuzzy state resolves the instant the overlay opens or the user selects
+(an explicit action where text egress is permitted). This turns "no new egress" into a genuine
+**reduction** in egress and a privacy-policy-consistent fix.
+
+**Alternatives considered:** (a) Keep passive text for pre-click fuzzy icon + amend the constitution
+(interview option B) — rejected by the user; the feature doesn't need passive text and it exfiltrates
+content the server can't otherwise fetch for protected/login-walled posts. (b) Narrow amend: passive
+text only for public tweets (option C) — rejected; more code to thread a distinction the feature
+doesn't require.
 
 ## D6 — API drift tolerance for the new fields (Resilience / Art. V)
 
@@ -104,18 +127,25 @@ rather than throwing when `api.quotewise.io` shape shifts under an installed bui
 
 ## D7 — Test strategy for selection + classification (Quality / Art. VI)
 
-**Decision:** Deterministic logic — `normalizeQuoteText`, the text-scoped classifier, and the
-badge-count resolution in `icon-state-resolver.ts` — is developed **test-first** (Art. VI.1). For
-the selection-driven overlay behavior, drive tests via the repo's existing **`window.getSelection()`
-stub** pattern (see `tests/setup.ts` and existing `quote-preview` / `overlay-bar` selection tests)
-rather than real drag-selection.
+**Decision:** Split by what is under test:
+- **Deterministic logic** — `normalizeQuoteText`, the text-scoped classifier, the matched-link
+  resolver, and the badge-count resolution in `icon-state-resolver.ts` — is developed **test-first**
+  (Art. VI.1), driven by plain data (no DOM).
+- **DOM/Shadow-DOM behavior** — the `in-post-content` selection guard (now exercised on **ordinary
+  posts** for the first time, not just X Articles) and the Shadow-DOM passages panel — is
+  characterized against **captured-HTML fixtures**: one ordinary post and one X Article captured
+  from live X into `tests/fixtures/` (Art. VI.2). The pure selection-*text* value can still use the
+  existing `window.getSelection()` stub, but which container counts as "in-post content" is
+  DOM-structure-dependent and MUST be asserted against real captured markup.
 
-**Rationale (Context7 — `/jsdom/jsdom`):** Recent jsdom (v30, via `jest-environment-jsdom`)
-implements Selection (`setBaseAndExtent`, `selectAllChildren`, and `selectionchange` events), so
-programmatic selection is possible; but `Selection.toString()` of an arbitrary range has historically
-been incomplete, and the repo already stubs `window.getSelection()` for the existing
-`getPageSelection` tests. Following the established stub keeps the new tests deterministic and
-consistent. Verify the exact stub shape against `tests/setup.ts` before writing new tests.
+**Rationale:** Constitution VI.2 (line 244) mandates that DOM extraction and Shadow-DOM UI be tested
+via **characterization tests against captured HTML fixtures**, not red-first against live X. This
+feature newly runs the in-post-content guard on ordinary posts, whose DOM differs from Articles;
+a jsdom stub cannot catch a container-selector mismatch that a captured fixture would. This closes
+analyze finding C3. (Context7 — `/jsdom/jsdom`: jsdom v30 implements Selection APIs, but
+`Selection.toString()` over arbitrary ranges is unreliable, reinforcing fixture-based structural
+assertions over synthesized selection ranges.) Verify the stub shape against `tests/setup.ts`; add a
+small fixture-loader helper if none exists.
 
 ## D8 — Badge count plumbing (where the number comes from)
 
