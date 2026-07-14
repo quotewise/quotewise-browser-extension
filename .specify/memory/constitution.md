@@ -30,13 +30,25 @@ Deferred follow-ups (TODO):
 - TODO(cookies-permission): The `cookies` permission is declared in manifest.json /
   manifest.prod.json / manifest.dev.json but has zero usages in src/. Per Article III it MUST be
   removed. Tracked as the first action item under this constitution.
+
+Amendment v1.1.0 (2026-07-13) — MINOR. Gap: Article V.2 asserted an unconditional per-feature MUST
+for a server kill-switch / min-version signal that has never been implemented, so every feature spec
+failed the gate (surfaced during spec 010 analysis). Change: V.2's kill-switch is reclassified as a
+**standing requirement** — until first shipped, its absence is a sanctioned, debt-tracked deviation
+under Article X (bead `qw-g4s31`), not a per-feature blocker; a feature MUST NOT falsely claim it
+exists. It reverts to a hard gate once implemented. The VI.3 live-X drift check remains a hard
+requirement and is being satisfied concretely (spec 010, bead `qw-5j5nj`).
+Also, Article II.1 is clarified: the pre-action allowlist governs tweet/user-identifying **data**, and
+a fixed non-identifying client `platform` constant ('twitter') is permitted (it carries no user info,
+nothing beyond what `source_url` encodes). No user/tweet data is added to the egress bound. No other
+article changed; no template structure changed.
 -->
 
 # Quotewise Chrome Extension Constitution
 
-**Version**: 1.0.0
+**Version**: 1.1.0
 **Ratified**: 2026-06-04
-**Last Amended**: 2026-06-04
+**Last Amended**: 2026-07-13
 
 ---
 
@@ -111,7 +123,10 @@ over a confident guess.
   ON (preload enabled) but MUST be honored globally when disabled.
 - Pre-action network requests MUST be limited to public tweet identifiers — `{tweet_id, handle,
   source_url}`. Quote **text** and any **write** (submission) MUST occur only on an explicit user
-  action, never during passive preload.
+  action, never during passive preload. *(Amendment v1.1.0, 2026-07-13: this allowlist governs
+  tweet/user-identifying **data**. A fixed, non-identifying client build **constant** — the
+  `platform` discriminator, always `"twitter"` for this X-only extension — is not user/tweet data and
+  is permitted; it carries no information beyond what `source_url` already encodes.)*
 
 ### Section 2: Minimal Local Storage
 
@@ -129,7 +144,7 @@ over a confident guess.
 
 ### Gates:
 - [ ] A setting disables all pre-action network calls and is respected globally (II.1)
-- [ ] Pre-action egress contains only tweet_id/handle/source_url — never quote text or writes (II.1)
+- [ ] Pre-action egress of tweet/user data contains only tweet_id/handle/source_url (plus the fixed non-identifying `platform` client constant) — never quote text or writes (II.1)
 - [ ] Logout clears tokens + all user-identifying cache; a manual clear-data action does the same (II.2)
 - [ ] Storage TTLs are documented and tied to function, not arbitrary (II.2)
 
@@ -215,6 +230,10 @@ content-free telemetry, not user tracking.
 - A server-driven kill-switch / minimum-supported-version signal MUST be honored: a build the
   server marks as too old or known-bad MUST stop capturing and prompt the user to update. This is
   the emergency brake that backs Article I when a shipped version is discovered to capture badly.
+  *(Amendment v1.1.0, 2026-07-13: this mechanism has not yet shipped. Until it is first implemented
+  it is a **standing requirement** tracked as sanctioned debt under Article X's Deviation Process
+  (bead `qw-g4s31`), **not a per-feature blocking gate** — a feature MUST NOT falsely claim it
+  exists, but its absence alone does not block a feature. It reverts to a hard gate once shipped.)*
 
 ### Section 3: Platform Constraints (informational)
 
@@ -225,7 +244,7 @@ content-free telemetry, not user tracking.
 - [ ] No correctness-bearing state exists only in memory; caches are rebuildable (V.1)
 - [ ] Handlers are idempotent and survive mid-flight service-worker termination (V.1)
 - [ ] API client pins /v1/, ignores unknown fields, and degrades (not throws) on unexpected shapes (V.2)
-- [ ] A server kill-switch / min-version signal can disable capture in an installed build (V.2)
+- [ ] A server kill-switch / min-version signal can disable capture in an installed build — OR, until first shipped, its absence is recorded as the standing tracked deviation `qw-g4s31` (V.2; amendment v1.1.0)
 - [ ] `splitChunks: false` preserved; entry points bundle to single files (V.3)
 
 ---
@@ -375,4 +394,4 @@ Sync Impact Report. Constitution changes propagate to Spec Kit templates via
 
 ---
 
-**Version**: 1.0.0 | **Ratified**: 2026-06-04 | **Last Amended**: 2026-06-04
+**Version**: 1.1.0 | **Ratified**: 2026-06-04 | **Last Amended**: 2026-07-13

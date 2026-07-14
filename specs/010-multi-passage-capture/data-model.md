@@ -49,13 +49,18 @@ No new persisted fields. Behavioral state derived per current selection:
 
 - **`passageStatus`** (drives copy + submit directive):
   - `already-captured-here` — normalized `selectedText` equals some `existing_sightings_for_url[].text`
-    → block; "already captured this passage" + View link.
+    → block; "already captured this passage" + View link to **that matched entry's** `web_url` (G2).
   - `new-at-known-url` — URL has ≥1 passage but selection is normalized-distinct → allow; submit
     label "Capture another passage" + notice.
   - `new` — URL has no passages → normal single-capture flow (unchanged).
-- **`passageCount`** = `existing_sightings_total ?? existing_sightings_for_url.length` → toolbar
-  badge shows it when `>= 2` (formatted `1`–`9`, then `9+`), and the action title always states it
-  in words (accessibility).
+- **`passageCount`** (`number | 'unknown'`) — resolved by the **canonical count truth table**
+  (contracts §2): `result` null / `search_metadata.error` ⇒ `'unknown'`; else `existing_sightings_total`
+  if a non-negative integer; else (total absent) `existing_sightings_for_url.length` **only if a valid
+  array with length < 50** else `'unknown'`; present-but-malformed ⇒ `'unknown'`; both absent (clean
+  success) ⇒ `0` (I1/INC1) → toolbar badge shows the number **only when `>= 2`**
+  (formatted `1`–`9`, then saturating `9+`, with the **exact** count always in the accessible title);
+  count `1` keeps the single-capture glyph; `'unknown'` ⇒ neutral "has captures", **no number**;
+  `0` ⇒ "new". The panel and badge consume this one value (I2/I5).
 
 ## Validation rules (from requirements)
 
@@ -63,6 +68,15 @@ No new persisted fields. Behavioral state derived per current selection:
 - FR-006: exact verbatim text shown before submit; no editable text field.
 - FR-007: each passage submitted with the post's `source_url`; distinct passages ⇒ distinct quotes
   sharing the URL.
-- FR-008/FR-009: panel + count are **global** (shared corpus), scheme-validated links.
+- FR-008/FR-009: panel + count are **global** (shared corpus), scheme-validated links; panel displays
+  **≤ 5** snippets (each the **original verbatim `text`** — NOT normalized — **character-truncated**: slice to 100 chars + `…`, deterministic; I2) + "+N more", and renders **whenever the URL has captures,
+  independent of the current selection's classification** (I3); badge numeric **only at `>= 2`**,
+  saturating `9+` with the **exact** count in the accessible title (I5).
 - FR-010: invalidate `preloadedDuplicateCheck` after a capture so count/panel refresh.
-- FR-011: degrade to a neutral state rather than show a wrong count.
+- FR-011: validate arrays + non-negative-integer total at runtime; degrade to **one `'unknown'`
+  neutral state** (distinct from `0`/"new"), reused by panel + badge, rather than show a wrong count
+  or throw (I2).
+- FR-014: automatic (page-load) preflight is **identifier-only** — no quote-text egress; exact
+  matching is local against the URL-derived list; text-bearing fuzzy lookup only on explicit action.
+- G2: the "already captured this passage" View link resolves to the **matched** passage entry's
+  `web_url`, not `matches[0]`.
