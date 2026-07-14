@@ -104,6 +104,19 @@ describe('similar-diff', () => {
     expect(buildSimilarMatchView(duplicateResult({ recommendation: 'new_quote', matches: [] }), 'hello')).toBeNull();
   });
 
+  it('keeps a near-match at a known URL on the sighting-or-variant path', () => {
+    const result = similarDuplicateResult({
+      existing_sightings_for_url: [{
+        id: 1,
+        quote_id: 'known-url-passage',
+        source_url: 'https://x.com/test/status/1',
+        text: 'A different passage already captured here',
+      }],
+    });
+
+    expect(buildSimilarMatchView(result, 'A near-identical selected passage')).not.toBeNull();
+  });
+
   it('falls back to a link-only view when on-record text is missing', () => {
     const container = document.createElement('span');
     const view = buildSimilarMatchView(similarDuplicateResult({

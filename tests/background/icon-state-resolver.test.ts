@@ -130,6 +130,48 @@ describe('resolveIconPresentation', () => {
     });
   });
 
+  it('resolves passage counts without inventing zero for unknown data', () => {
+    expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('duplicate', {
+      existing_sightings_total: 12,
+    }), tweetTab)).toMatchObject({
+      passageCount: 12,
+      badgeText: '9+',
+      badgeColor: '#009E73',
+      title: 'Quotewise — 12 passages captured from this post',
+    });
+
+    expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('duplicate', {
+      existing_sightings_total: 1,
+    }), tweetTab)).toMatchObject({ badgeText: '=' });
+
+    expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote', {
+      existing_sightings_total: 0,
+    }), tweetTab)).toMatchObject({ badgeText: '★' });
+
+    expect(resolveIconPresentation(AuthState.AUTHENTICATED, null, tweetTab)).toMatchObject({
+      badgeText: '',
+      title: 'Quotewise — ready to capture',
+    });
+
+    for (const result of [
+      duplicate('duplicate', { search_metadata: { error: true } }),
+      duplicate('duplicate', { existing_sightings_total: -1 }),
+      duplicate('duplicate', { existing_sightings_for_url: {} as never }),
+      duplicate('duplicate', {
+        existing_sightings_for_url: Array.from({ length: 50 }, (_, index) => ({
+          id: index,
+          quote_id: String(index),
+          source_url: 'https://x.com/test/status/1',
+        })),
+      }),
+    ]) {
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, result, tweetTab)).toMatchObject({
+        badgeText: '=',
+        title: 'Quotewise — this post has captured passages',
+      });
+    }
+  });
+
   it('renders missing originator after similar/exact but before new', () => {
     expect(resolveIconPresentation(
       AuthState.AUTHENTICATED,
@@ -246,14 +288,14 @@ describe('resolveIconPresentation', () => {
     }
   });
 
-  it('falls back to ready on errored duplicate checks and supported idle on non-tweet pages', () => {
+  it('uses the neutral captured state on errored checks and supported idle on non-tweet pages', () => {
     expect(resolveIconPresentation(
       AuthState.AUTHENTICATED,
       duplicate('duplicate', { search_metadata: { error: true } }),
       tweetTab,
     )).toMatchObject({
-      badgeText: '',
-      title: 'Quotewise — ready to capture',
+      badgeText: '=',
+      title: 'Quotewise — this post has captured passages',
     });
 
     expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote'), supportedNonTweetTab)).toMatchObject({

@@ -3,7 +3,9 @@ import { getWebBaseUrl } from '../../../config/environment';
 import {
   classifyMatchResolution,
   classifyDuplicateSighting,
-  getMatchForDuplicateSightingState
+  getMatchForDuplicateSightingState,
+  matchedSightingForText,
+  passageCountForUrl,
 } from '../../../utils/duplicate-status';
 import { buildSimilarMatchView, renderSimilarDiff, type ResolutionDecision } from './similar-diff';
 import { safeHref, safeHttpsUrl } from './dom-utils';
@@ -63,29 +65,31 @@ export class DuplicateBadge {
     }
 
     const { result } = state;
-    const resolution = classifyMatchResolution(result);
+    const resolution = classifyMatchResolution(result, capturedText);
 
     if (resolution === 'couldnt_verify') {
       this.renderCouldntVerify();
+      this.renderPassagesPanel(result);
       return;
     }
 
     if (resolution === 'exact') {
-      const sightingState = classifyDuplicateSighting(result);
-      const match = getMatchForDuplicateSightingState(result, sightingState);
-      const quotePageUrl = this.getQuotePageUrl(match);
-
-      if (sightingState === 'exact_sighting') {
-        this.renderExactSighting(quotePageUrl, match);
-      } else {
-        this.renderEarlierSighting(quotePageUrl, match);
-      }
+      const matchedSighting = matchedSightingForText(result, capturedText);
+      const matchedQuoteId = matchedSighting?.quote_id;
+      const match = Array.isArray(result.matches)
+        ? result.matches.find(candidate => candidate.quote_id === matchedQuoteId)
+        : undefined;
+      this.renderExactSighting(matchedSighting?.web_url
+        ? safeHref(matchedSighting.web_url) ?? undefined
+        : undefined, match);
+      this.renderPassagesPanel(result);
       return;
     }
 
     if (resolution === 'conflict') {
       const match = Array.isArray(result.matches) ? result.matches[0] : undefined;
       this.renderConflict(match, this.getSafeQuotePageUrl(match));
+      this.renderPassagesPanel(result);
       return;
     }
 
@@ -96,6 +100,7 @@ export class DuplicateBadge {
 
       if (!similarView) {
         this.renderLegacyStatus(result);
+        this.renderPassagesPanel(result);
         return;
       }
 
@@ -103,14 +108,97 @@ export class DuplicateBadge {
         onResolve: (decision) => this.callbacks.onResolveDecision?.(decision),
       });
       this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Choose Action' });
+      this.renderPassagesPanel(result);
       return;
     }
 
-    this.renderLegacyStatus(result);
+    if (Array.isArray(result.existing_sightings_for_url) && result.existing_sightings_for_url.length > 0) {
+      this.renderBadge('info', 'ℹ️', 'This post already has a captured quote');
+      this.container.title = 'This post already has a captured quote; this passage is new';
+      this.callbacks.onSubmitStateChange({
+        type: 'submit',
+        enabled: true,
+        text: 'Capture another passage',
+      });
+      this.renderPassagesPanel(result);
+      return;
+    }
+
+    this.renderLegacyStatus(result, capturedText);
+    this.renderPassagesPanel(result);
   }
 
-  private renderLegacyStatus(result: DuplicateCheckResult): void {
-    const sightingState = classifyDuplicateSighting(result);
+  private renderPassagesPanel(result: DuplicateCheckResult): void {
+    const count = passageCountForUrl(result);
+    if (count === 0) return;
+
+    this.container.classList.add('has-passages');
+
+    const panel = document.createElement('section');
+    panel.className = 'passages-panel';
+    panel.setAttribute('aria-label', 'Captured passages from this post');
+
+    const heading = document.createElement('div');
+    heading.className = 'passages-heading';
+    heading.setAttribute('role', 'heading');
+    heading.setAttribute('aria-level', '2');
+    heading.textContent = count === 'unknown'
+      ? 'This post already has captures'
+      : `${count} ${count === 1 ? 'passage' : 'passages'} captured from this post`;
+    panel.appendChild(heading);
+
+    const sightings = Array.isArray(result.existing_sightings_for_url)
+      ? result.existing_sightings_for_url
+      : [];
+    const displayableSightings = sightings
+      .filter((sighting): sighting is typeof sighting & { text: string } => (
+        typeof sighting === 'object' && sighting !== null && typeof sighting.text === 'string'
+      ))
+      .slice(0, 5);
+
+    if (displayableSightings.length > 0) {
+      const list = document.createElement('ul');
+      list.className = 'passages-list';
+
+      displayableSightings.forEach((sighting) => {
+        const item = document.createElement('li');
+        const snippet = sighting.text.length > 100
+          ? `${sighting.text.slice(0, 100)}…`
+          : sighting.text;
+        const passageUrl = typeof sighting.web_url === 'string' ? safeHref(sighting.web_url) : null;
+
+        if (passageUrl) {
+          const link = document.createElement('a');
+          link.href = passageUrl;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = snippet;
+          link.setAttribute('aria-label', `View captured passage: ${snippet} (opens in a new tab)`);
+          item.appendChild(link);
+        } else {
+          const text = document.createElement('span');
+          text.textContent = snippet;
+          item.appendChild(text);
+        }
+
+        list.appendChild(item);
+      });
+
+      panel.appendChild(list);
+    }
+
+    if (count !== 'unknown' && count > displayableSightings.length) {
+      const more = document.createElement('div');
+      more.className = 'passages-more';
+      more.textContent = `+${count - displayableSightings.length} more`;
+      panel.appendChild(more);
+    }
+
+    this.container.appendChild(panel);
+  }
+
+  private renderLegacyStatus(result: DuplicateCheckResult, capturedText?: string): void {
+    const sightingState = classifyDuplicateSighting(result, capturedText);
     const match = getMatchForDuplicateSightingState(result, sightingState);
     const quotePageUrl = this.getQuotePageUrl(match);
 
@@ -171,12 +259,12 @@ export class DuplicateBadge {
     quotePageUrl?: string,
     match?: DuplicateCheckResult['matches'][number],
   ): void {
-    this.renderBadge('success', '🟢', this.membershipText(match) || 'Already captured', quotePageUrl);
-    this.container.title = this.membershipText(match) || 'This exact URL is already in Quotewise';
+    this.renderBadge('success', '✓', this.membershipText(match) || 'Already captured this passage', quotePageUrl);
+    this.container.title = this.membershipText(match) || 'This passage is already in Quotewise';
     if (quotePageUrl) {
       this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
     } else {
-      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Already Captured' });
+      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Already captured this passage' });
     }
   }
 
@@ -237,6 +325,7 @@ export class DuplicateBadge {
       link.style.color = 'inherit';
       link.style.textDecoration = 'none';
       link.textContent = `${icon} ${text} ↗`;
+      link.setAttribute('aria-label', `${text} (opens in a new tab)`);
       this.container.appendChild(link);
     } else {
       this.container.textContent = `${icon} ${text}`;

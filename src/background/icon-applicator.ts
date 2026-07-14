@@ -86,15 +86,22 @@ export async function applyIconPresentation(
   const effectiveScope = options.forceTabScope ? 'tab' : presentation.scope;
   const scopeArgs = effectiveScope === 'tab' ? { tabId } : {};
   const path = presentation.iconVariant === 'grey' ? GREY_ICON_PATHS : COLOR_ICON_PATHS;
+  const passageCount = presentation.passageCount;
+  const badgeText = passageCount === undefined
+    ? presentation.badgeText
+    : passageCount <= 9 ? String(passageCount) : '9+';
+  const title = passageCount === undefined
+    ? presentation.title
+    : `Quotewise — ${passageCount} passages captured from this post`;
   lastAttempt = {
     timestamp: Date.now(),
     scope: effectiveScope,
     ...(effectiveScope === 'tab' ? { tabId } : {}),
     forceTabScope: options.forceTabScope === true,
     iconVariant: presentation.iconVariant,
-    badgeText: presentation.badgeText,
+    badgeText,
     badgeColor: presentation.badgeColor,
-    title: presentation.title,
+    title,
     path: clonePath(path),
   };
 
@@ -116,14 +123,20 @@ export async function applyIconPresentation(
     }
   }
 
-  await chrome.action.setBadgeText({ ...scopeArgs, text: presentation.badgeText });
+  await chrome.action.setBadgeText({ ...scopeArgs, text: badgeText });
 
-  if (presentation.badgeText !== '') {
+  if (badgeText !== '') {
+    if (presentation.badgeTextColor) {
+      await chrome.action.setBadgeTextColor({
+        ...scopeArgs,
+        color: presentation.badgeTextColor,
+      });
+    }
     await chrome.action.setBadgeBackgroundColor({
       ...scopeArgs,
       color: presentation.badgeColor,
     });
   }
 
-  await chrome.action.setTitle({ ...scopeArgs, title: presentation.title });
+  await chrome.action.setTitle({ ...scopeArgs, title });
 }

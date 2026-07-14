@@ -61,6 +61,11 @@ export class QuotePreview {
     const selectedText = selection.toString().trim();
     if (!selectedText) return null;
 
+    const isAnchoredSelection = selection.anchorNode
+      ? QuotePreview.isSelectionWithinPostContent(selection, tweetText)
+      : null;
+    if (isAnchoredSelection === false) return null;
+
     // Fast path: the selection is a verbatim subset of the extracted text.
     if (tweetText && tweetText.includes(selectedText)) {
       return selectedText;
@@ -71,7 +76,7 @@ export class QuotePreview {
     // extracted `tweetText` is often partial or wrong (e.g. a "Subscribe"
     // CTA), so we must not gate the user's highlight on it — only on whether
     // the highlight actually lives within the post's content.
-    if (QuotePreview.isSelectionWithinPostContent(selection)) {
+    if (isAnchoredSelection) {
       return selectedText;
     }
 
@@ -85,13 +90,27 @@ export class QuotePreview {
    * <article>, but it is matched explicitly so selections are honored even on
    * layouts where it does not.
    */
-  private static isSelectionWithinPostContent(selection: Selection): boolean {
+  private static isSelectionWithinPostContent(selection: Selection, tweetText?: string): boolean {
     const anchor = selection.anchorNode;
     if (!anchor) return false;
     const anchorEl = anchor instanceof Element ? anchor : anchor.parentElement;
-    return !!anchorEl?.closest(
-      'article, [data-testid="tweet"], [data-testid="twitterArticleReadView"], [data-testid="longformRichTextComponent"]'
-    );
+    if (!anchorEl) return false;
+
+    if (anchorEl.closest(
+      '[data-testid="twitterArticleReadView"], [data-testid="twitterArticleRichTextView"], [data-testid="longformRichTextComponent"]'
+    )) {
+      return true;
+    }
+
+    const tweetTextContainer = anchorEl.closest('[data-testid="tweetText"]');
+    if (tweetTextContainer) {
+      if (!tweetText) return true;
+      const containerText = tweetTextContainer.textContent?.replace(/\s+/g, ' ').trim();
+      return containerText === tweetText.replace(/\s+/g, ' ').trim();
+    }
+
+    const article = anchorEl.closest('article, [data-testid="tweet"]');
+    return !!article && !article.querySelector('[data-testid="tweetText"]');
   }
 
   private escapeHtml(text: string): string {

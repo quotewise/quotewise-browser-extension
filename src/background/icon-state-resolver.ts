@@ -1,7 +1,7 @@
 import { AuthState } from '../auth/auth-state-machine';
 import { ICON_STATES, type IconScope, type IconVariant } from '../config/icon-states';
 import type { DuplicateCheckResult } from '../types/api';
-import { mapRecommendationToQuoteStatus } from '../utils/duplicate-status';
+import { mapRecommendationToQuoteStatus, passageCountForUrl } from '../utils/duplicate-status';
 
 export interface TabContext {
   tabId: number;
@@ -15,8 +15,10 @@ export interface IconPresentation {
   iconVariant: IconVariant;
   badgeText: string;
   badgeColor: string;
+  badgeTextColor?: string;
   title: string;
   scope: IconScope;
+  passageCount?: number;
 }
 
 const QUOTE_STATUS_TO_STATE = {
@@ -78,6 +80,21 @@ export function resolveIconPresentation(
   }
 
   if (auth === AuthState.AUTHENTICATED && tab.isTweetPage) {
+    if (dup) {
+      const passageCount = passageCountForUrl(dup);
+      if (passageCount === 'unknown') {
+        return ICON_STATES.HasCaptures;
+      }
+      if (passageCount >= 2) {
+        return {
+          ...ICON_STATES.Count,
+          badgeText: passageCount <= 9 ? String(passageCount) : '9+',
+          title: `Quotewise — ${passageCount} passages captured from this post`,
+          passageCount,
+        };
+      }
+    }
+
     if (quoteStatus !== 'None' && quoteStatus !== 'New') {
       return QUOTE_STATUS_TO_STATE[quoteStatus];
     }

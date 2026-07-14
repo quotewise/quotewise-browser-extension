@@ -32,6 +32,15 @@ function makeDuplicateResult(
     }],
     reasoning: '',
     search_metadata: {},
+    ...(sightingStatus === 'exact_url' ? {
+      existing_sightings_for_url: [{
+        id: 1,
+        quote_id: 'q1',
+        source_url: 'https://twitter.com/author/status/123',
+        text: 'A just submitted quote',
+        web_url: 'https://quotewise.io/q/q1/',
+      }],
+    } : {}),
   };
 }
 
@@ -119,6 +128,28 @@ describe('OverlayBar', () => {
         text: 'A just submitted quotation',
         quote_date: '2026-06-01T00:00:00Z',
       })],
+    });
+  }
+
+  function knownUrlResult(existingText = 'An existing passage'): DuplicateCheckResult {
+    return duplicateResult({
+      recommendation: 'duplicate',
+      in_quotewise: true,
+      matches: [duplicateMatch({
+        quote_id: 'existing',
+        text: existingText,
+        match_source: 'url',
+        match_class: 'exact',
+        sighting_status: 'exact_url',
+      })],
+      existing_sightings_for_url: [{
+        id: 1,
+        quote_id: 'existing',
+        source_url: tweetData.url,
+        text: existingText,
+        web_url: 'https://quotewise.io/q/existing/',
+      }],
+      existing_sightings_total: 1,
     });
   }
 
@@ -536,6 +567,56 @@ describe('OverlayBar', () => {
     expect(shadow.textContent).toContain('In your collection: Favorites');
   });
 
+  it('force-refreshes a missing originator instead of reusing preloaded not-found data', async () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).captureState.expanded = true;
+    (overlay as any).captureState.originator = null;
+    (overlay as any).captureState.lookupResult = 'not_found';
+    (overlay as any).captureState.createUrl = 'https://quotewise.io/create?handle=author';
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue({
+      preloadedOriginator: {
+        handle: 'author',
+        originator: null,
+        timestamp: Date.now() - 5000,
+      },
+    });
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.LOOKUP_ORIGINATOR_BY_HANDLE) {
+        callback({
+          success: true,
+          found: true,
+          originator: {
+            id: 42,
+            unique_id: 'author',
+            full_name: 'Author',
+            sort_name_display: 'Author',
+            confidence: 1,
+          },
+        });
+        return;
+      }
+
+      if (message.type === MessageType.CHECK_DUPLICATE) {
+        callback({ success: true, result: duplicateResult({ recommendation: 'new_quote' }) });
+        return;
+      }
+
+      callback({ success: true });
+    });
+
+    await (overlay as any).refreshFromTray();
+    await flushPromises();
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.LOOKUP_ORIGINATOR_BY_HANDLE,
+        data: expect.objectContaining({ handle: 'author' }),
+      }),
+      expect.any(Function),
+    );
+    expect((overlay as any).captureState.originator?.unique_id).toBe('author');
+  });
+
   it('live-updates the selection when the user highlights after opening (article)', () => {
     const overlay = new OverlayBar(async () => tweetData);
     (overlay as any).currentData = { ...tweetData, isArticle: true };
@@ -548,6 +629,139 @@ describe('OverlayBar', () => {
     (overlay as any).onPageSelectionChanged();
 
     expect((overlay as any).captureState.selectedText).toBe('a highlighted article passage');
+  });
+
+  it('allows a distinct selection at a known URL and blocks its matching passage', () => {
+    const overlay = setupReadyOverlay();
+    const originator = (overlay as any).captureState.originator;
+    const result = knownUrlResult();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+
+    (overlay as any).captureState.selectedText = 'A new passage';
+    (overlay as any).captureState.duplicateResult = result;
+    (overlay as any).updateQuotePreview();
+    (overlay as any).updateDuplicateInfo({ result });
+
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.textContent).toBe('Capture another passage');
+    expect(shadow.textContent).toContain('This post already has a captured quote');
+    expect(shadow.textContent).toContain('A new passage');
+    expect((overlay as any).captureState.originator).toBe(originator);
+
+    (overlay as any).captureState.selectedText = 'An existing passage';
+    (overlay as any).updateQuotePreview();
+    (overlay as any).updateDuplicateInfo({ result });
+
+    expect(shadow.textContent).toContain('Already captured this passage');
+    expect(shadow.getElementById('submit-btn')).toBeNull();
+    expect(shadow.getElementById('view-quote-btn')).toBeTruthy();
+  });
+
+  it('reclassifies from cached URL data immediately while the selection lookup stays non-blocking', () => {
+    const overlay = setupReadyOverlay();
+    const result = knownUrlResult();
+    (overlay as any).captureState.duplicateResult = result;
+    jest.spyOn(overlay as any, 'getPageSelection').mockReturnValue('A cached new passage');
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type !== MessageType.CHECK_DUPLICATE) callback({ success: true });
+    });
+
+    (overlay as any).onPageSelectionChanged();
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.textContent).toBe('Capture another passage');
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: MessageType.CHECK_DUPLICATE,
+      data: expect.objectContaining({ text: 'A cached new passage' }),
+    }), expect.any(Function));
+  });
+
+  it('drops a fuzzy response for a superseded selection', async () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).captureState.duplicateResult = knownUrlResult();
+    const selections = jest.spyOn(overlay as any, 'getPageSelection');
+    selections.mockReturnValueOnce('First passage').mockReturnValueOnce('Second passage');
+    const duplicateCallbacks: Array<(response: unknown) => void> = [];
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.CHECK_DUPLICATE) {
+        duplicateCallbacks.push(callback);
+      } else {
+        callback({ success: true });
+      }
+    });
+
+    (overlay as any).onPageSelectionChanged();
+    (overlay as any).onPageSelectionChanged();
+    expect(duplicateCallbacks).toHaveLength(2);
+
+    const latestResult = similarDuplicateResult({
+      matches: [duplicateMatch({ text: 'Second passage with a small difference' })],
+    });
+    duplicateCallbacks[1]({ success: true, result: latestResult });
+    await flushPromises();
+    duplicateCallbacks[0]({ success: true, result: couldntVerifyDuplicateResult() });
+    await flushPromises();
+
+    expect((overlay as any).captureState.selectedText).toBe('Second passage');
+    expect((overlay as any).captureState.duplicateResult).toBe(latestResult);
+    expect(((overlay as any).shadow as ShadowRoot).textContent).not.toContain("Couldn't verify duplicates");
+  });
+
+  it('submits distinct passages with the same source URL', async () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).currentData = tweetData;
+    (overlay as any).captureState.originator = {
+      id: 42,
+      unique_id: 'author',
+      full_name: 'Author',
+      sort_name_display: 'Author',
+      confidence: 1,
+    };
+
+    (overlay as any).captureState.selectedText = 'First passage';
+    await (overlay as any).submitQuote();
+    (overlay as any).captureState.selectedText = 'Second passage';
+    await (overlay as any).submitQuote();
+
+    const submits = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .map(([message]) => message)
+      .filter(message => message.type === MessageType.SUBMIT_QUOTE);
+    expect(submits.map(message => message.data.text)).toEqual(['First passage', 'Second passage']);
+    expect(submits.map(message => message.data.source_url)).toEqual([tweetData.url, tweetData.url]);
+  });
+
+  it('keeps authentication and unreadable-post gates ahead of multi-passage capture', async () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).mount();
+    await flushPromises();
+    (overlay as any).currentData = tweetData;
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.AUTH_STATE_GET) {
+        callback({ success: true, data: { state: 'UNAUTHENTICATED' } });
+      } else {
+        callback({ success: true });
+      }
+    });
+
+    await (overlay as any).expandCapture();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    expect(shadow.textContent).toContain('Login required to capture quotes');
+    expect(shadow.getElementById('login-btn')).toBeTruthy();
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: MessageType.CHECK_DUPLICATE }),
+      expect.any(Function),
+    );
+
+    (overlay as any).currentData = null;
+    (overlay as any).captureState.originator = { unique_id: 'author' };
+    await (overlay as any).submitQuote();
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: MessageType.SUBMIT_QUOTE }),
+      expect.any(Function),
+    );
   });
 
   it('latches: does not clear an existing selection when selectionchange reports nothing', () => {

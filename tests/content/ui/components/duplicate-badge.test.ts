@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DuplicateBadge, SubmitStateDirective } from '../../../../src/content/ui/components/duplicate-badge';
 import type { DuplicateCheckResult } from '../../../../src/types/api';
 import {
@@ -39,6 +41,16 @@ function makeMatch(
   };
 }
 
+function makeUrlSighting(text = 'hi', webUrl: string | null = 'https://quotewise.io/q/q1/') {
+  return {
+    id: 1,
+    quote_id: 'q1',
+    source_url: 'https://x.com/test/status/1',
+    text,
+    web_url: webUrl,
+  };
+}
+
 describe('DuplicateBadge', () => {
   let container: HTMLElement;
   let directives: SubmitStateDirective[];
@@ -73,13 +85,14 @@ describe('DuplicateBadge', () => {
   it('shows "Already captured" link for exact_url with url', () => {
     badge.update({
       result: makeResult({
+        existing_sightings_for_url: [makeUrlSighting('hi', 'https://quotewise.io/quotes/q1')],
         matches: [makeMatch({
           sighting_status: 'exact_url',
           url: 'https://quotewise.io/quotes/q1',
         })],
       }),
-    });
-    expect(container.textContent).toContain('Already captured');
+    }, 'hi');
+    expect(container.textContent).toContain('Already captured this passage');
     const link = container.querySelector('a') as HTMLAnchorElement;
     expect(link).toBeTruthy();
     expect(link.href).toBe('https://quotewise.io/quotes/q1');
@@ -92,6 +105,7 @@ describe('DuplicateBadge', () => {
   it('names member collections for already-captured quotes', () => {
     badge.update({
       result: makeResult({
+        existing_sightings_for_url: [makeUrlSighting('hi', 'https://quotewise.io/quotes/q1')],
         matches: [makeMatch({
           sighting_status: 'exact_url',
           url: 'https://quotewise.io/quotes/q1',
@@ -99,7 +113,7 @@ describe('DuplicateBadge', () => {
           member_collections: [{ slug: 'favorites', name: 'Favorites' }],
         })],
       }),
-    });
+    }, 'hi');
 
     expect(container.textContent).toContain('In your collection: Favorites');
   });
@@ -237,11 +251,12 @@ describe('DuplicateBadge', () => {
   it('falls back to disabled submit for exact_url without a quote page URL', () => {
     badge.update({
       result: makeResult({
+        existing_sightings_for_url: [makeUrlSighting('hi', null)],
         matches: [makeMatch({ sighting_status: 'exact_url' })],
       }),
-    });
+    }, 'hi');
     expect(directives).toEqual([
-      { type: 'submit', enabled: false, text: 'Already Captured' },
+      { type: 'submit', enabled: false, text: 'Already captured this passage' },
     ]);
   });
 
@@ -252,6 +267,29 @@ describe('DuplicateBadge', () => {
     expect(directives).toEqual([
       { type: 'submit', enabled: true },
     ]);
+  });
+
+  it('enables capture-another copy for a distinct passage at a known URL', () => {
+    badge.update({
+      result: makeResult({
+        recommendation: 'duplicate',
+        in_quotewise: true,
+        existing_sightings_for_url: [makeUrlSighting('Existing passage')],
+        matches: [makeMatch({
+          text: 'Existing passage',
+          match_source: 'url',
+          match_class: 'exact',
+          sighting_status: 'exact_url',
+        })],
+      }),
+    }, 'New passage');
+
+    expect(container.textContent).toContain('This post already has a captured quote');
+    expect(directives).toEqual([{
+      type: 'submit',
+      enabled: true,
+      text: 'Capture another passage',
+    }]);
   });
 
   it('can restore submit after a previous disabled duplicate state', () => {
@@ -338,6 +376,10 @@ describe('DuplicateBadge', () => {
   it('keeps exact URL matches on the single already-captured action', () => {
     badge.update({
       result: exactDuplicateResult({
+        existing_sightings_for_url: [makeUrlSighting(
+          'captured words',
+          'https://quotewise.io/quotes/exact',
+        )],
         matches: [duplicateMatch({
           match_source: 'url',
           match_class: 'exact',
@@ -394,5 +436,120 @@ describe('DuplicateBadge', () => {
     // The View Quote button calls window.open(url); a non-http(s) URL must
     // never reach it via the view_quote directive.
     expect(directives.find((d) => d.type === 'view_quote')).toBeUndefined();
+  });
+
+  it.each(['x-ordinary-post.html', 'x-article.html'])(
+    'renders the capped passages panel in Shadow DOM against %s',
+    (fixtureName) => {
+      document.body.innerHTML = readFileSync(
+        join(process.cwd(), 'tests', 'fixtures', fixtureName),
+        'utf8',
+      );
+      const focalPost = document.querySelector('article[data-testid="tweet"]') as HTMLElement;
+      const host = document.createElement('div');
+      focalPost.appendChild(host);
+      const shadow = host.attachShadow({ mode: 'open' });
+      container = document.createElement('div');
+      shadow.appendChild(container);
+      badge = new DuplicateBadge(container, {
+        onSubmitStateChange: (directive) => directives.push(directive),
+      });
+
+      const longSnippet = `  ${'A'.repeat(99)}`;
+      const sightings = [
+        makeUrlSighting(longSnippet, 'https://quotewise.io/quotes/one'),
+        { ...makeUrlSighting('Second passage', 'javascript:alert(1)'), id: 2 },
+        { ...makeUrlSighting('Third passage', 'https://quotewise.io/quotes/three'), id: 3 },
+        { ...makeUrlSighting('Fourth passage', 'https://quotewise.io/quotes/four'), id: 4 },
+        { ...makeUrlSighting('Fifth passage', 'https://quotewise.io/quotes/five'), id: 5 },
+        { ...makeUrlSighting('Sixth passage', 'https://quotewise.io/quotes/six'), id: 6 },
+      ];
+
+      badge.update({
+        result: makeResult({
+          existing_sightings_total: 6,
+          existing_sightings_for_url: sightings,
+        }),
+      }, 'A new passage');
+
+      const panel = shadow.querySelector('.passages-panel') as HTMLElement;
+      expect(panel.getAttribute('aria-label')).toBe('Captured passages from this post');
+      expect(panel.querySelector('[role="heading"]')?.textContent)
+        .toBe('6 passages captured from this post');
+      expect(panel.querySelectorAll('li')).toHaveLength(5);
+      expect(panel.querySelectorAll('a')).toHaveLength(4);
+      expect(panel.querySelector('li')?.textContent).toBe(`${longSnippet.slice(0, 100)}…`);
+      expect(panel.querySelector('li')?.textContent).toHaveLength(101);
+      expect(panel.querySelectorAll('li')[1].querySelector('a')).toBeNull();
+      expect(panel.querySelector('.passages-more')?.textContent).toBe('+1 more');
+
+      panel.querySelectorAll('a').forEach((link) => {
+        expect(link.getAttribute('aria-label')).toContain('View captured passage');
+        expect(link.getAttribute('target')).toBe('_blank');
+        expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+      });
+    },
+  );
+
+  it('renders a neutral panel for malformed passage data without throwing', () => {
+    const malformedResult = {
+      ...makeResult(),
+      existing_sightings_total: 'many',
+      existing_sightings_for_url: { text: 42 },
+    } as unknown as DuplicateCheckResult;
+
+    expect(() => badge.update({ result: malformedResult }, 'New passage')).not.toThrow();
+    expect(container.querySelector('.passages-heading')?.textContent)
+      .toBe('This post already has captures');
+    expect(container.querySelector('.passages-list')).toBeNull();
+    expect(container.querySelector('.passages-more')).toBeNull();
+  });
+
+  it('shows the panel for an already-captured passage and uses its matched View URL', () => {
+    badge.update({
+      result: makeResult({
+        existing_sightings_total: 2,
+        existing_sightings_for_url: [
+          makeUrlSighting('First passage', 'https://quotewise.io/quotes/first'),
+          { ...makeUrlSighting('Matched passage', 'https://quotewise.io/quotes/matched'), id: 2 },
+        ],
+        matches: [
+          makeMatch({ quote_id: 'q1' }),
+          makeMatch({ quote_id: 'q1', url: 'https://quotewise.io/quotes/matched' }),
+        ],
+      }),
+    }, '  Matched   passage ');
+
+    expect(container.textContent).toContain('Already captured this passage');
+    expect(container.querySelector('.passages-heading')?.textContent)
+      .toBe('2 passages captured from this post');
+    expect(directives[0]).toEqual({
+      type: 'view_quote',
+      url: 'https://quotewise.io/quotes/matched',
+      text: 'View Quote',
+    });
+  });
+
+  it('does not render the passages panel for a clean empty response', () => {
+    badge.update({
+      result: makeResult({
+        existing_sightings_total: 0,
+        existing_sightings_for_url: [],
+      }),
+    }, 'New passage');
+
+    expect(container.querySelector('.passages-panel')).toBeNull();
+  });
+
+  it('inherits visible focus, reduced-motion, contrast, and fixed overlay coverage', () => {
+    const overlaySource = readFileSync(
+      join(process.cwd(), 'src', 'content', 'ui', 'overlay-bar.ts'),
+      'utf8',
+    );
+
+    expect(overlaySource).toContain('.duplicate-badge a:focus-visible');
+    expect(overlaySource).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(overlaySource).toContain('@media (prefers-contrast: more)');
+    expect(overlaySource).toContain("this.root.style.position = 'fixed'");
   });
 });
