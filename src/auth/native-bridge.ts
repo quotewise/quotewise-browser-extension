@@ -134,3 +134,13 @@ export async function signOutNative(): Promise<void> {
   clearNativeTokenCache();
   await sendNative({ type: 'SIGN_OUT' });
 }
+
+/**
+ * Hand the app the in-Safari sign-in result: it exchanges the one-time code (+PKCE verifier) into
+ * the shared Keychain. Returns whether the app is now signed in (bead em9).
+ */
+export async function completeSignInNative(code: string, codeVerifier: string): Promise<boolean> {
+  clearNativeTokenCache();
+  const response = await sendNative({ type: 'COMPLETE_SIGN_IN', code, codeVerifier });
+  return response?.ok === true && response.status === 'signed_in';
+}
