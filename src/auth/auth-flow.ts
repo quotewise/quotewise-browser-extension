@@ -30,10 +30,14 @@ export class OAuthFlowError extends Error {
  * Opens a popup for user authentication via launchWebAuthFlow
  */
 export async function initiateOAuthFlow(): Promise<OAuthTokens> {
-  // Safari has no chrome.identity.launchWebAuthFlow — sign-in happens in the container app, not the
-  // extension (spec 002; CLAUDE.md caution). Fail with guidance instead of a TypeError crash.
+  // Safari has no chrome.identity.launchWebAuthFlow — sign in via a Safari tab; the container app
+  // exchanges the code into the shared Keychain (bead em9). Tokens never live in extension JS, so we
+  // return a token-less shell carrying only the granted scopes (the OAUTH_LOGIN handler reads .scopes;
+  // the real session lives in the app and is read back over the bridge).
   if (isSafariExtension()) {
-    throw new OAuthFlowError('Please sign in from the Quotewise app.', 'safari_use_app', false);
+    const { safariSignIn } = await import('./safari-signin');
+    const scopes = await safariSignIn();
+    return { accessToken: '', refreshToken: '', accessTokenExpiresAt: 0, refreshTokenExpiresAt: 0, scopes };
   }
 
   const config = getOAuthConfig();
