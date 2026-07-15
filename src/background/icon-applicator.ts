@@ -1,4 +1,25 @@
 import type { IconPresentation } from './icon-state-resolver';
+import { isSafariExtension } from '../auth/native-bridge';
+
+// Safari mis-decodes non-ASCII action badge/title text as Latin-1 at the JS→native boundary
+// (em-dashes render "â€\"", glyph badges garble). Substitute ASCII on Safari only; Chrome keeps its
+// original typography/glyphs. (spec 002 — quotewise-apple bead szb)
+const SAFARI_BADGE_MAP: Record<string, string> = {
+  '★': '*', '●': '*', '✓': '+', '⚠': '!', '⏸': '=',
+};
+function safariSafeBadge(text: string): string {
+  return Array.from(text)
+    .map((ch) => {
+      const cp = ch.codePointAt(0) ?? 0;
+      if (cp < 128) return ch;
+      if (cp === 0xfe0e || cp === 0xfe0f) return ''; // strip variation selectors
+      return SAFARI_BADGE_MAP[ch] ?? '*';
+    })
+    .join('');
+}
+function safariSafeTitle(title: string): string {
+  return title.replace(/—/g, '-').replace(/…/g, '...');
+}
 
 export interface ApplyIconPresentationOptions {
   forceTabScope?: boolean;
@@ -123,7 +144,8 @@ export async function applyIconPresentation(
     }
   }
 
-  await chrome.action.setBadgeText({ ...scopeArgs, text: badgeText });
+  const safari = isSafariExtension();
+  await chrome.action.setBadgeText({ ...scopeArgs, text: safari ? safariSafeBadge(badgeText) : badgeText });
 
   if (badgeText !== '') {
     if (presentation.badgeTextColor) {
@@ -138,5 +160,5 @@ export async function applyIconPresentation(
     });
   }
 
-  await chrome.action.setTitle({ ...scopeArgs, title });
+  await chrome.action.setTitle({ ...scopeArgs, title: safari ? safariSafeTitle(title) : title });
 }

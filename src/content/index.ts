@@ -100,6 +100,12 @@ class ContentOrchestrator {
       if (nextUrl !== this.lastUrl) {
         this.selectAdapter(true);
         this.lastUrl = nextUrl;
+        // Tell the background a client-side navigation happened so it can refresh icon/capture
+        // state. On Safari this is the ONLY signal (no webNavigation.onHistoryStateUpdated); on
+        // Chrome it's harmless — the background dedupes by URL (spec 002 T006).
+        chrome.runtime.sendMessage({ type: MessageType.SPA_NAV, data: { url: nextUrl } }).catch(() => {
+          // background asleep / not listening — icon refresh is best-effort
+        });
       }
     }, 750);
   }

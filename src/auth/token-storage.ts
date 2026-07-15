@@ -5,6 +5,7 @@
 
 import type { OAuthTokens, OAuthTokenResponse } from '../types/oauth';
 import { debugLog } from '../config/environment';
+import { isSafariExtension, getNativeAccessToken } from './native-bridge';
 
 /** Storage keys */
 const ACCESS_TOKEN_KEY = 'oauth_access_token';
@@ -90,6 +91,13 @@ export async function getStoredTokens(): Promise<OAuthTokens | null> {
  * Returns null if no valid access token exists
  */
 export async function getAccessToken(): Promise<string | null> {
+  // Safari: the container app is the token broker — ask it, never local storage (spec 002 T016).
+  // This single branch routes every authenticated request (capture, duplicate check, library)
+  // through the native bridge, and makes isAccessTokenValid() reflect the app's session too.
+  if (isSafariExtension()) {
+    return getNativeAccessToken();
+  }
+
   const tokens = await getStoredTokens();
 
   if (!tokens || !tokens.accessToken) {
