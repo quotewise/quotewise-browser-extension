@@ -21,6 +21,13 @@ function safariSafeTitle(title: string): string {
   return title.replace(/—/g, '-').replace(/…/g, '...');
 }
 
+// Safari IGNORES setBadgeBackgroundColor and always renders the badge RED (confirmed platform
+// limitation), so a badge on a positive/neutral state reads as a false alarm. On Safari, show a
+// badge ONLY for "attention" states — those whose intended color is amber/vermillion (warnings and
+// errors), where red is apt. Everything else relies on the icon variant (color/grey) + the tooltip.
+// Data-driven by the spec palette so new states auto-classify. (bead szb)
+const SAFARI_ALERT_BADGE_COLORS = new Set(['#D55E00', '#E69F00']);
+
 export interface ApplyIconPresentationOptions {
   forceTabScope?: boolean;
 }
@@ -145,7 +152,10 @@ export async function applyIconPresentation(
   }
 
   const safari = isSafariExtension();
-  await chrome.action.setBadgeText({ ...scopeArgs, text: safari ? safariSafeBadge(badgeText) : badgeText });
+  const badgeToShow = safari
+    ? (SAFARI_ALERT_BADGE_COLORS.has(presentation.badgeColor) ? safariSafeBadge(badgeText) : '')
+    : badgeText;
+  await chrome.action.setBadgeText({ ...scopeArgs, text: badgeToShow });
 
   if (badgeText !== '') {
     if (presentation.badgeTextColor) {
