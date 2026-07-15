@@ -14,6 +14,7 @@ import {
   hasScope,
 } from './token-storage';
 import { attemptTokenRefresh } from './token-refresh';
+import { isSafariExtension, getNativeAuthStatus } from './native-bridge';
 
 /**
  * Checks authentication status using OAuth tokens
@@ -28,6 +29,27 @@ export class AuthChecker {
    * Falls back to API check if needed
    */
   async checkAuthStatus(): Promise<AuthStatus | AuthError> {
+    // Safari: the container app owns auth (spec 002). Local storage never holds tokens there, so
+    // derive status from the native bridge — otherwise the capture UI sees an empty local store and
+    // shows a bogus login prompt (which then crashes on chrome.identity.launchWebAuthFlow).
+    if (isSafariExtension()) {
+      const signedIn = await getNativeAuthStatus();
+      if (!signedIn) {
+        return {
+          type: 'not_authenticated',
+          message: 'Sign in from the Quotewise app to capture quotes.',
+          requiresLogin: true,
+        };
+      }
+      return {
+        isAuthenticated: true,
+        isStaff: true, // the app's OAuth grants quotes:write
+        username: undefined,
+        sessionAge: 0,
+        scopes: ['quotes:read', 'quotes:write', 'collections:read', 'collections:write'],
+      };
+    }
+
     try {
       debugLog('Checking authentication status...');
 

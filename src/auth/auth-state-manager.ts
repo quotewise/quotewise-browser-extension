@@ -18,6 +18,7 @@ import {
 import { AuthChecker } from './auth-checker';
 import { apiClient } from '../api/quotewise-api';
 import { debugLog } from '../config/environment';
+import { isSafariExtension } from './native-bridge';
 import { MessageType } from '../types/chrome';
 import {
   getStoredTokens,
@@ -61,7 +62,8 @@ export class AuthStateManager {
 
     instance = new AuthStateManager();
     await instance.restoreState();
-    instance.setupMessageListeners();
+    // Auth-state messages (AUTH_STATE_GET/SUBSCRIBE/CHECK_AUTH_STATUS) are answered by the single
+    // bootstrap-aware service-worker listener — one owner, no "first response wins" race (audit #9).
     instance.setupAlarms();
 
     debugLog('AuthStateManager initialized, state:', instance.stateData.state);
@@ -97,6 +99,15 @@ export class AuthStateManager {
    * Token refresh scheduling is owned by initializeTokenRefresh(), not this method.
    */
   private async restoreState(): Promise<void> {
+    // Safari: auth lives in the container app, not the extension. Persisted extension state is
+    // unreliable — the user can sign in/out in the app while the extension isn't looking (and the
+    // extension has no OAuth of its own) — so always re-derive from the native bridge instead of
+    // trusting a possibly-stale stored UNAUTHENTICATED that would wrongly show a Login CTA (spec 002).
+    if (isSafariExtension()) {
+      await this.checkAuthState();
+      return;
+    }
+
     try {
       const stored = await chrome.storage.local.get(AUTH_STATE_STORAGE_KEY);
       const storedState = stored[AUTH_STATE_STORAGE_KEY] as AuthStateData | undefined;
@@ -202,12 +213,16 @@ export class AuthStateManager {
     await this.transitionTo(AuthState.CHECKING);
 
     try {
-      // Quick check: do we have any refresh token?
-      const hasRefresh = await hasValidRefreshToken();
+      // Quick check: do we have any refresh token? Skip on Safari — the refresh token lives in the
+      // container app, never in extension storage, so this local check is always false there and
+      // would wrongly bail to UNAUTHENTICATED before checkAuthStatus() can ask the bridge (spec 002).
+      if (!isSafariExtension()) {
+        const hasRefresh = await hasValidRefreshToken();
 
-      if (!hasRefresh) {
-        await this.transitionTo(AuthState.UNAUTHENTICATED);
-        return AuthState.UNAUTHENTICATED;
+        if (!hasRefresh) {
+          await this.transitionTo(AuthState.UNAUTHENTICATED);
+          return AuthState.UNAUTHENTICATED;
+        }
       }
 
       // Check access token validity
@@ -259,12 +274,13 @@ export class AuthStateManager {
         }
       }
 
-      // AuthStatus returned - authenticated
+      // AuthStatus returned - authenticated. On Safari there are no local tokens (the session
+      // lives in the app), so fall back to the scopes the bridge reported via checkAuthStatus.
       const tokens = await getStoredTokens();
 
       await this.transitionTo(AuthState.AUTHENTICATED, {
         username: authResult.username,
-        scopes: tokens?.scopes,
+        scopes: tokens?.scopes ?? authResult.scopes,
         expiresAt: tokens?.accessTokenExpiresAt,
         error: undefined,
       });
@@ -420,40 +436,6 @@ export class AuthStateManager {
   /**
    * Setup message listeners for auth state requests
    */
-  private setupMessageListeners(): void {
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (message.type === MessageType.AUTH_STATE_GET) {
-        // Return current state immediately
-        sendResponse({
-          success: true,
-          data: this.getStateData(),
-        });
-        return false; // Synchronous response
-      }
-
-      if (message.type === MessageType.AUTH_STATE_SUBSCRIBE) {
-        // Content script wants to subscribe - just send current state
-        // They'll get updates via AUTH_STATE_CHANGED broadcasts
-        sendResponse({
-          success: true,
-          data: this.getStateData(),
-        });
-        return false;
-      }
-
-      // Handle legacy CHECK_AUTH_STATUS message
-      if (message.type === MessageType.CHECK_AUTH_STATUS) {
-        const state = this.getStateData();
-        sendResponse({
-          isAuthenticated: state.state === AuthState.AUTHENTICATED,
-          scopes: state.scopes,
-          username: state.username,
-        });
-        return false;
-      }
-    });
-  }
-
   /**
    * Setup alarms for periodic auth state checks
    */

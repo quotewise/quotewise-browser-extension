@@ -7,8 +7,9 @@ import type { OAuthTokens, OAuthTokenResponse, OAuthError, AuthCallbackResult } 
 import { getOAuthConfig } from '../config/environment';
 import { debugLog } from '../config/environment';
 import { generatePKCEParams, storeFlowState, retrieveAndClearFlowState, validateState } from './pkce';
-import { storeTokens, clearTokens } from './token-storage';
+import { storeTokens } from './token-storage';
 import { scheduleTokenRefresh } from './token-refresh';
+import { isSafariExtension } from './native-bridge';
 
 /**
  * Error thrown during OAuth flow
@@ -29,6 +30,12 @@ export class OAuthFlowError extends Error {
  * Opens a popup for user authentication via launchWebAuthFlow
  */
 export async function initiateOAuthFlow(): Promise<OAuthTokens> {
+  // Safari has no chrome.identity.launchWebAuthFlow — sign-in happens in the container app, not the
+  // extension (spec 002; CLAUDE.md caution). Fail with guidance instead of a TypeError crash.
+  if (isSafariExtension()) {
+    throw new OAuthFlowError('Please sign in from the Quotewise app.', 'safari_use_app', false);
+  }
+
   const config = getOAuthConfig();
   debugLog('Starting OAuth flow with config:', { ...config, clientId: config.clientId });
 
@@ -235,12 +242,14 @@ async function exchangeCodeForTokens(
  * Logout - clear all stored tokens and revoke if possible
  */
 export async function logout(): Promise<void> {
-  debugLog('Logging out - clearing tokens');
+  debugLog('Logging out - clearing session');
 
-  // Clear stored tokens
-  await clearTokens();
+  // Wipe the session via the selected backend: Safari tells the container app (native SIGN_OUT and
+  // drops the cached access token — otherwise the extension keeps submitting for ~1h); Chrome
+  // clears its local tokens. Then clear any local refresh alarm.
+  const { authBackend } = await import('./auth-backend');
+  await authBackend.signOut();
 
-  // Clear any scheduled refresh alarms
   await chrome.alarms.clear('token-refresh');
 
   debugLog('Logout complete');
