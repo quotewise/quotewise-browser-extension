@@ -826,10 +826,10 @@ export class OverlayBar {
       this.captureState.expanded &&
       !this.captureState.originator
     ) {
-      // User just logged in while overlay is showing login required
-      // Re-attempt the capture flow
-      this.collapseCapture();
-      this.expandCapture();
+      // User just logged in while overlay is showing login required. Re-attempt the capture flow,
+      // but confirm auth has actually settled first (a fresh round-trip) so the re-fired originator
+      // lookup doesn't race the just-completed login and get a partial response (bead v5e).
+      void this.reattemptCaptureAfterAuth();
     }
 
     // If user logged out while overlay is showing, show login required
@@ -843,6 +843,14 @@ export class OverlayBar {
       this.captureState.lookupResult = null;
       this.showLoginRequired();
     }
+  }
+
+  /** Re-run the capture flow after a login, once auth is confirmed settled (bead v5e). */
+  private async reattemptCaptureAfterAuth(): Promise<void> {
+    const status = await this.checkAuthStatus();
+    if (!status.isAuthenticated) return;
+    this.collapseCapture();
+    this.expandCapture();
   }
 
   private async loadSettings(): Promise<void> {
