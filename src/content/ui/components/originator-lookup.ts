@@ -100,13 +100,23 @@ export class OriginatorLookup {
     this.renderLoading(handle);
 
     try {
-      const response = await this.sendMessage({
-        type: 'LOOKUP_ORIGINATOR_BY_HANDLE',
-        data: { handle, platform, source_url: currentUrl }
-      });
+      const requestData = { handle, platform, source_url: currentUrl };
+      // A resolved originator missing a slug is impossible for a real originator — it happens
+      // transiently right after login, when the request lands before the backend session has fully
+      // settled. Since these originators DO have slugs, retry once before surfacing an error.
+      let response = await this.sendMessage({ type: 'LOOKUP_ORIGINATOR_BY_HANDLE', data: requestData });
+      let originator = response.success && response.found && response.originator
+        ? this.normalizeOriginator(response.originator)
+        : null;
+      if (response.success && response.found && response.originator && !originator) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        response = await this.sendMessage({ type: 'LOOKUP_ORIGINATOR_BY_HANDLE', data: requestData });
+        originator = response.success && response.found && response.originator
+          ? this.normalizeOriginator(response.originator)
+          : null;
+      }
 
       if (response.success && response.found && response.originator) {
-        const originator = this.normalizeOriginator(response.originator);
         if (!originator) {
           throw new Error('Resolved originator is missing a slug');
         }
