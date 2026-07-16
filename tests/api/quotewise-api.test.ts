@@ -64,24 +64,13 @@ describe('QuotewiseApiClient', () => {
       );
     });
 
-    test('makes requests without Authorization header when no token', async () => {
+    test('fails closed (throws, sends nothing) when there is no token', async () => {
+      // Fail-closed: with no token we must NOT send the request unauthenticated —
+      // capture/preflight data would otherwise egress anonymously before the 401.
       getAccessToken.mockResolvedValue(null);
 
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ results: [] })
-      } as Response);
-
-      await client.searchOriginators('test');
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.not.objectContaining({
-            'Authorization': expect.any(String)
-          })
-        })
-      );
+      await expect(client.searchOriginators('test')).rejects.toThrow('Authentication required');
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     test('does not include credentials (cookies) in requests', async () => {
