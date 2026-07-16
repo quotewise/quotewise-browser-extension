@@ -1,0 +1,40 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 7 * * 1'   # weekly, Monday 07:00 UTC
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    # Code scanning needs GitHub Advanced Security, which is free on public repos
+    # but not enabled on this (currently private) repo. Skip while private (a
+    # neutral skip, not a failure); this activates automatically on the public flip.
+    if: ${{ github.event.repository.visibility == 'public' }}
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+
+      # JavaScript/TypeScript needs no build step; CodeQL analyzes the source.
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:${{ matrix.language }}'
