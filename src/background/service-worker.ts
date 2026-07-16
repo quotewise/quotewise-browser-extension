@@ -57,6 +57,18 @@ import {
   type RuntimeDiagnostics,
   type RuntimeDiagnosticsContext,
 } from './diagnostics';
+import {
+  tabInFlightOperations,
+  PREFLIGHT_TIMEOUT_ALARM_PREFIX,
+  createOperationId,
+  preflightTimeoutAlarmName,
+  parsePreflightTimeoutAlarmName,
+  getMatchingInFlightOperation,
+  isCheckInFlightForTab,
+  persistAutomaticPreflightOperations,
+  readPersistedAutomaticPreflightOperations,
+  type InFlightIconOperation,
+} from './preflight-operations';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -72,7 +84,6 @@ const pendingDuplicateChecks = new Map<string, Promise<void>>();
 const tabDuplicateResults = new Map<number, DuplicateCheckResult | null>();
 const tabDuplicateResultUrls = new Map<number, string>();
 const tabMissingOriginators = new Map<number, MissingOriginatorInfo>();
-const tabInFlightOperations = new Map<number, InFlightIconOperation>();
 const tabScopedPresentationTabIds = new Set<number>();
 let lastActiveTabId: number | null = null;
 let userDataWriteEpoch = 0;
@@ -93,21 +104,6 @@ const AUTOMATIC_PREFLIGHT_TIMEOUT_MS = 8_000;
 const AUTOMATIC_ORIGINATOR_PROBE_DELAY_MS = 300;
 const ORIGINATOR_FALLBACK_TIMEOUT_MS = 3_000;
 const AUTOMATIC_PREFLIGHT_KEEPALIVE_MS = AUTOMATIC_PREFLIGHT_TIMEOUT_MS + ORIGINATOR_FALLBACK_TIMEOUT_MS + 1_000;
-const PREFLIGHT_OPERATION_STORAGE_KEY = 'automaticPreflightOperations';
-const PREFLIGHT_TIMEOUT_ALARM_PREFIX = 'automatic-preflight-timeout:';
-
-interface InFlightIconOperation {
-  tabId: number;
-  url: string;
-  platform?: CapturePlatform;
-  statusId: string;
-  operationId: string;
-  trigger: DiagnosticTrigger;
-  startedAt: number;
-  timeoutAt?: number;
-  handle?: string;
-  cacheWriteEpoch?: number;
-}
 
 const tweetExtractionRetryTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const automaticTweetExtractionRequests = new Map<string, Promise<void>>();
@@ -167,14 +163,6 @@ function isExtractedTweetDataForUrl(data: unknown, url?: string): boolean {
     (expected.platform === actual.platform && expected.sourceId === actual.sourceId);
 }
 
-function createOperationId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function preflightTimeoutAlarmName(operation: InFlightIconOperation): string {
-  return `${PREFLIGHT_TIMEOUT_ALARM_PREFIX}${operation.tabId}:${operation.operationId}`;
-}
-
 function automaticOriginatorProbeKey(operation: InFlightIconOperation): string {
   return `${operation.tabId}:${operation.operationId}`;
 }
@@ -192,88 +180,6 @@ function clearAutomaticOriginatorProbeTimer(operation: InFlightIconOperation): v
 
 function hasAutomaticOriginatorProbeTimer(operation: InFlightIconOperation | null): boolean {
   return operation !== null && automaticOriginatorProbeTimers.has(automaticOriginatorProbeKey(operation));
-}
-
-function parsePreflightTimeoutAlarmName(name: string): { tabId: number; operationId: string } | null {
-  if (!name.startsWith(PREFLIGHT_TIMEOUT_ALARM_PREFIX)) {
-    return null;
-  }
-
-  const value = name.slice(PREFLIGHT_TIMEOUT_ALARM_PREFIX.length);
-  const separatorIndex = value.indexOf(':');
-  if (separatorIndex <= 0) {
-    return null;
-  }
-
-  const tabId = Number(value.slice(0, separatorIndex));
-  const operationId = value.slice(separatorIndex + 1);
-  if (!Number.isInteger(tabId) || operationId === '') {
-    return null;
-  }
-
-  return { tabId, operationId };
-}
-
-function getMatchingInFlightOperation(tabId: number, url?: string): InFlightIconOperation | null {
-  const operation = tabInFlightOperations.get(tabId);
-  if (!operation) {
-    return null;
-  }
-
-  if (url && !isSameTweetPageUrl(operation.url, url)) {
-    return null;
-  }
-
-  return operation;
-}
-
-function isCheckInFlightForTab(tabId: number, url?: string): boolean {
-  return getMatchingInFlightOperation(tabId, url) !== null;
-}
-
-function serializableAutomaticPreflightOperations(): InFlightIconOperation[] {
-  return [...tabInFlightOperations.values()].filter(
-    operation => operation.trigger === 'automatic-preflight' && operation.timeoutAt !== undefined,
-  );
-}
-
-async function persistAutomaticPreflightOperations(): Promise<void> {
-  try {
-    await chrome.storage.session.set({
-      [PREFLIGHT_OPERATION_STORAGE_KEY]: serializableAutomaticPreflightOperations(),
-    });
-  } catch (error) {
-    debugLog('Unable to persist automatic preflight operations:', error);
-  }
-}
-
-function isValidPersistedInFlightOperation(value: unknown): value is InFlightIconOperation {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const operation = value as Partial<InFlightIconOperation>;
-  return (
-    typeof operation.tabId === 'number' &&
-    typeof operation.url === 'string' &&
-    typeof operation.statusId === 'string' &&
-    typeof operation.operationId === 'string' &&
-    operation.trigger === 'automatic-preflight' &&
-    typeof operation.startedAt === 'number' &&
-    typeof operation.timeoutAt === 'number' &&
-    tweetStatusId(operation.url) === operation.statusId
-  );
-}
-
-async function readPersistedAutomaticPreflightOperations(): Promise<InFlightIconOperation[]> {
-  try {
-    const storage = await chrome.storage.session.get([PREFLIGHT_OPERATION_STORAGE_KEY]);
-    const value = storage[PREFLIGHT_OPERATION_STORAGE_KEY];
-    return Array.isArray(value) ? value.filter(isValidPersistedInFlightOperation) : [];
-  } catch (error) {
-    debugLog('Unable to read automatic preflight operations:', error);
-    return [];
-  }
 }
 
 async function clearInFlightOperation(
