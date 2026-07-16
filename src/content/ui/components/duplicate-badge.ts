@@ -207,8 +207,8 @@ export class DuplicateBadge {
     } else if (sightingState === 'same_platform_sighting') {
       this.renderEarlierSighting(quotePageUrl, match);
     } else if (sightingState === 'other_platform_sighting') {
-      this.renderBadge('info', '🔵', 'Add Twitter sighting', quotePageUrl);
-      this.container.title = 'Quote exists in Quotewise, but this Twitter sighting has not been captured';
+      this.renderBadge('info', '🔵', 'Add sighting', quotePageUrl);
+      this.container.title = 'Quote exists in Quotewise, but this sighting has not been captured';
       this.callbacks.onSubmitStateChange({ type: 'submit', enabled: true, text: 'Add Sighting' });
     } else if (result.recommendation === 'duplicate') {
       this.renderBadge('warning', '⚠️', 'Duplicate', quotePageUrl);

@@ -1,82 +1,93 @@
-# Quotewise Chrome Extension
+# Quotewise Quote Capture
 
-A Chrome extension for capturing quotes from web sources and adding them to the Quotewise database.
+[![CI](https://github.com/quotewise/chrome-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/quotewise/chrome-extension/actions/workflows/ci.yml)
 
-## Overview
+A browser extension (Chrome and Firefox, Manifest V3) for capturing quotes from
+social posts and saving them to your [Quotewise](https://quotewise.io) library —
+with attribution, a link back to the source, and a duplicate check before
+anything is saved.
 
-This extension allows authenticated Quotewise admin users to capture quotes directly from web pages (initially Twitter/X) with full context, engagement metrics, and proper attribution - all without expensive API costs.
+When you come across a quotable line, click the extension icon. An overlay opens
+over the current post; you confirm the author and the text, and the quote is
+submitted with full attribution and the source URL.
 
-## Features (MVP)
+## Supported platforms
 
-- **Quote Capture**: Extract quotes from individual Twitter/X tweets
-- **Originator Search**: Find and select the correct quote author
-- **Duplicate Detection**: Check for existing quotes before submission
-- **Engagement Metrics**: Capture likes, retweets, and other platform metrics
-- **Attribution Levels**: Specify confidence in attribution (Direct, Popularized, Disputed)
+- **X** (formerly Twitter)
+- **Threads**
+- **Bluesky**
+- **Substack Notes**
 
-## Project Structure
+The extension only activates on a single post you choose to capture — it does not
+read your feed or any other page content.
 
+## How it works
+
+1. **Browse normally.** When you see a post worth saving, click the Quotewise
+   icon. An overlay appears over the current post.
+2. **Review and confirm.** The extension reads the quote text, the author name or
+   handle, and the source URL from the page. You confirm the author before
+   anything is saved.
+3. **Duplicate check.** Before saving, Quotewise checks whether the quote already
+   exists so you don't create accidental doubles.
+4. **Save with attribution.** The quote is submitted with the author, the
+   platform, the source link, and the public engagement counts visible at capture
+   time. If you use Quotewise collections, you can pick which one(s) to file it
+   into during capture.
+
+Captured quotes go into the public Quotewise database, attributed to the original
+author, and new contributors' submissions are reviewed by curators before
+publication. See [quotewise.io/privacy](https://quotewise.io/privacy/) for how
+data is handled.
+
+## Build from source
+
+The extension is not yet on the Chrome Web Store / AMO, so load it unpacked from a
+local build. This project uses **[Bun](https://bun.sh)** (≥ 1.3.4).
+
+```bash
+bun install
+bun run build        # production bundle → dist/
 ```
-quotewise-chrome-extension/
-├── docs/delivery/          # PBI documentation and tasks
-├── manifest.json           # Chrome extension configuration
-├── background/             # Service worker scripts
-├── content/               # Content scripts for web pages
-├── popup/                 # Extension popup interface
-├── api/                   # Quotewise API client
-└── icons/                 # Extension icons
+
+### Chrome / Brave / Edge
+
+1. Open `chrome://extensions`.
+2. Enable **Developer mode**.
+3. Click **Load unpacked** and select this repo's `dist/` directory.
+
+### Firefox
+
+Firefox consumes the same source as a plain WebExtension (no separate repo):
+
+```bash
+bun run build:firefox   # → dist-firefox/ + web-ext-artifacts/*.zip
 ```
 
-## Development Setup
+Then load `dist-firefox/` via `about:debugging` → **This Firefox** → **Load
+Temporary Add-on**, or install the built zip from `web-ext-artifacts/`.
 
-1. Clone this repository
-2. Open Chrome/Brave and navigate to `chrome://extensions/`
-3. Enable "Developer mode"
-4. Click "Load unpacked" and select this directory
-5. The extension icon should appear in your toolbar
+## Authentication & privacy
 
-## Authentication
+- Sign-in uses **OAuth 2.0 (Authorization Code + PKCE)** with an
+  `Authorization: Bearer <token>` header. No passwords are entered into the
+  extension, and it does not read your browser cookies.
+- Access/refresh tokens are stored in `chrome.storage.local`. They, and any
+  cached lookup data, are cleared when you log out, enable Private mode, or choose
+  **Clear my data**.
+- The extension talks only to `api.quotewise.io` and requests minimal permissions.
 
-The extension requires:
-1. An active session on quotewise.io
-2. Admin privileges for quote creation
+## Development
 
-## API Integration
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the build/test/PR workflow and
+[SECURITY.md](./SECURITY.md) to report a vulnerability.
 
-This extension works with the Quotewise API endpoints defined in PBI-22 of the main Quotewise project:
-- Originator search
-- Quote addition with duplicate handling
-- Duplicate checking
-
-## Platform Support
-
-### Current (MVP)
-- Twitter/X (platform code: TX)
-
-### Planned
-- Instagram (IG)
-- LinkedIn (LI)
-- Reddit (RD)
-- Generic web pages
-
-## Contributing
-
-See the [Product Backlog](./docs/delivery/backlog.md) for planned features and improvements.
-
-## Development Guidelines
-
-- Follow the PBI process defined in docs/delivery/
-- Test on both Chrome and Brave browsers
-- Ensure all API calls handle errors gracefully
-- Maintain user privacy - only capture necessary data
-
-## Security Considerations
-
-- No storage of user credentials
-- All API calls use existing session authentication
-- Minimal permissions requested
-- Data transmitted only to api.quotewise.io
+```bash
+bun run type-check   # tsc --noEmit
+bun run lint         # ESLint
+bun run test         # Jest + jsdom
+```
 
 ## License
 
-[License details to be determined]
+[MPL-2.0](./LICENSE) © Quotewise

@@ -57,14 +57,14 @@ describe('resolveIconPresentation', () => {
       iconVariant: 'grey',
       badgeText: '',
       scope: 'global',
-      title: 'Quotewise — capture works on X/Twitter tweets',
+      title: 'Quotewise — capture works on X, Threads, Bluesky & Substack Notes',
     });
 
     expect(resolveIconPresentation(AuthState.AUTHENTICATED, null, supportedNonTweetTab)).toMatchObject({
       iconVariant: 'color',
       badgeText: '',
       scope: 'global',
-      title: 'Quotewise — open a tweet to capture',
+      title: 'Quotewise — open a post to capture',
     });
 
     for (const state of [AuthState.UNKNOWN, AuthState.CHECKING, AuthState.AUTHENTICATING]) {
@@ -300,7 +300,7 @@ describe('resolveIconPresentation', () => {
 
     expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote'), supportedNonTweetTab)).toMatchObject({
       badgeText: '',
-      title: 'Quotewise — open a tweet to capture',
+      title: 'Quotewise — open a post to capture',
     });
   });
 
@@ -313,7 +313,7 @@ describe('resolveIconPresentation', () => {
       iconVariant: 'grey',
       badgeText: '',
       scope: 'global',
-      title: 'Quotewise — capture works on X/Twitter tweets',
+      title: 'Quotewise — capture works on X, Threads, Bluesky & Substack Notes',
     });
   });
 

@@ -137,7 +137,7 @@ describe('DuplicateBadge', () => {
     ]);
   });
 
-  it('shows "Add Twitter sighting" badge and submit action for no_platform_sighting with short_code', () => {
+  it('shows "Add sighting" badge and submit action for no_platform_sighting with short_code', () => {
     badge.update({
       result: makeResult({
         matches: [makeMatch({
@@ -148,7 +148,7 @@ describe('DuplicateBadge', () => {
         })],
       }),
     });
-    expect(container.textContent).toContain('Add Twitter sighting');
+    expect(container.textContent).toContain('Add sighting');
     expect(container.querySelector('a')).toBeTruthy();
     expect(directives).toEqual([
       { type: 'submit', enabled: true, text: 'Add Sighting' },

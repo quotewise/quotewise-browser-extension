@@ -38,22 +38,16 @@
 
 ## Commit & Pull Request Guidelines
 - Commit messages follow the existing short, imperative style (`Add …`, `Enhance …`, `Implement …`); keep scope focused per commit.
-- PRs should include: a concise summary, linked backlog item (see `docs/delivery/backlog.md`), clear before/after notes for UI changes (screenshots for overlay-bar tweaks), and which verification commands were run.
+- PRs should include: a concise summary, a linked GitHub issue where applicable, clear before/after notes for UI changes (screenshots for overlay-bar tweaks), and which verification commands were run.
 - Call out manifest permission or API surface changes in PRs.
 
-## Issue Tracking — Beads (shared with `quotewise` repo)
-- This repo has no local beads DB; it redirects to the canonical Dolt store in `../quotewise/.beads` via `.beads/redirect` (an absolute path; `.beads/` is gitignored).
-- One-time setup on a fresh clone: `mkdir -p .beads && echo "$(cd ../quotewise && pwd)/.beads" > .beads/redirect`, then verify with `bd where`.
-- Do **not** `bd init` here. It would create a competing local DB.
-- When creating issues, tag the surface(s) via labels so the shared DB stays filterable across repos:
-  - `--labels chrome-ext[,django-api,cli,mcp-server,infra]` plus domain labels (e.g. `auth`, `duplicate-detection`, `ux`). Add a label per surface for cross-cutting work.
-  - Do **not** pass `--repo`. It triggers auto-routing this DB isn't configured for — creates appear successful but silently fail to persist. Filter via `bd list --label chrome-ext` instead.
-- See the main `quotewise/AGENTS.md` for the broader bd workflow (`bd ready`, `bd show`, `bd update --claim`, `bd close`).
+## Issue Tracking
+- External contributors: use **GitHub issues** and pull requests (see [CONTRIBUTING.md](./CONTRIBUTING.md)).
+- Maintainers track work in a separate internal (private) tracker that is not part of this repository.
 
 ## Quotewise API Contract Verification
-- Before changing code that consumes Quotewise.io API request or response shapes, verify against the current sibling backend repo, not memory or stale local files.
-- Fetch and verify current main in `../quotewise`: `git -C ../quotewise fetch origin main`, confirm the checkout is `main`, then fast-forward with `git -C ../quotewise merge --ff-only origin/main` when it will not overwrite local work. If the sibling repo is dirty or cannot be fast-forwarded safely, inspect `origin/main:<path>` with `git -C ../quotewise show ...` instead.
-- Treat the backend serializer/viewset/tests as the source of truth for extension contracts. Do not guess API shapes, add optional compatibility formats, or normalize alternate envelopes unless the current backend contract explicitly documents those alternates or the user asks for backwards compatibility.
+- Before changing code that consumes Quotewise API request/response shapes, verify against the live API (`https://api.quotewise.io`) rather than memory or stale local files.
+- Treat the backend as the source of truth for extension contracts. Do not guess API shapes, add optional compatibility formats, or normalize alternate envelopes unless the contract explicitly documents those alternates or the user asks for backwards compatibility.
 
 ## Security & Configuration Tips
 - Environments are defined in `src/config/environment.ts`; avoid hardcoding secrets or domains outside that map.
