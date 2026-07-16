@@ -38,7 +38,7 @@ interface StorageCleanupConfig {
   cleanupInterval: number;
   // Max age for different data types (in milliseconds)
   maxAge: {
-    tweets: number;
+    posts: number;
     authChecks: number;
     searchHistory: number;
   };
@@ -58,8 +58,8 @@ export class StorageCleanupService {
       // Run cleanup every 6 hours
       cleanupInterval: 6 * 60 * 60 * 1000,
       maxAge: {
-        // Tweet data expires after 24 hours (tweets change frequently)
-        tweets: 24 * 60 * 60 * 1000,
+        // Post data expires after 24 hours (posts change frequently)
+        posts: 24 * 60 * 60 * 1000,
         // Auth checks expire after 1 hour (auth status changes)
         authChecks: 60 * 60 * 1000,
         // Search history expires after 3 weeks
@@ -111,8 +111,8 @@ export class StorageCleanupService {
       const now = Date.now();
       let totalCleaned = 0;
 
-      // Clean up tweets
-      totalCleaned += await this.cleanupTweets(now);
+      // Clean up posts
+      totalCleaned += await this.cleanupPosts(now);
 
       // Clean up auth checks
       totalCleaned += await this.cleanupAuthChecks(now);
@@ -130,9 +130,9 @@ export class StorageCleanupService {
   }
   
   /**
-   * Clean up stale tweet data
+   * Clean up stale post data
    */
-  private async cleanupTweets(now: number): Promise<number> {
+  private async cleanupPosts(now: number): Promise<number> {
     try {
       const result = await chrome.storage.local.get(['currentPost', 'currentTweet']);
       const currentPost = result.currentPost as StoredPostData | undefined;
@@ -144,7 +144,7 @@ export class StorageCleanupService {
       }
       
       const age = now - storedPost.timestamp;
-      if (age > this.config.maxAge.tweets) {
+      if (age > this.config.maxAge.posts) {
         await chrome.storage.local.remove(['currentPost', 'currentTweet']);
         debugLog(`Cleaned up stale post data (age: ${Math.round(age / (60 * 60 * 1000))}h)`);
         return 1;
@@ -152,7 +152,7 @@ export class StorageCleanupService {
       
       return 0;
     } catch (error) {
-      console.error('Error cleaning up tweets:', error);
+      console.error('Error cleaning up posts:', error);
       return 0;
     }
   }
@@ -226,13 +226,13 @@ export class StorageCleanupService {
    * Get storage usage statistics
    */
   public async getStorageStats(): Promise<{
-    tweets: { count: number; oldestAge: number | null };
+    posts: { count: number; oldestAge: number | null };
     authChecks: { count: number; age: number | null };
     searchHistory: { count: number; oldestAge: number | null };
   }> {
     const now = Date.now();
     const stats = {
-      tweets: { count: 0, oldestAge: null as number | null },
+      posts: { count: 0, oldestAge: null as number | null },
       authChecks: { count: 0, age: null as number | null },
       searchHistory: { count: 0, oldestAge: null as number | null }
     };
@@ -245,10 +245,10 @@ export class StorageCleanupService {
         'originator_search_history'
       ]);
       
-      // Check tweets
+      // Check posts
       if (result.currentPost || result.currentTweet) {
-        stats.tweets.count = 1;
-        stats.tweets.oldestAge = now - (result.currentPost ?? result.currentTweet).timestamp;
+        stats.posts.count = 1;
+        stats.posts.oldestAge = now - (result.currentPost ?? result.currentTweet).timestamp;
       }
       
       // Check auth

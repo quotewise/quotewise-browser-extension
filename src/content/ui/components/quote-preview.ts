@@ -54,7 +54,7 @@ export class QuotePreview {
     }
   }
 
-  static getPageSelection(tweetText: string | undefined): string | null {
+  static getPageSelection(postText: string | undefined): string | null {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return null;
 
@@ -62,18 +62,18 @@ export class QuotePreview {
     if (!selectedText) return null;
 
     const isAnchoredSelection = selection.anchorNode
-      ? QuotePreview.isSelectionWithinPostContent(selection, tweetText)
+      ? QuotePreview.isSelectionWithinPostContent(selection, postText)
       : null;
     if (isAnchoredSelection === false) return null;
 
     // Fast path: the selection is a verbatim subset of the extracted text.
-    if (tweetText && tweetText.includes(selectedText)) {
+    if (postText && postText.includes(selectedText)) {
       return selectedText;
     }
 
     // Otherwise honor a genuine selection that is anchored inside the tweet /
     // long-form article content. On article and subscription pages the
-    // extracted `tweetText` is often partial or wrong (e.g. a "Subscribe"
+    // extracted `postText` is often partial or wrong (e.g. a "Subscribe"
     // CTA), so we must not gate the user's highlight on it — only on whether
     // the highlight actually lives within the post's content.
     if (isAnchoredSelection) {
@@ -90,7 +90,7 @@ export class QuotePreview {
    * <article>, but it is matched explicitly so selections are honored even on
    * layouts where it does not.
    */
-  private static isSelectionWithinPostContent(selection: Selection, tweetText?: string): boolean {
+  private static isSelectionWithinPostContent(selection: Selection, postText?: string): boolean {
     const anchor = selection.anchorNode;
     if (!anchor) return false;
     const anchorEl = anchor instanceof Element ? anchor : anchor.parentElement;
@@ -102,11 +102,11 @@ export class QuotePreview {
       return true;
     }
 
-    const tweetTextContainer = anchorEl.closest('[data-testid="tweetText"]');
-    if (tweetTextContainer) {
-      if (!tweetText) return true;
-      const containerText = tweetTextContainer.textContent?.replace(/\s+/g, ' ').trim();
-      return containerText === tweetText.replace(/\s+/g, ' ').trim();
+    const postTextContainer = anchorEl.closest('[data-testid="tweetText"]');
+    if (postTextContainer) {
+      if (!postText) return true;
+      const containerText = postTextContainer.textContent?.replace(/\s+/g, ' ').trim();
+      return containerText === postText.replace(/\s+/g, ' ').trim();
     }
 
     const article = anchorEl.closest('article, [data-testid="tweet"]');

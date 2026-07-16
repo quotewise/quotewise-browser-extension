@@ -5,19 +5,19 @@ import type { DuplicateCheckResult } from '../../src/types/api';
 const tweetTab: TabContext = {
   tabId: 1,
   isSupportedPlatform: true,
-  isTweetPage: true,
+  isPostPage: true,
   isCheckInFlight: false,
 };
 const supportedNonTweetTab: TabContext = {
   tabId: 1,
   isSupportedPlatform: true,
-  isTweetPage: false,
+  isPostPage: false,
   isCheckInFlight: false,
 };
 const unsupportedTab: TabContext = {
   tabId: 1,
   isSupportedPlatform: false,
-  isTweetPage: false,
+  isPostPage: false,
   isCheckInFlight: false,
 };
 
@@ -334,7 +334,7 @@ describe('resolveIconPresentation', () => {
     for (const auth of Object.values(AuthState)) {
       for (const recommendation of recommendations) {
         for (const isSupportedPlatform of [true, false]) {
-          for (const isTweetPage of [true, false]) {
+          for (const isPostPage of [true, false]) {
             for (const isCheckInFlight of [true, false]) {
               for (const isOriginatorMissing of [true, false]) {
                 for (const collected of [true, false]) {
@@ -364,7 +364,7 @@ describe('resolveIconPresentation', () => {
                   const tab = {
                     tabId: 1,
                     isSupportedPlatform,
-                    isTweetPage,
+                    isPostPage,
                     isCheckInFlight,
                     isOriginatorMissing,
                   };

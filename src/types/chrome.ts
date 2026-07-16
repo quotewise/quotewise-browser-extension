@@ -296,8 +296,8 @@ export type Platform = CapturePlatform | 'x' | 'unknown';
 export interface PlatformDetection {
   platform: Platform;
   isSupported: boolean;
-  isTweetPage: boolean;
-  tweetId?: string;
+  isPostPage: boolean;
+  postId?: string;
 }
 
 // Content script injection types

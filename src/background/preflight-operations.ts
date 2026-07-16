@@ -13,7 +13,7 @@
  */
 
 import type { CapturePlatform } from '../types/index';
-import type { DiagnosticTrigger } from './diagnostics';
+import type { DiagnosticTrigger, DiagnosticTimingEvent } from './diagnostics';
 import { captureIdentityFromUrl, isSameCaptureUrl } from '../platforms/capture';
 import { debugLog } from '../config/environment';
 
@@ -28,6 +28,41 @@ export interface InFlightIconOperation {
   timeoutAt?: number;
   handle?: string;
   cacheWriteEpoch?: number;
+}
+
+/**
+ * Context threaded through the originator-lookup application flow. Homed here
+ * (rather than the worker) so the originator-probe module can name the shape it
+ * hands back to the worker's `applyOriginatorLookupResponse` without importing
+ * the worker.
+ */
+export interface OriginatorLookupApplicationContext {
+  tabId: number;
+  sourceUrl: string;
+  trigger: DiagnosticTrigger;
+  handle?: string;
+  operation?: InFlightIconOperation | null;
+  staleReason?: string;
+}
+
+/** Diagnostic timing fields common to every event about an in-flight operation. */
+export function operationTimingFields(operation: InFlightIconOperation): Pick<
+  DiagnosticTimingEvent,
+  'tabId' | 'sourceUrl' | 'statusId' | 'handle' | 'operationId' | 'trigger'
+> {
+  return {
+    tabId: operation.tabId,
+    sourceUrl: operation.url,
+    statusId: operation.statusId,
+    handle: operation.handle,
+    operationId: operation.operationId,
+    trigger: operation.trigger,
+  };
+}
+
+/** Elapsed milliseconds since `startedAt`, or undefined when it is unset. */
+export function durationSince(startedAt: number | undefined): number | undefined {
+  return typeof startedAt === 'number' ? Date.now() - startedAt : undefined;
 }
 
 const PREFLIGHT_OPERATION_STORAGE_KEY = 'automaticPreflightOperations';

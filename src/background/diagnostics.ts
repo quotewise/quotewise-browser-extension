@@ -149,13 +149,13 @@ export interface RuntimeDiagnostics {
     id?: number;
     url?: string;
     isSupportedPlatform: boolean;
-    isTweetPage: boolean;
+    isPostPage: boolean;
     queryError?: string;
   } | null;
   activeTabState: {
     tabId: number;
     isSupportedPlatform: boolean;
-    isTweetPage: boolean;
+    isPostPage: boolean;
     isCheckInFlight: boolean;
     isOriginatorMissing: boolean;
     hasDuplicateResult: boolean;
@@ -429,12 +429,12 @@ async function getActiveTabDiagnostics(): Promise<RuntimeDiagnostics['activeTab'
       id: tab.id,
       url: tab.url,
       isSupportedPlatform: isSupportedCapturePlatformUrl(tab.url),
-      isTweetPage: isSupportedPermalinkUrl(tab.url),
+      isPostPage: isSupportedPermalinkUrl(tab.url),
     };
   } catch (error) {
     return {
       isSupportedPlatform: false,
-      isTweetPage: false,
+      isPostPage: false,
       queryError: errorMessage(error),
     };
   }
@@ -455,7 +455,7 @@ function getTabStateDiagnostics(
   return {
     tabId,
     isSupportedPlatform: isSupportedCapturePlatformUrl(url),
-    isTweetPage: isSupportedPermalinkUrl(url),
+    isPostPage: isSupportedPermalinkUrl(url),
     isCheckInFlight: ctx.isCheckInFlightForTab(tabId, url),
     isOriginatorMissing: missingOriginator !== null,
     hasDuplicateResult: cachedDuplicate.hasResult,

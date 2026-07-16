@@ -47,12 +47,10 @@ import {
   recordPreflightDiagnostic,
   summarizeDuplicateResult,
   summarizeOriginatorResult,
-  summarizeHandleLookupResult,
   duplicateResultFromResponse,
   errorMessage,
   getRuntimeDiagnostics,
   type DiagnosticTrigger,
-  type DiagnosticTimingEvent,
   type MissingOriginatorInfo,
   type RuntimeDiagnostics,
   type RuntimeDiagnosticsContext,
@@ -67,8 +65,15 @@ import {
   isCheckInFlightForTab,
   persistAutomaticPreflightOperations,
   readPersistedAutomaticPreflightOperations,
+  operationTimingFields,
+  durationSince,
   type InFlightIconOperation,
+  type OriginatorLookupApplicationContext,
 } from './preflight-operations';
+import {
+  createOriginatorProbe,
+  ORIGINATOR_FALLBACK_TIMEOUT_MS,
+} from './originator-probe';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -101,13 +106,12 @@ const WEB_NAVIGATION_PLATFORM_FILTERS = Object.values(PLATFORM_DEFINITIONS)
 const PRELOADED_DUPLICATE_MAX_AGE_MS = 60_000;
 const POST_EXTRACTION_RETRY_DELAYS_MS = [1_000, 2_500, 5_000] as const;
 const AUTOMATIC_PREFLIGHT_TIMEOUT_MS = 8_000;
-const AUTOMATIC_ORIGINATOR_PROBE_DELAY_MS = 300;
-const ORIGINATOR_FALLBACK_TIMEOUT_MS = 3_000;
+// ORIGINATOR_FALLBACK_TIMEOUT_MS is owned by the originator-probe module; the
+// keepalive window has to cover a preflight plus its timeout fallback probe.
 const AUTOMATIC_PREFLIGHT_KEEPALIVE_MS = AUTOMATIC_PREFLIGHT_TIMEOUT_MS + ORIGINATOR_FALLBACK_TIMEOUT_MS + 1_000;
 
 const postExtractionRetryTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const automaticPostExtractionRequests = new Map<string, Promise<void>>();
-const automaticOriginatorProbeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function isPostPageUrl(url?: string): boolean {
   return isSupportedPermalinkUrl(url);
@@ -163,24 +167,32 @@ function isExtractedPostDataForUrl(data: unknown, url?: string): boolean {
     (expected.platform === actual.platform && expected.sourceId === actual.sourceId);
 }
 
-function automaticOriginatorProbeKey(operation: InFlightIconOperation): string {
-  return `${operation.tabId}:${operation.operationId}`;
-}
-
-function clearAutomaticOriginatorProbeTimer(operation: InFlightIconOperation): void {
-  const key = automaticOriginatorProbeKey(operation);
-  const timer = automaticOriginatorProbeTimers.get(key);
-  if (!timer) {
-    return;
-  }
-
-  clearTimeout(timer);
-  automaticOriginatorProbeTimers.delete(key);
-}
-
-function hasAutomaticOriginatorProbeTimer(operation: InFlightIconOperation | null): boolean {
-  return operation !== null && automaticOriginatorProbeTimers.has(automaticOriginatorProbeKey(operation));
-}
+// The automatic-originator-probe subsystem lives in ./originator-probe. It is
+// mutually recursive with the operation lifecycle below (start/clear schedule
+// and clear the probe; the probe calls back into these operations), so the
+// worker owns the state and injects it here. This runs once at module-eval
+// time, before any event fires, so the operation lifecycle functions defined
+// below can reference the assembled `probe` closure. The injected callbacks are
+// hoisted function declarations, so referencing them here is safe despite their
+// definitions appearing later in the file.
+const probe = createOriginatorProbe({
+  getApiHandler: () => apiHandler,
+  isPrivateModeEnabled,
+  canWriteUserIdentifyingCache,
+  isSenderTabStillOnSourceUrl,
+  resolveOriginatorCreateUrl,
+  applyResolvedIconForTab,
+  applyAuthRequiredApiResponse,
+  applyOriginatorLookupResponse,
+  cacheFoundOriginatorFromLookup,
+  startInFlightOperation,
+  clearInFlightOperation,
+  getCachedDuplicateResultForTab,
+  setTabDuplicateResult,
+  setMissingOriginator: (tabId, info) => { tabMissingOriginators.set(tabId, info); },
+  deleteMissingOriginator: (tabId) => { tabMissingOriginators.delete(tabId); },
+  markTabScopedPresentation: (tabId) => { tabScopedPresentationTabIds.add(tabId); },
+});
 
 async function clearInFlightOperation(
   tabId: number,
@@ -210,7 +222,7 @@ async function clearInFlightOperation(
   tabInFlightOperations.delete(tabId);
 
   if (operation.trigger === 'automatic-preflight') {
-    clearAutomaticOriginatorProbeTimer(operation);
+    probe.clearAutomaticOriginatorProbeTimer(operation);
     try {
       await chrome.alarms.clear(preflightTimeoutAlarmName(operation));
     } catch (error) {
@@ -259,7 +271,7 @@ async function startInFlightOperation(
     });
     await persistAutomaticPreflightOperations();
     chrome.alarms.create(preflightTimeoutAlarmName(operation), { when: operation.timeoutAt });
-    scheduleAutomaticOriginatorProbe(operation);
+    probe.scheduleAutomaticOriginatorProbe(operation);
   }
 
   return operation;
@@ -369,33 +381,6 @@ function resolveOriginatorCreateUrl(
 
 function originatorSlugFromPreflight(originator: PreflightOriginatorResult | undefined): string | undefined {
   return originator?.originator?.slug ?? originator?.originator?.unique_id;
-}
-
-function operationTimingFields(operation: InFlightIconOperation): Pick<
-  DiagnosticTimingEvent,
-  'tabId' | 'sourceUrl' | 'statusId' | 'handle' | 'operationId' | 'trigger'
-> {
-  return {
-    tabId: operation.tabId,
-    sourceUrl: operation.url,
-    statusId: operation.statusId,
-    handle: operation.handle,
-    operationId: operation.operationId,
-    trigger: operation.trigger,
-  };
-}
-
-function durationSince(startedAt: number | undefined): number | undefined {
-  return typeof startedAt === 'number' ? Date.now() - startedAt : undefined;
-}
-
-function isAutomaticOriginatorProbeTimeoutResponse(response: unknown): boolean {
-  if (!response || typeof response !== 'object') {
-    return false;
-  }
-
-  const error = (response as { error?: unknown }).error;
-  return typeof error === 'string' && error === 'Automatic originator probe timed out';
 }
 
 function getMissingOriginatorForTab(tabId: number, url?: string): MissingOriginatorInfo | null {
@@ -523,7 +508,7 @@ async function applyResolvedIconForTab(
   const presentation = resolveIconPresentation(authState, resolvedDuplicateResult, {
     tabId,
     isSupportedPlatform: isSupportedPlatformUrl(url),
-    isTweetPage: isPostPageUrl(url),
+    isPostPage: isPostPageUrl(url),
     isCheckInFlight: isCheckInFlightForTab(tabId, url),
     isOriginatorMissing: getMissingOriginatorForTab(tabId, url) !== null,
   }, isPrivateModeEnabled());
@@ -617,7 +602,7 @@ async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
   const presentation = resolveIconPresentation(authState, null, {
     tabId: 0,
     isSupportedPlatform: false,
-    isTweetPage: false,
+    isPostPage: false,
     isCheckInFlight: false,
   }, isPrivateModeEnabled());
 
@@ -649,73 +634,6 @@ async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
 }
 
 setAuthPresentationUpdater(applyAuthStatePresentation);
-
-function currentAutomaticPreflightOperation(operation: InFlightIconOperation): InFlightIconOperation | null {
-  const currentOperation = getMatchingInFlightOperation(operation.tabId, operation.url);
-  if (
-    !currentOperation ||
-    currentOperation.operationId !== operation.operationId ||
-    currentOperation.trigger !== 'automatic-preflight'
-  ) {
-    return null;
-  }
-
-  return currentOperation;
-}
-
-async function shouldApplyAutomaticOriginatorProbeResult(
-  operation: InFlightIconOperation,
-): Promise<boolean> {
-  if (!currentAutomaticPreflightOperation(operation)) {
-    return false;
-  }
-
-  return isSenderTabStillOnSourceUrl(operation.tabId, operation.url);
-}
-
-function scheduleAutomaticOriginatorProbe(operation: InFlightIconOperation): void {
-  if (operation.trigger !== 'automatic-preflight') {
-    return;
-  }
-
-  if (isPrivateModeEnabled()) {
-    recordDiagnosticTimingEvent({
-      event: 'originator_probe_skipped',
-      ...operationTimingFields(operation),
-      reason: 'private_mode',
-      durationMs: durationSince(operation.startedAt),
-    });
-    return;
-  }
-
-  if (!operation.handle) {
-    recordDiagnosticTimingEvent({
-      event: 'originator_probe_skipped',
-      ...operationTimingFields(operation),
-      reason: 'missing_handle',
-      durationMs: durationSince(operation.startedAt),
-    });
-    return;
-  }
-
-  clearAutomaticOriginatorProbeTimer(operation);
-
-  const key = automaticOriginatorProbeKey(operation);
-  const timer = setTimeout(() => {
-    automaticOriginatorProbeTimers.delete(key);
-    void runAutomaticOriginatorProbe(operation).catch(error => {
-      debugLog('Automatic originator probe failed:', error);
-    });
-  }, AUTOMATIC_ORIGINATOR_PROBE_DELAY_MS);
-
-  automaticOriginatorProbeTimers.set(key, timer);
-  recordDiagnosticTimingEvent({
-    event: 'originator_probe_scheduled',
-    ...operationTimingFields(operation),
-    reason: 'after_automatic_preflight_start',
-    durationMs: durationSince(operation.startedAt),
-  });
-}
 
 async function handleAutomaticPreflightTimeout(operation: InFlightIconOperation): Promise<void> {
   if (!await isCurrentPostOperation(operation)) {
@@ -759,7 +677,7 @@ async function handleAutomaticPreflightTimeout(operation: InFlightIconOperation)
     durationMs: durationSince(operation.startedAt),
   });
 
-  if (await runAutomaticOriginatorFallback(operation)) {
+  if (await probe.runAutomaticOriginatorFallback(operation)) {
     return;
   }
 
@@ -2060,15 +1978,6 @@ async function applyOriginatorLookupLoading(
   await applyResolvedIconForTab(tabId, sourceUrl, getCachedDuplicateResultForTab(tabId, sourceUrl).result);
 }
 
-interface OriginatorLookupApplicationContext {
-  tabId: number;
-  sourceUrl: string;
-  trigger: DiagnosticTrigger;
-  handle?: string;
-  operation?: InFlightIconOperation | null;
-  staleReason?: string;
-}
-
 async function clearOriginatorLookupOperation(context: OriginatorLookupApplicationContext): Promise<void> {
   if (context.operation) {
     await clearInFlightOperation(context.tabId, {
@@ -2283,388 +2192,6 @@ async function cacheFoundOriginatorFromLookup(
       timestamp: Date.now(),
     },
   });
-}
-
-async function requestOriginatorLookupForOperation(
-  operation: InFlightIconOperation,
-  messages: {
-    unavailable: string;
-    timedOut: string;
-  },
-): Promise<unknown> {
-  if (!apiHandler || !operation.handle) {
-    return {
-      success: false,
-      error: messages.unavailable,
-    };
-  }
-
-  return new Promise<unknown>((resolve) => {
-    let settled = false;
-
-    const timeoutId = setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve({
-        success: false,
-        error: messages.timedOut,
-      });
-    }, ORIGINATOR_FALLBACK_TIMEOUT_MS);
-
-    const settle = (response: unknown): void => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      clearTimeout(timeoutId);
-      resolve(response);
-    };
-
-    Promise.resolve(apiHandler!.handleMessage(
-      {
-        type: MessageType.LOOKUP_ORIGINATOR_BY_HANDLE,
-        data: {
-          handle: operation.handle,
-          platform: operation.platform ?? captureIdentityFromUrl(operation.url)?.platform ?? 'twitter',
-          source_url: operation.url,
-        },
-      },
-      {
-        tab: {
-          id: operation.tabId,
-          url: operation.url,
-        },
-      } as chrome.runtime.MessageSender,
-      settle,
-    )).catch(error => {
-      settle({
-        success: false,
-        error: errorMessage(error),
-      });
-    });
-  });
-}
-
-async function requestOriginatorFallback(
-  operation: InFlightIconOperation,
-): Promise<unknown> {
-  return requestOriginatorLookupForOperation(operation, {
-    unavailable: 'Originator fallback unavailable',
-    timedOut: 'Originator fallback timed out',
-  });
-}
-
-async function requestAutomaticOriginatorProbe(
-  operation: InFlightIconOperation,
-): Promise<unknown> {
-  const requestedAt = Date.now();
-  recordDiagnosticTimingEvent({
-    event: 'originator_probe_request_sent',
-    ...operationTimingFields(operation),
-    durationMs: durationSince(operation.startedAt),
-  });
-
-  const response = await requestOriginatorLookupForOperation(operation, {
-    unavailable: 'Automatic originator probe unavailable',
-    timedOut: 'Automatic originator probe timed out',
-  });
-  const isTimeout = isAutomaticOriginatorProbeTimeoutResponse(response);
-  recordDiagnosticTimingEvent({
-    event: 'originator_probe_response_received',
-    ...operationTimingFields(operation),
-    reason: isTimeout ? 'originator_probe_lookup_timeout' : undefined,
-    ...(isTimeout ? { classification: 'probe_lookup_timeout' as const } : {}),
-    durationMs: Date.now() - requestedAt,
-  });
-
-  return response;
-}
-
-async function applyAutomaticOriginatorProbeResponse(
-  response: unknown,
-  operation: InFlightIconOperation,
-): Promise<void> {
-  if (!await shouldApplyAutomaticOriginatorProbeResult(operation)) {
-    recordPreflightDiagnostic({
-      status: 'skipped',
-      trigger: 'automatic-originator-probe',
-      tabId: operation.tabId,
-      url: operation.url,
-      handle: operation.handle,
-      operationId: operation.operationId,
-      durationMs: durationSince(operation.startedAt),
-      reason: 'stale_originator_probe_response',
-      classification: 'probe_stale_after_navigation',
-    });
-    recordDiagnosticTimingEvent({
-      event: 'originator_probe_skipped',
-      ...operationTimingFields(operation),
-      reason: 'stale_originator_probe_response',
-      classification: 'probe_stale_after_navigation',
-      durationMs: durationSince(operation.startedAt),
-    });
-    return;
-  }
-
-  if (await applyAuthRequiredApiResponse(response, {
-    tabId: operation.tabId,
-    url: operation.url,
-    trigger: 'automatic-originator-probe',
-    handle: operation.handle,
-  })) {
-    return;
-  }
-
-  const lookup = response as {
-    success?: unknown;
-    found?: unknown;
-    handle?: unknown;
-    platform?: unknown;
-    match_platform?: unknown;
-    confidence?: unknown;
-    create_url?: unknown;
-    originator?: unknown;
-    error?: unknown;
-  };
-
-  if (lookup.success !== true || typeof lookup.found !== 'boolean') {
-    const isTimeout = isAutomaticOriginatorProbeTimeoutResponse(response);
-    recordPreflightDiagnostic({
-      status: 'failed',
-      trigger: 'automatic-originator-probe',
-      tabId: operation.tabId,
-      url: operation.url,
-      handle: operation.handle,
-      operationId: operation.operationId,
-      durationMs: durationSince(operation.startedAt),
-      reason: 'originator_probe_unsuccessful',
-      ...(isTimeout ? { classification: 'probe_lookup_timeout' as const } : {}),
-      error: typeof lookup.error === 'string' ? lookup.error : undefined,
-    });
-    recordDiagnosticTimingEvent({
-      event: 'originator_probe_failed',
-      ...operationTimingFields(operation),
-      reason: isTimeout ? 'originator_probe_lookup_timeout' : 'originator_probe_unsuccessful',
-      ...(isTimeout ? { classification: 'probe_lookup_timeout' as const } : {}),
-      durationMs: durationSince(operation.startedAt),
-      error: typeof lookup.error === 'string' ? lookup.error : undefined,
-    });
-    return;
-  }
-
-  const handle = typeof lookup.handle === 'string'
-    ? lookup.handle
-    : operation.handle;
-  if (!handle) {
-    recordPreflightDiagnostic({
-      status: 'failed',
-      trigger: 'automatic-originator-probe',
-      tabId: operation.tabId,
-      url: operation.url,
-      operationId: operation.operationId,
-      durationMs: durationSince(operation.startedAt),
-      reason: 'originator_probe_missing_handle',
-      originator: summarizeHandleLookupResult(lookup, operation.handle),
-    });
-    recordDiagnosticTimingEvent({
-      event: 'originator_probe_failed',
-      ...operationTimingFields(operation),
-      reason: 'originator_probe_missing_handle',
-      durationMs: durationSince(operation.startedAt),
-    });
-    return;
-  }
-
-  const normalizedHandle = handle.toLowerCase();
-
-  if (lookup.found === false) {
-    if (!canWriteUserIdentifyingCache(operation.cacheWriteEpoch)) {
-      recordPreflightDiagnostic({
-        status: 'skipped',
-        trigger: 'automatic-originator-probe',
-        tabId: operation.tabId,
-        url: operation.url,
-        handle: normalizedHandle,
-        operationId: operation.operationId,
-        durationMs: durationSince(operation.startedAt),
-        reason: 'user_data_writes_blocked',
-      });
-      return;
-    }
-
-    const createUrl = resolveOriginatorCreateUrl(handle, operation.platform ?? 'twitter', lookup.create_url);
-
-    tabMissingOriginators.set(operation.tabId, {
-      handle: normalizedHandle,
-      url: operation.url,
-      createUrl,
-      timestamp: Date.now(),
-    });
-    await chrome.storage.local.set({
-      preloadedOriginator: {
-        handle: normalizedHandle,
-        originator: null,
-        ...(createUrl ? { create_url: createUrl } : {}),
-        timestamp: Date.now(),
-      },
-    });
-
-    setTabDuplicateResult(operation.tabId, null, operation.url);
-
-    await clearInFlightOperation(operation.tabId, {
-      url: operation.url,
-      operationId: operation.operationId,
-      triggers: ['automatic-preflight'],
-    });
-    tabScopedPresentationTabIds.add(operation.tabId);
-    recordPreflightDiagnostic({
-      status: 'succeeded',
-      trigger: 'automatic-originator-probe',
-      tabId: operation.tabId,
-      url: operation.url,
-      handle: normalizedHandle,
-      operationId: operation.operationId,
-      durationMs: durationSince(operation.startedAt),
-      reason: 'originator_probe_not_found',
-      originator: summarizeHandleLookupResult(lookup, normalizedHandle),
-    });
-    recordDiagnosticTimingEvent({
-      event: 'originator_probe_applied',
-      ...operationTimingFields(operation),
-      handle: normalizedHandle,
-      reason: 'originator_probe_not_found',
-      durationMs: durationSince(operation.startedAt),
-    });
-    await applyResolvedIconForTab(operation.tabId, operation.url, null);
-    return;
-  }
-
-  tabMissingOriginators.delete(operation.tabId);
-  await cacheFoundOriginatorFromLookup(normalizedHandle, lookup, operation.cacheWriteEpoch);
-  recordPreflightDiagnostic({
-    status: 'succeeded',
-    trigger: 'automatic-originator-probe',
-    tabId: operation.tabId,
-    url: operation.url,
-    handle: normalizedHandle,
-    operationId: operation.operationId,
-    durationMs: durationSince(operation.startedAt),
-    reason: 'originator_probe_found',
-    originator: summarizeHandleLookupResult(lookup, normalizedHandle),
-  });
-  recordDiagnosticTimingEvent({
-    event: 'originator_probe_applied',
-    ...operationTimingFields(operation),
-    handle: normalizedHandle,
-    reason: 'originator_probe_found',
-    durationMs: durationSince(operation.startedAt),
-  });
-}
-
-async function runAutomaticOriginatorProbe(operation: InFlightIconOperation): Promise<void> {
-  if (!operation.handle || !apiHandler) {
-    recordDiagnosticTimingEvent({
-      event: 'originator_probe_skipped',
-      ...operationTimingFields(operation),
-      reason: !operation.handle ? 'missing_handle' : 'api_handler_unavailable',
-      durationMs: durationSince(operation.startedAt),
-    });
-    return;
-  }
-
-  if (!await shouldApplyAutomaticOriginatorProbeResult(operation)) {
-    recordDiagnosticTimingEvent({
-      event: 'originator_probe_skipped',
-      ...operationTimingFields(operation),
-      reason: 'stale_before_probe_request',
-      classification: 'probe_stale_after_navigation',
-      durationMs: durationSince(operation.startedAt),
-    });
-    return;
-  }
-
-  const response = await requestAutomaticOriginatorProbe(operation);
-  await applyAutomaticOriginatorProbeResponse(response, operation);
-}
-
-async function runAutomaticOriginatorFallback(
-  timedOutOperation: InFlightIconOperation,
-): Promise<boolean> {
-  if (!timedOutOperation.handle || !apiHandler) {
-    recordDiagnosticTimingEvent({
-      event: 'automatic_preflight_timeout_fallback_skipped',
-      ...operationTimingFields(timedOutOperation),
-      reason: !timedOutOperation.handle ? 'missing_handle' : 'api_handler_unavailable',
-      classification: 'combined_preflight_timeout',
-      durationMs: durationSince(timedOutOperation.startedAt),
-    });
-    return false;
-  }
-
-  recordDiagnosticTimingEvent({
-    event: 'automatic_preflight_timeout_fallback_started',
-    ...operationTimingFields(timedOutOperation),
-    reason: 'preflight_timeout_fallback',
-    classification: 'combined_preflight_timeout',
-    durationMs: durationSince(timedOutOperation.startedAt),
-  });
-
-  const fallbackOperation = await startInFlightOperation(
-    timedOutOperation.tabId,
-    timedOutOperation.url,
-    'automatic-originator-fallback',
-    timedOutOperation.handle,
-  );
-  if (!fallbackOperation) {
-    recordDiagnosticTimingEvent({
-      event: 'automatic_preflight_timeout_fallback_skipped',
-      ...operationTimingFields(timedOutOperation),
-      reason: 'fallback_operation_unavailable',
-      classification: 'combined_preflight_timeout',
-      durationMs: durationSince(timedOutOperation.startedAt),
-    });
-    return false;
-  }
-
-  recordPreflightDiagnostic({
-    status: 'loading',
-    trigger: 'automatic-originator-fallback',
-    tabId: timedOutOperation.tabId,
-    url: timedOutOperation.url,
-    handle: timedOutOperation.handle,
-    operationId: fallbackOperation.operationId,
-    durationMs: durationSince(timedOutOperation.startedAt),
-    reason: 'preflight_timeout_fallback',
-    classification: 'combined_preflight_timeout',
-  });
-  tabScopedPresentationTabIds.add(timedOutOperation.tabId);
-  await applyResolvedIconForTab(
-    timedOutOperation.tabId,
-    timedOutOperation.url,
-    getCachedDuplicateResultForTab(timedOutOperation.tabId, timedOutOperation.url).result,
-  );
-
-  const response = await requestOriginatorFallback(fallbackOperation);
-  await applyOriginatorLookupResponse(response, {
-    tabId: fallbackOperation.tabId,
-    sourceUrl: fallbackOperation.url,
-    trigger: 'automatic-originator-fallback',
-    handle: fallbackOperation.handle,
-    operation: fallbackOperation,
-    staleReason: 'stale_originator_fallback_response',
-  });
-  recordDiagnosticTimingEvent({
-    event: 'automatic_preflight_timeout_fallback_applied',
-    ...operationTimingFields(fallbackOperation),
-    reason: 'preflight_timeout_fallback',
-    classification: 'combined_preflight_timeout',
-    durationMs: durationSince(timedOutOperation.startedAt),
-  });
-  return true;
 }
 
 async function handleOriginatorLookupStatus(
@@ -3030,7 +2557,7 @@ async function checkQuoteCollectionStatus(
       return;
     }
 
-    if (preflightOperation && hasAutomaticOriginatorProbeTimer(preflightOperation)) {
+    if (preflightOperation && probe.hasAutomaticOriginatorProbeTimer(preflightOperation)) {
       recordDiagnosticTimingEvent({
         event: 'originator_probe_skipped',
         ...operationTimingFields(preflightOperation),

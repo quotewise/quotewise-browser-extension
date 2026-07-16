@@ -2186,11 +2186,11 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         activeTab: expect.objectContaining({
           id: 22,
           url: 'https://x.com/test/status/123',
-          isTweetPage: true,
+          isPostPage: true,
         }),
         activeTabState: expect.objectContaining({
           tabId: 22,
-          isTweetPage: true,
+          isPostPage: true,
         }),
         storage: expect.objectContaining({
           currentTweet: expect.objectContaining({
