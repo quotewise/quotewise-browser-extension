@@ -3,6 +3,7 @@
  */
 
 import type { DuplicateSightingState } from '../utils/duplicate-status';
+import type { CapturePlatform, CapturePlatformCode } from '../platforms/capture';
 
 // Extend Chrome API types as needed
 declare namespace chrome {
@@ -110,8 +111,10 @@ export const DEFAULT_SETTINGS: Settings = {
   firstRunNoticeShown: false,
 };
 
-export type CapturePlatform = 'twitter' | 'threads' | 'bluesky' | 'substack_notes';
-export type CapturePlatformCode = 'TX' | 'TH' | 'BS' | 'SS';
+// CapturePlatform / CapturePlatformCode are derived from PLATFORM_DEFINITIONS
+// (the single source of truth in src/platforms/capture.ts) and re-exported here
+// for the existing `@types` import sites.
+export type { CapturePlatform, CapturePlatformCode };
 
 export interface CapturedAuthor {
   /**
