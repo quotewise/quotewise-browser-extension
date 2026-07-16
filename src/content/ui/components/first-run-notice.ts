@@ -22,7 +22,7 @@ export class FirstRunNotice {
     notice.setAttribute('aria-label', 'Quotewise privacy notice');
 
     const text = document.createElement('span');
-    text.textContent = 'Quotewise can check this tweet before capture. Private mode pauses those checks until you ask.';
+    text.textContent = 'Quotewise can check this post before capture. Private mode pauses those checks until you ask.';
     notice.appendChild(text);
 
     const dismiss = document.createElement('button');

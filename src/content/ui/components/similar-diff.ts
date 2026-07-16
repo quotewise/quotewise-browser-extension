@@ -183,7 +183,7 @@ function addSightingState(
 
   return {
     eligible,
-    hint: eligible ? 'This tweet is older than our records' : null,
+    hint: eligible ? 'This post is older than our records' : null,
   };
 }
 

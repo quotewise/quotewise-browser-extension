@@ -28,7 +28,7 @@ describe('similar-diff', () => {
     expect(olderTweet?.quoteId).toBe(42);
     expect(olderTweet?.variantAvailable).toBe(true);
     expect(olderTweet?.sightingAvailable).toBe(true);
-    expect(olderTweet?.sightingHint).toBe('This tweet is older than our records');
+    expect(olderTweet?.sightingHint).toBe('This post is older than our records');
     expect(newerTweet?.variantAvailable).toBe(true);
     expect(newerTweet?.sightingAvailable).toBe(false);
   });

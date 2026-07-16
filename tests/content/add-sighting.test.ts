@@ -48,7 +48,7 @@ describe('add earlier sighting date gate', () => {
     );
 
     expect(older?.sightingAvailable).toBe(true);
-    expect(older?.sightingHint).toBe('This tweet is older than our records');
+    expect(older?.sightingHint).toBe('This post is older than our records');
     expect(newer?.sightingAvailable).toBe(false);
   });
 

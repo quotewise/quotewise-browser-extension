@@ -10,7 +10,7 @@ import type { OAuthConfig } from '../types/oauth';
  * Debug mode flag - enables console logging in non-production environments
  * Active when:
  * - NODE_ENV is 'development'
- * - Manifest name contains '[DEV]' or '[STAGING]'
+ * - Manifest name contains '[DEV]'
  */
 function isDebugMode(): boolean {
   // Check NODE_ENV first
@@ -22,7 +22,6 @@ function isDebugMode(): boolean {
   if (typeof chrome !== 'undefined' && chrome.runtime?.getManifest) {
     const manifest = chrome.runtime.getManifest();
     if (manifest.name?.includes('[DEV]') ||
-        manifest.name?.includes('[STAGING]') ||
         manifest.name?.toLowerCase().includes('dev')) {
       return true;
     }
@@ -51,11 +50,6 @@ export const ENVIRONMENTS: Record<string, EnvironmentConfig> = {
         webBaseUrl: 'http://quotewise.test:8000',
         secure: false  // Based on settings/test.py:153
     },
-    staging: {
-        apiBaseUrl: 'https://api.staging.quotewise.io',
-        webBaseUrl: 'https://staging.quotewise.io',
-        secure: true  // settings/staging.py:33
-    },
     production: {
         apiBaseUrl: 'https://api.quotewise.io',
         webBaseUrl: 'https://quotewise.io',
@@ -66,7 +60,7 @@ export const ENVIRONMENTS: Record<string, EnvironmentConfig> = {
 /**
  * Detect current environment based on extension context
  */
-export function detectEnvironment(): 'development' | 'staging' | 'production' {
+export function detectEnvironment(): 'development' | 'production' {
     // Prefer explicit env flag (set via build)
     if (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development') {
         return 'development';
@@ -81,20 +75,12 @@ export function detectEnvironment(): 'development' | 'staging' | 'production' {
             return 'development';
         }
 
-        if (manifest.name?.includes('staging') || manifest.name?.includes('Staging')) {
-            return 'staging';
-        }
-
         // Check version for development builds (e.g., "1.0.0-dev")
         if (manifest.version?.includes('-dev') || manifest.version?.includes('-alpha')) {
             return 'development';
         }
 
-        if (manifest.version?.includes('-staging') || manifest.version?.includes('-beta')) {
-            return 'staging';
-        }
-
-        // No dev/staging indicators in manifest = production
+        // No dev indicators in manifest = production
         return 'production';
     }
     
@@ -102,10 +88,6 @@ export function detectEnvironment(): 'development' | 'staging' | 'production' {
     if (typeof process !== 'undefined' && process.env) {
         if (process.env.NODE_ENV === 'development') {
             return 'development';
-        }
-        
-        if (process.env.NODE_ENV === 'staging') {
-            return 'staging';
         }
         
         if (process.env.NODE_ENV === 'production') {
@@ -119,10 +101,6 @@ export function detectEnvironment(): 'development' | 'staging' | 'production' {
         
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
             return 'development';
-        }
-        
-        if (hostname.includes('staging')) {
-            return 'staging';
         }
         
         if (hostname === 'quotewise.io' || hostname.endsWith('.quotewise.io')) {

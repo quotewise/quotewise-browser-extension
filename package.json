@@ -1,8 +1,17 @@
 {
   "name": "quotewise-chrome-extension",
   "version": "1.6.4",
-  "description": "Chrome extension for capturing quotes from web sources",
+  "description": "Chrome and Firefox extension for capturing quotes from X, Threads, Bluesky, and Substack Notes into your Quotewise library — attributed, sourced, and duplicate-checked.",
   "license": "MPL-2.0",
+  "author": "Quotewise",
+  "homepage": "https://quotewise.io",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quotewise/quotewise-chrome-extension.git"
+  },
+  "bugs": {
+    "url": "https://github.com/quotewise/quotewise-chrome-extension/issues"
+  },
   "scripts": {
     "build": "webpack --mode production",
     "build:dev": "webpack --mode development",

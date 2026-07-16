@@ -2420,7 +2420,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '' });
     expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
       tabId: 22,
-      title: 'Quotewise — capture works on X/Twitter tweets',
+      title: 'Quotewise — capture works on X, Threads, Bluesky & Substack Notes',
     });
     expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
   });
@@ -2443,7 +2443,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '' });
     expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
       tabId: 22,
-      title: 'Quotewise — open a tweet to capture',
+      title: 'Quotewise — open a post to capture',
     });
     expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
   });

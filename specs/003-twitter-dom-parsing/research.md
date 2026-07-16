@@ -9,7 +9,7 @@ REMOVE-disposition fields from the submitted `platform_data`?** (FR-070 precondi
 `reply_to_tweet_id` from the submitted `platform_data` is **100% safe**. More broadly, the **entire
 `platform_data` object is silently ignored** by the current API.
 
-**Evidence** (in `/Users/chris/code/quotewise-org/quotewise`):
+**Evidence** (in the Quotewise backend repo):
 - `quotewise/serializers/quote.py` — `QuoteCreateSerializer` (the `POST /v1/quotes/` contract) defines **no
   `platform_data` field**. Required: `text`, `originator_id`, `source_url`. Optional: `language_code`,
   `sighting_framing`, `attribution_type`, `quote_date`, `quote_date_is_approximate`, `collection_id`,
