@@ -2,10 +2,13 @@
   "name": "quotewise-chrome-extension",
   "version": "1.6.4",
   "description": "Chrome extension for capturing quotes from web sources",
+  "license": "MPL-2.0",
   "scripts": {
     "build": "webpack --mode production",
     "build:dev": "webpack --mode development",
     "package": "npm run build && node scripts/package.mjs",
+    "build:firefox": "node scripts/build-firefox.mjs",
+    "sign:firefox": "web-ext sign --source-dir=dist-firefox --channel=listed --amo-metadata=amo-metadata.json --approval-timeout=0",
     "dev": "webpack --mode development --watch",
     "icons": "node scripts/generate-icons.mjs",
     "bump-version": "node scripts/bump-version.js",
@@ -33,6 +36,7 @@
     "ts-jest": "^29.1.1",
     "ts-loader": "^9.5.1",
     "typescript": "^5.3.3",
+    "web-ext": "^10.5.0",
     "webpack": "^5.106.2",
     "webpack-cli": "^5.1.4"
   },

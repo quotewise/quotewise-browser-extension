@@ -13,7 +13,9 @@ pnpm-lock.yaml
 
 # Build outputs
 dist/
+dist-firefox/
 build/
+web-ext-artifacts/
 
 # Environment variables
 .env*
