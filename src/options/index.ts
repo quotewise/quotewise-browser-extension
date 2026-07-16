@@ -1,4 +1,4 @@
-import { MessageType, type Settings } from '../types';
+import { MessageType, type Settings, type ExtensionMessage } from '../types';
 import { AuthState } from '../auth/auth-state-machine';
 import type { Collection } from '../types/api';
 import { getSettings, onSettingsChanged, updateSettings } from '../settings/settings-store';
@@ -99,6 +99,9 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
         min-height: 20px;
         color: #475569;
       }
+      #account-identity, #logout-btn {
+        transition: opacity 0.22s ease;
+      }
     </style>
     <div class="settings-shell">
       <h1>Quotewise Settings</h1>
@@ -185,22 +188,36 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
     return authState === AuthState.AUTHENTICATED;
   }
 
+  let firstAuthApply = true;
   function applyAuthState(state: AuthState, username?: string): void {
-    authState = state;
-    logoutButton.disabled = false;
-    if (state === AuthState.AUTHENTICATED) {
-      identity.textContent = username ? `Signed in as ${username}` : 'Signed in';
-      logoutButton.textContent = 'Log out';
-    } else if (state === AuthState.SESSION_EXPIRED) {
-      identity.textContent = 'Session expired';
-      logoutButton.textContent = 'Log in';
-    } else if (state === AuthState.INSUFFICIENT_PRIVILEGES) {
-      identity.textContent = 'Permissions needed';
-      logoutButton.textContent = 'Log in';
-    } else {
-      identity.textContent = 'Not signed in';
-      logoutButton.textContent = 'Log in';
+    const render = (): void => {
+      authState = state;
+      logoutButton.disabled = false;
+      if (state === AuthState.AUTHENTICATED) {
+        identity.textContent = username ? `Signed in as ${username}` : 'Signed in';
+        logoutButton.textContent = 'Log out';
+      } else if (state === AuthState.SESSION_EXPIRED) {
+        identity.textContent = 'Session expired';
+        logoutButton.textContent = 'Log in';
+      } else if (state === AuthState.INSUFFICIENT_PRIVILEGES) {
+        identity.textContent = 'Permissions needed';
+        logoutButton.textContent = 'Log in';
+      } else {
+        identity.textContent = 'Not signed in';
+        logoutButton.textContent = 'Log in';
+      }
+      identity.style.opacity = '1';
+      logoutButton.style.opacity = '1';
+    };
+    // Snap on the first paint; cross-fade on later changes so login/logout feels intentional.
+    if (firstAuthApply) {
+      firstAuthApply = false;
+      render();
+      return;
     }
+    identity.style.opacity = '0';
+    logoutButton.style.opacity = '0';
+    window.setTimeout(render, 180);
   }
 
   applySettings(await getSettings());
@@ -232,6 +249,14 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
       applySettings(settings);
       setStatus(settings.defaultCollectionSlug ? 'Default collection saved.' : 'Default collection cleared.');
     });
+  });
+
+  // React to auth changes from anywhere (esp. the Safari tab sign-in, whose OAUTH_LOGIN response
+  // often doesn't land back on this still-open page) so the page updates without a manual refresh.
+  chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
+    if (message?.type === MessageType.AUTH_STATE_CHANGED && message.data?.state) {
+      applyAuthState(message.data.state as AuthState, message.data.username);
+    }
   });
 
   logoutButton.addEventListener('click', () => {
