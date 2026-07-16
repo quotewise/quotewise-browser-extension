@@ -6,7 +6,7 @@ export const DEBUG_MODE = true;
 
 export const debugLog = jest.fn();
 
-function detectMockEnvironment(): 'development' | 'staging' | 'production' {
+function detectMockEnvironment(): 'development' | 'production' {
   if (typeof chrome !== 'undefined' && chrome.runtime?.getManifest) {
     const manifest = chrome.runtime.getManifest();
     const name = manifest.name ?? '';
@@ -14,10 +14,6 @@ function detectMockEnvironment(): 'development' | 'staging' | 'production' {
 
     if (name.toLowerCase().includes('dev') || version.includes('-dev') || version.includes('-alpha')) {
       return 'development';
-    }
-
-    if (name.toLowerCase().includes('staging')) {
-      return 'staging';
     }
 
     return 'production';
@@ -39,14 +35,6 @@ export const getEnvironmentConfig = jest.fn((env?: string) => {
       webBaseUrl: 'https://quotewise.io',
       sessionCookieName: 'sessionid',
       environment: 'production'
-    };
-  }
-  if (env === 'staging') {
-    return {
-      apiBaseUrl: 'https://api.staging.quotewise.io',
-      webBaseUrl: 'https://staging.quotewise.io',
-      sessionCookieName: 'sessionid',
-      environment: 'staging'
     };
   }
   // Default to development

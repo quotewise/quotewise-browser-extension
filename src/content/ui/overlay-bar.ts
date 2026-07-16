@@ -1147,8 +1147,8 @@ export class OverlayBar {
 
     infoEl.innerHTML = `
       <span class="badge info">⏸︎</span>
-      <span>Private mode is on. Check this tweet only when you choose.</span>
-      <button type="button" class="check-now" id="check-now-btn" aria-label="Check this tweet now">Check now</button>
+      <span>Private mode is on. Check this post only when you choose.</span>
+      <button type="button" class="check-now" id="check-now-btn" aria-label="Check this post now">Check now</button>
     `;
     infoEl.querySelector('#check-now-btn')?.addEventListener('click', () => {
       void this.checkNow();

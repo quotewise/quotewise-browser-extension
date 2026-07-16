@@ -32,10 +32,21 @@ web-ext-artifacts/
 *.swo
 *~
 
-# Claude Code local settings
-.claude/settings.local.json
+# AI-agent tooling trees — kept on disk for local agent workflows, not published
+.agents/
+.claude/
+.specify/
 .mcp.json
 .playwright-mcp/
+
+# Internal pre-ship security review (resolved punch-list; not for public consumption)
+README-pre-ship-review.md
+
+# Audit fixtures: real third-party DOM captures used for internal platform-adapter work
+specs/*/audits/
+
+# Historical MVP-phase delivery/PBI docs — internal planning, superseded architecture
+docs/delivery/
 
 # Beads redirect to the canonical Dolt store in ../quotewise/.beads
 # (machine-specific absolute path; see CLAUDE.md "Beads issue tracker")

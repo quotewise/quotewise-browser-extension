@@ -1845,12 +1845,18 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
 
       await import('../../src/background/service-worker');
 
+      const startupListener = (chrome.runtime.onStartup.addListener as jest.Mock).mock.calls[0][0];
+      await startupListener();
+      await flushPromises(10);
+
       const listener = (chrome.webNavigation.onHistoryStateUpdated.addListener as jest.Mock).mock.calls[0][0];
       await listener({
         frameId: 0,
         tabId: 22,
         url: 'https://x.com/replier/status/222',
       });
+
+      await flushPromises(10);
 
       expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(22, {
         type: 'EXTRACT_TWEET_DATA',
@@ -1916,12 +1922,18 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
 
       await import('../../src/background/service-worker');
 
+      const startupListener = (chrome.runtime.onStartup.addListener as jest.Mock).mock.calls[0][0];
+      await startupListener();
+      await flushPromises(10);
+
       const listener = (chrome.webNavigation.onHistoryStateUpdated.addListener as jest.Mock).mock.calls[0][0];
       await listener({
         frameId: 0,
         tabId: 22,
         url: 'https://x.com/replier/status/222',
       });
+
+      await flushPromises(10);
 
       expect(handleMessage).not.toHaveBeenCalled();
 
@@ -2408,7 +2420,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '' });
     expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
       tabId: 22,
-      title: 'Quotewise — capture works on X/Twitter tweets',
+      title: 'Quotewise — capture works on X, Threads, Bluesky & Substack Notes',
     });
     expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
   });
@@ -2431,7 +2443,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '' });
     expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
       tabId: 22,
-      title: 'Quotewise — open a tweet to capture',
+      title: 'Quotewise — open a post to capture',
     });
     expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
   });

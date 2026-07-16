@@ -22,14 +22,14 @@ export const ICON_STATES = {
     iconVariant: 'color',
     badgeText: '',
     badgeColor: '#0072B2',
-    title: 'Quotewise — open a tweet to capture',
+    title: 'Quotewise — open a post to capture',
     scope: 'global',
   },
   UnsupportedPage: {
     iconVariant: 'grey',
     badgeText: '',
     badgeColor: '#0072B2',
-    title: 'Quotewise — capture works on X/Twitter tweets',
+    title: 'Quotewise — capture works on X, Threads, Bluesky & Substack Notes',
     scope: 'global',
   },
   AuthPending: {
