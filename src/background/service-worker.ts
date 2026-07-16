@@ -12,7 +12,7 @@ import { initializeApiHandler } from './api-handler';
 import { AuthenticationMonitor } from './auth-monitor';
 import { initializeStorageCleanup, STORAGE_CLEANUP_ALARM } from './storage-cleanup';
 import { validateCapturedPostData, ValidationError } from '../utils/validators';
-import { DEBUG_MODE, debugLog, getWebBaseUrl, isProduction } from '../config/environment';
+import { debugLog, getWebBaseUrl } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
 import { initiateOAuthFlow } from '../auth/auth-flow';
 import {
@@ -20,9 +20,9 @@ import {
   AuthStateManager,
   setAuthPresentationUpdater,
 } from '../auth/auth-state-manager';
-import { AuthState, type AuthStateData } from '../auth/auth-state-machine';
+import { AuthState } from '../auth/auth-state-machine';
 import { ICON_STATES } from '../config/icon-states';
-import { applyIconPresentation, getIconApplicatorDiagnostics } from './icon-applicator';
+import { applyIconPresentation } from './icon-applicator';
 import { resolveIconPresentation, type IconPresentation } from './icon-state-resolver';
 import type { DuplicateCheckResult, PreflightOriginatorResult } from '../types/api';
 import type { CollectionBadgeInfo } from '../types/chrome';
@@ -34,7 +34,6 @@ import {
   captureIdentityFromData,
   captureIdentityFromUrl,
   capturePlatform,
-  capturePlatformData,
   captureSourceId,
   captureSourceUrl,
   isSameCaptureUrl,
@@ -42,6 +41,34 @@ import {
   isSupportedPlatformUrl as isSupportedCapturePlatformUrl,
   PLATFORM_DEFINITIONS,
 } from '../platforms/capture';
+import {
+  recordDiagnosticTimingEvent,
+  recordExtractionDiagnostic,
+  recordPreflightDiagnostic,
+  summarizeDuplicateResult,
+  summarizeOriginatorResult,
+  summarizeHandleLookupResult,
+  duplicateResultFromResponse,
+  errorMessage,
+  getRuntimeDiagnostics,
+  type DiagnosticTrigger,
+  type DiagnosticTimingEvent,
+  type MissingOriginatorInfo,
+  type RuntimeDiagnostics,
+  type RuntimeDiagnosticsContext,
+} from './diagnostics';
+import {
+  tabInFlightOperations,
+  PREFLIGHT_TIMEOUT_ALARM_PREFIX,
+  createOperationId,
+  preflightTimeoutAlarmName,
+  parsePreflightTimeoutAlarmName,
+  getMatchingInFlightOperation,
+  isCheckInFlightForTab,
+  persistAutomaticPreflightOperations,
+  readPersistedAutomaticPreflightOperations,
+  type InFlightIconOperation,
+} from './preflight-operations';
 
 // Service instances - lazily initialized to handle MV3 service worker termination
 let apiHandler: ReturnType<typeof initializeApiHandler> | null = null;
@@ -57,7 +84,6 @@ const pendingDuplicateChecks = new Map<string, Promise<void>>();
 const tabDuplicateResults = new Map<number, DuplicateCheckResult | null>();
 const tabDuplicateResultUrls = new Map<number, string>();
 const tabMissingOriginators = new Map<number, MissingOriginatorInfo>();
-const tabInFlightOperations = new Map<number, InFlightIconOperation>();
 const tabScopedPresentationTabIds = new Set<number>();
 let lastActiveTabId: number | null = null;
 let userDataWriteEpoch = 0;
@@ -73,219 +99,17 @@ const WEB_NAVIGATION_PLATFORM_FILTERS = Object.values(PLATFORM_DEFINITIONS)
   .flatMap(definition => definition.hostSuffixes)
   .map(hostSuffix => ({ hostSuffix }));
 const PRELOADED_DUPLICATE_MAX_AGE_MS = 60_000;
-const TWEET_EXTRACTION_RETRY_DELAYS_MS = [1_000, 2_500, 5_000] as const;
+const POST_EXTRACTION_RETRY_DELAYS_MS = [1_000, 2_500, 5_000] as const;
 const AUTOMATIC_PREFLIGHT_TIMEOUT_MS = 8_000;
 const AUTOMATIC_ORIGINATOR_PROBE_DELAY_MS = 300;
 const ORIGINATOR_FALLBACK_TIMEOUT_MS = 3_000;
 const AUTOMATIC_PREFLIGHT_KEEPALIVE_MS = AUTOMATIC_PREFLIGHT_TIMEOUT_MS + ORIGINATOR_FALLBACK_TIMEOUT_MS + 1_000;
-const PREFLIGHT_OPERATION_STORAGE_KEY = 'automaticPreflightOperations';
-const PREFLIGHT_TIMEOUT_ALARM_PREFIX = 'automatic-preflight-timeout:';
-const DIAGNOSTIC_EVENT_TRAIL_LIMIT = 20;
-const DIAGNOSTIC_EVENT_TRAIL_ENABLED = DEBUG_MODE && !isProduction();
-const serviceWorkerLoadedAt = Date.now();
 
-interface DuplicateResultDiagnostic {
-  recommendation: DuplicateCheckResult['recommendation'];
-  confidence: number;
-  inQuotewise: boolean;
-  matchCount: number;
-  sourceUrlChecked?: boolean;
-  socialHandleMatched?: boolean;
-  queryTimeMs?: number;
-}
-
-interface OriginatorDiagnostic {
-  found: boolean;
-  handle?: string;
-  platform?: string;
-  matchPlatform?: string;
-  confidence?: number;
-  fullName?: string;
-  slug?: string;
-  createUrl?: string;
-}
-
-interface MissingOriginatorInfo {
-  handle: string;
-  url: string;
-  createUrl?: string;
-  timestamp: number;
-}
-
-type PreflightDiagnosticStatus = 'idle' | 'loading' | 'skipped' | 'succeeded' | 'failed';
-type ExtractionDiagnosticStatus = 'idle' | 'requested' | 'skipped' | 'succeeded' | 'no_data' | 'failed';
-type DiagnosticClassification =
-  | 'extraction_retry_before_preflight'
-  | 'probe_lookup_timeout'
-  | 'probe_stale_after_navigation'
-  | 'combined_preflight_timeout'
-  | 'preflight_won_before_probe';
-type DiagnosticTrigger =
-  | 'automatic-preflight'
-  | 'automatic-originator-probe'
-  | 'automatic-originator-fallback'
-  | 'explicit-duplicate-check'
-  | 'originator-lookup';
-
-interface InFlightIconOperation {
-  tabId: number;
-  url: string;
-  platform?: CapturePlatform;
-  statusId: string;
-  operationId: string;
-  trigger: DiagnosticTrigger;
-  startedAt: number;
-  timeoutAt?: number;
-  handle?: string;
-  cacheWriteEpoch?: number;
-}
-
-interface PreflightDiagnostic {
-  timestamp: number;
-  status: PreflightDiagnosticStatus;
-  trigger: DiagnosticTrigger;
-  tabId?: number;
-  url?: string;
-  handle?: string;
-  operationId?: string;
-  durationMs?: number;
-  reason?: string;
-  classification?: DiagnosticClassification;
-  error?: string;
-  authRequired?: boolean;
-  duplicate?: DuplicateResultDiagnostic | null;
-  originator?: OriginatorDiagnostic | null;
-}
-
-interface ExtractionDiagnostic {
-  timestamp: number;
-  status: ExtractionDiagnosticStatus;
-  tabId?: number;
-  url?: string;
-  reason?: string;
-  classification?: DiagnosticClassification;
-  error?: string;
-  attempt?: number;
-  retryAfterMs?: number;
-}
-
-interface DiagnosticTimingEvent {
-  timestamp: number;
-  event: string;
-  tabId?: number;
-  sourceUrl?: string;
-  source_url?: string;
-  statusId?: string;
-  handle?: string;
-  operationId?: string;
-  trigger?: DiagnosticTrigger;
-  reason?: string;
-  classification?: DiagnosticClassification;
-  error?: string;
-  durationMs?: number;
-  attempt?: number;
-  retryAfterMs?: number;
-}
-
-interface RuntimeDiagnostics {
-  generatedAt: number;
-  serviceWorkerLoadedAt: number;
-  manifest: {
-    name?: string;
-    version?: string;
-  };
-  services: {
-    initialized: boolean;
-    apiHandler: boolean;
-    authMonitor: boolean;
-    storageCleanup: boolean;
-    authStateManager: boolean;
-  };
-  auth: {
-    initialized: boolean;
-    state: AuthState;
-    username?: string;
-    scopes?: string[];
-    expiresAt?: number;
-    lastCheckedAt?: number;
-    error?: string;
-  };
-  activeTab: {
-    id?: number;
-    url?: string;
-    isSupportedPlatform: boolean;
-    isTweetPage: boolean;
-    queryError?: string;
-  } | null;
-  activeTabState: {
-    tabId: number;
-    isSupportedPlatform: boolean;
-    isTweetPage: boolean;
-    isCheckInFlight: boolean;
-    isOriginatorMissing: boolean;
-    hasDuplicateResult: boolean;
-    hasTabScopedPresentation: boolean;
-    duplicate: DuplicateResultDiagnostic | null;
-    missingOriginator: MissingOriginatorInfo | null;
-  } | null;
-  lastActiveTabId: number | null;
-  pendingDuplicateChecks: {
-    count: number;
-    urls: string[];
-  };
-  storage: {
-    currentTweet: {
-      url?: string;
-      timestamp?: number;
-      authorUsername?: string;
-      tweetId?: string | null;
-      metrics?: {
-        replies?: number;
-        retweets?: number;
-        likes?: number;
-        views?: number;
-        bookmarks?: number;
-      };
-    } | null;
-    preloadedDuplicateCheck: {
-      url?: string;
-      timestamp?: number;
-      duplicate: DuplicateResultDiagnostic | null;
-    } | null;
-    preloadedOriginator: {
-      handle?: string;
-      timestamp?: number;
-      found?: boolean;
-      fullName?: string;
-      uniqueId?: string;
-      createUrl?: string;
-    } | null;
-    error?: string;
-  };
-  extraction: ExtractionDiagnostic;
-  preflight: PreflightDiagnostic;
-  events: DiagnosticTimingEvent[];
-  icon: ReturnType<typeof getIconApplicatorDiagnostics>;
-}
-
-let lastExtractionDiagnostic: ExtractionDiagnostic = {
-  timestamp: serviceWorkerLoadedAt,
-  status: 'idle',
-};
-
-let lastPreflightDiagnostic: PreflightDiagnostic = {
-  timestamp: serviceWorkerLoadedAt,
-  status: 'idle',
-  trigger: 'automatic-preflight',
-};
-
-const diagnosticTimingEvents: DiagnosticTimingEvent[] = [];
-
-const tweetExtractionRetryTimers = new Map<number, ReturnType<typeof setTimeout>>();
-const automaticTweetExtractionRequests = new Map<string, Promise<void>>();
+const postExtractionRetryTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const automaticPostExtractionRequests = new Map<string, Promise<void>>();
 const automaticOriginatorProbeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-function isTweetPageUrl(url?: string): boolean {
+function isPostPageUrl(url?: string): boolean {
   return isSupportedPermalinkUrl(url);
 }
 
@@ -313,38 +137,30 @@ function isPrivateModeEnabled(): boolean {
   return currentSettings.privateMode;
 }
 
-function tweetStatusId(url?: string): string | null {
+function postStatusId(url?: string): string | null {
   return captureIdentityFromUrl(url)?.sourceId ?? null;
 }
 
-function automaticTweetOperationKey(tabId: number | undefined, url?: string): string | null {
+function automaticPostOperationKey(tabId: number | undefined, url?: string): string | null {
   const identity = captureIdentityFromUrl(url);
   return tabId !== undefined && identity ? `${tabId}:${identity.platform}:${identity.sourceId}` : null;
 }
 
 function automaticPreflightCacheKey(tabId: number | undefined, url: string): string {
-  return automaticTweetOperationKey(tabId, url) ?? url;
+  return automaticPostOperationKey(tabId, url) ?? url;
 }
 
-function isSameTweetPageUrl(expectedUrl?: string, currentUrl?: string): boolean {
+function isSamePostPageUrl(expectedUrl?: string, currentUrl?: string): boolean {
   return isSameCaptureUrl(expectedUrl, currentUrl);
 }
 
-function isExtractedTweetDataForUrl(data: unknown, url?: string): boolean {
+function isExtractedPostDataForUrl(data: unknown, url?: string): boolean {
   const expected = captureIdentityFromUrl(url);
   const actual = captureIdentityFromData(data);
 
   return expected === null ||
     actual === null ||
     (expected.platform === actual.platform && expected.sourceId === actual.sourceId);
-}
-
-function createOperationId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function preflightTimeoutAlarmName(operation: InFlightIconOperation): string {
-  return `${PREFLIGHT_TIMEOUT_ALARM_PREFIX}${operation.tabId}:${operation.operationId}`;
 }
 
 function automaticOriginatorProbeKey(operation: InFlightIconOperation): string {
@@ -366,88 +182,6 @@ function hasAutomaticOriginatorProbeTimer(operation: InFlightIconOperation | nul
   return operation !== null && automaticOriginatorProbeTimers.has(automaticOriginatorProbeKey(operation));
 }
 
-function parsePreflightTimeoutAlarmName(name: string): { tabId: number; operationId: string } | null {
-  if (!name.startsWith(PREFLIGHT_TIMEOUT_ALARM_PREFIX)) {
-    return null;
-  }
-
-  const value = name.slice(PREFLIGHT_TIMEOUT_ALARM_PREFIX.length);
-  const separatorIndex = value.indexOf(':');
-  if (separatorIndex <= 0) {
-    return null;
-  }
-
-  const tabId = Number(value.slice(0, separatorIndex));
-  const operationId = value.slice(separatorIndex + 1);
-  if (!Number.isInteger(tabId) || operationId === '') {
-    return null;
-  }
-
-  return { tabId, operationId };
-}
-
-function getMatchingInFlightOperation(tabId: number, url?: string): InFlightIconOperation | null {
-  const operation = tabInFlightOperations.get(tabId);
-  if (!operation) {
-    return null;
-  }
-
-  if (url && !isSameTweetPageUrl(operation.url, url)) {
-    return null;
-  }
-
-  return operation;
-}
-
-function isCheckInFlightForTab(tabId: number, url?: string): boolean {
-  return getMatchingInFlightOperation(tabId, url) !== null;
-}
-
-function serializableAutomaticPreflightOperations(): InFlightIconOperation[] {
-  return [...tabInFlightOperations.values()].filter(
-    operation => operation.trigger === 'automatic-preflight' && operation.timeoutAt !== undefined,
-  );
-}
-
-async function persistAutomaticPreflightOperations(): Promise<void> {
-  try {
-    await chrome.storage.session.set({
-      [PREFLIGHT_OPERATION_STORAGE_KEY]: serializableAutomaticPreflightOperations(),
-    });
-  } catch (error) {
-    debugLog('Unable to persist automatic preflight operations:', error);
-  }
-}
-
-function isValidPersistedInFlightOperation(value: unknown): value is InFlightIconOperation {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const operation = value as Partial<InFlightIconOperation>;
-  return (
-    typeof operation.tabId === 'number' &&
-    typeof operation.url === 'string' &&
-    typeof operation.statusId === 'string' &&
-    typeof operation.operationId === 'string' &&
-    operation.trigger === 'automatic-preflight' &&
-    typeof operation.startedAt === 'number' &&
-    typeof operation.timeoutAt === 'number' &&
-    tweetStatusId(operation.url) === operation.statusId
-  );
-}
-
-async function readPersistedAutomaticPreflightOperations(): Promise<InFlightIconOperation[]> {
-  try {
-    const storage = await chrome.storage.session.get([PREFLIGHT_OPERATION_STORAGE_KEY]);
-    const value = storage[PREFLIGHT_OPERATION_STORAGE_KEY];
-    return Array.isArray(value) ? value.filter(isValidPersistedInFlightOperation) : [];
-  } catch (error) {
-    debugLog('Unable to read automatic preflight operations:', error);
-    return [];
-  }
-}
-
 async function clearInFlightOperation(
   tabId: number,
   options: {
@@ -461,7 +195,7 @@ async function clearInFlightOperation(
     return false;
   }
 
-  if (options.url && !isSameTweetPageUrl(operation.url, options.url)) {
+  if (options.url && !isSamePostPageUrl(operation.url, options.url)) {
     return false;
   }
 
@@ -494,7 +228,7 @@ async function startInFlightOperation(
   trigger: DiagnosticTrigger,
   handle?: string,
 ): Promise<InFlightIconOperation | null> {
-  const statusId = tweetStatusId(url);
+  const statusId = postStatusId(url);
   if (!url || !statusId) {
     return null;
   }
@@ -531,7 +265,7 @@ async function startInFlightOperation(
   return operation;
 }
 
-async function isCurrentTweetOperation(
+async function isCurrentPostOperation(
   operation: InFlightIconOperation | null,
 ): Promise<boolean> {
   if (!operation) {
@@ -540,34 +274,34 @@ async function isCurrentTweetOperation(
 
   try {
     const tab = await chrome.tabs.get(operation.tabId);
-    return isSameTweetPageUrl(operation.url, tab.url);
+    return isSamePostPageUrl(operation.url, tab.url);
   } catch {
     return false;
   }
 }
 
-function clearTweetDataExtractionRetry(tabId: number): void {
-  const timer = tweetExtractionRetryTimers.get(tabId);
+function clearPostDataExtractionRetry(tabId: number): void {
+  const timer = postExtractionRetryTimers.get(tabId);
   if (!timer) {
     return;
   }
 
   clearTimeout(timer);
-  tweetExtractionRetryTimers.delete(tabId);
+  postExtractionRetryTimers.delete(tabId);
 }
 
-function clearAutomaticTweetExtractionRequestsForTab(tabId: number): void {
+function clearAutomaticPostExtractionRequestsForTab(tabId: number): void {
   const keyPrefix = `${tabId}:`;
-  for (const key of automaticTweetExtractionRequests.keys()) {
+  for (const key of automaticPostExtractionRequests.keys()) {
     if (key.startsWith(keyPrefix)) {
-      automaticTweetExtractionRequests.delete(key);
+      automaticPostExtractionRequests.delete(key);
     }
   }
 }
 
-function clearAutomaticTweetExtractionRequestIfCurrent(key: string, promise: Promise<void>): void {
-  if (automaticTweetExtractionRequests.get(key) === promise) {
-    automaticTweetExtractionRequests.delete(key);
+function clearAutomaticPostExtractionRequestIfCurrent(key: string, promise: Promise<void>): void {
+  if (automaticPostExtractionRequests.get(key) === promise) {
+    automaticPostExtractionRequests.delete(key);
   }
 }
 
@@ -620,47 +354,6 @@ function isMissingContentScriptError(error: unknown): boolean {
   return error instanceof Error && error.message.includes(MISSING_CONTENT_SCRIPT_MESSAGE);
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  return String(error);
-}
-
-function summarizeDuplicateResult(result: DuplicateCheckResult | null | undefined): DuplicateResultDiagnostic | null {
-  if (!result) {
-    return null;
-  }
-
-  return {
-    recommendation: result.recommendation,
-    confidence: result.confidence,
-    inQuotewise: result.in_quotewise,
-    matchCount: Array.isArray(result.matches) ? result.matches.length : 0,
-    sourceUrlChecked: result.search_metadata?.source_url_checked,
-    socialHandleMatched: result.search_metadata?.social_handle_matched,
-    queryTimeMs: result.search_metadata?.query_time_ms,
-  };
-}
-
-function summarizeOriginatorResult(originator: PreflightOriginatorResult | undefined): OriginatorDiagnostic | null {
-  if (!originator) {
-    return null;
-  }
-
-  return {
-    found: originator.found,
-    handle: originator.handle,
-    platform: originator.platform,
-    matchPlatform: originator.match_platform,
-    confidence: originator.confidence,
-    fullName: originator.originator?.full_name,
-    slug: originator.originator?.slug ?? originator.originator?.unique_id,
-    createUrl: originator.create_url,
-  };
-}
-
 function resolveOriginatorCreateUrl(
   handle: string,
   platform: CapturePlatform = 'twitter',
@@ -676,33 +369,6 @@ function resolveOriginatorCreateUrl(
 
 function originatorSlugFromPreflight(originator: PreflightOriginatorResult | undefined): string | undefined {
   return originator?.originator?.slug ?? originator?.originator?.unique_id;
-}
-
-function recordDiagnosticTimingEvent(update: Omit<DiagnosticTimingEvent, 'timestamp'>): void {
-  if (!DIAGNOSTIC_EVENT_TRAIL_ENABLED) {
-    return;
-  }
-
-  const event: DiagnosticTimingEvent = {
-    timestamp: Date.now(),
-    ...update,
-  };
-
-  if (!event.statusId && event.sourceUrl) {
-    const statusId = tweetStatusId(event.sourceUrl);
-    if (statusId) {
-      event.statusId = statusId;
-    }
-  }
-
-  if (event.sourceUrl && !event.source_url) {
-    event.source_url = event.sourceUrl;
-  }
-
-  diagnosticTimingEvents.push(event);
-  if (diagnosticTimingEvents.length > DIAGNOSTIC_EVENT_TRAIL_LIMIT) {
-    diagnosticTimingEvents.splice(0, diagnosticTimingEvents.length - DIAGNOSTIC_EVENT_TRAIL_LIMIT);
-  }
 }
 
 function operationTimingFields(operation: InFlightIconOperation): Pick<
@@ -732,94 +398,13 @@ function isAutomaticOriginatorProbeTimeoutResponse(response: unknown): boolean {
   return typeof error === 'string' && error === 'Automatic originator probe timed out';
 }
 
-function recordExtractionDiagnostic(update: Omit<ExtractionDiagnostic, 'timestamp'>): void {
-  lastExtractionDiagnostic = {
-    timestamp: Date.now(),
-    ...update,
-  };
-}
-
-function recordPreflightDiagnostic(update: Omit<PreflightDiagnostic, 'timestamp'>): void {
-  lastPreflightDiagnostic = {
-    timestamp: Date.now(),
-    ...update,
-  };
-}
-
-function sanitizeAuthState(stateData: AuthStateData | null): RuntimeDiagnostics['auth'] {
-  if (!stateData) {
-    return {
-      initialized: false,
-      state: getCurrentAuthState(),
-    };
-  }
-
-  return {
-    initialized: true,
-    state: stateData.state,
-    username: stateData.username,
-    scopes: stateData.scopes ? [...stateData.scopes] : undefined,
-    expiresAt: stateData.expiresAt,
-    lastCheckedAt: stateData.lastCheckedAt,
-    error: stateData.error,
-  };
-}
-
-async function getActiveTabDiagnostics(): Promise<RuntimeDiagnostics['activeTab']> {
-  try {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tab = tabs[0];
-
-    if (!tab) {
-      return null;
-    }
-
-    return {
-      id: tab.id,
-      url: tab.url,
-      isSupportedPlatform: isSupportedPlatformUrl(tab.url),
-      isTweetPage: isTweetPageUrl(tab.url),
-    };
-  } catch (error) {
-    return {
-      isSupportedPlatform: false,
-      isTweetPage: false,
-      queryError: errorMessage(error),
-    };
-  }
-}
-
-function getTabStateDiagnostics(
-  tabId: number | undefined,
-  url: string | undefined,
-): RuntimeDiagnostics['activeTabState'] {
-  if (!tabId) {
-    return null;
-  }
-
-  const cachedDuplicate = getCachedDuplicateResultForTab(tabId, url);
-  const missingOriginator = getMissingOriginatorForTab(tabId, url);
-
-  return {
-    tabId,
-    isSupportedPlatform: isSupportedPlatformUrl(url),
-    isTweetPage: isTweetPageUrl(url),
-    isCheckInFlight: isCheckInFlightForTab(tabId, url),
-    isOriginatorMissing: missingOriginator !== null,
-    hasDuplicateResult: cachedDuplicate.hasResult,
-    hasTabScopedPresentation: tabScopedPresentationTabIds.has(tabId),
-    duplicate: summarizeDuplicateResult(cachedDuplicate.result),
-    missingOriginator,
-  };
-}
-
 function getMissingOriginatorForTab(tabId: number, url?: string): MissingOriginatorInfo | null {
   const info = tabMissingOriginators.get(tabId);
   if (!info) {
     return null;
   }
 
-  if (url && !isSameTweetPageUrl(info.url, url)) {
+  if (url && !isSamePostPageUrl(info.url, url)) {
     return null;
   }
 
@@ -849,7 +434,7 @@ function getCachedDuplicateResultForTab(
   }
 
   const cachedUrl = tabDuplicateResultUrls.get(tabId);
-  if (url && cachedUrl && !isSameTweetPageUrl(cachedUrl, url)) {
+  if (url && cachedUrl && !isSamePostPageUrl(cachedUrl, url)) {
     clearTabDuplicateResult(tabId);
     return { hasResult: false, result: null };
   }
@@ -860,135 +445,36 @@ function getCachedDuplicateResultForTab(
   };
 }
 
-async function getStorageDiagnostics(): Promise<RuntimeDiagnostics['storage']> {
-  try {
-    const storage = await chrome.storage.local.get([
-      'currentPost',
-      'currentTweet',
-      'preloadedDuplicateCheck',
-      'preloadedOriginator',
-    ]);
-    const currentTweet = (storage.currentPost ?? storage.currentTweet) as {
-      data?: Partial<CapturedPostData>;
-      timestamp?: unknown;
-      url?: unknown;
-    } | undefined;
-    const preloadedDuplicateCheck = storage.preloadedDuplicateCheck as {
-      url?: unknown;
-      result?: unknown;
-      timestamp?: unknown;
-    } | undefined;
-    const preloadedOriginator = storage.preloadedOriginator as {
-      handle?: unknown;
-      timestamp?: unknown;
-      create_url?: unknown;
-      originator?: {
-        full_name?: unknown;
-        unique_id?: unknown;
-      } | null;
-    } | undefined;
-
-    return {
-      currentTweet: currentTweet
-        ? {
-          url: typeof currentTweet.url === 'string' ? currentTweet.url : undefined,
-          timestamp: typeof currentTweet.timestamp === 'number' ? currentTweet.timestamp : undefined,
-          authorUsername: currentTweet.data ? captureAuthorHandle(currentTweet.data as CapturedPostData) : undefined,
-          tweetId: currentTweet.data ? captureSourceId(currentTweet.data as CapturedPostData) : undefined,
-          metrics: {
-            replies: Number(capturePlatformData(currentTweet.data as CapturedPostData).reply_count) || undefined,
-            retweets: Number(capturePlatformData(currentTweet.data as CapturedPostData).retweet_count) || undefined,
-            likes: typeof currentTweet.data?.likes === 'number'
-              ? currentTweet.data.likes
-              : typeof currentTweet.data?.likesCount === 'number'
-                ? currentTweet.data.likesCount
-                : undefined,
-            views: Number(capturePlatformData(currentTweet.data as CapturedPostData).view_count) || undefined,
-            bookmarks: Number(capturePlatformData(currentTweet.data as CapturedPostData).bookmark_count) || undefined,
-          },
-        }
-        : null,
-      preloadedDuplicateCheck: preloadedDuplicateCheck
-        ? {
-          url: typeof preloadedDuplicateCheck.url === 'string' ? preloadedDuplicateCheck.url : undefined,
-          timestamp: typeof preloadedDuplicateCheck.timestamp === 'number'
-            ? preloadedDuplicateCheck.timestamp
-            : undefined,
-          duplicate: summarizeDuplicateResult(
-            duplicateResultFromResponse({
-              success: true,
-              result: preloadedDuplicateCheck.result,
-            }),
-          ),
-        }
-        : null,
-      preloadedOriginator: preloadedOriginator
-        ? {
-          handle: typeof preloadedOriginator.handle === 'string' ? preloadedOriginator.handle : undefined,
-          timestamp: typeof preloadedOriginator.timestamp === 'number'
-            ? preloadedOriginator.timestamp
-            : undefined,
-          found: !!preloadedOriginator.originator,
-          fullName: typeof preloadedOriginator.originator?.full_name === 'string'
-            ? preloadedOriginator.originator.full_name
-            : undefined,
-          uniqueId: typeof preloadedOriginator.originator?.unique_id === 'string'
-            ? preloadedOriginator.originator.unique_id
-            : undefined,
-          createUrl: typeof preloadedOriginator.create_url === 'string'
-            ? preloadedOriginator.create_url
-            : undefined,
-        }
-        : null,
-    };
-  } catch (error) {
-    return {
-      currentTweet: null,
-      preloadedDuplicateCheck: null,
-      preloadedOriginator: null,
-      error: errorMessage(error),
-    };
-  }
-}
-
-async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
-  const manifest = chrome.runtime.getManifest();
-  const activeTab = await getActiveTabDiagnostics();
-  const authStateData = authStateManager?.getStateData() ?? null;
-
+// The diagnostics aggregators live in ./diagnostics but read worker-owned tab
+// state; hand that state to them through a context rather than importing the
+// worker back (which would cycle through the webpack entry point).
+function runtimeDiagnosticsContext(): RuntimeDiagnosticsContext {
   return {
-    generatedAt: Date.now(),
-    serviceWorkerLoadedAt,
-    manifest: {
-      name: manifest.name,
-      version: manifest.version,
-    },
-    services: {
+    getServices: () => ({
       initialized: servicesInitialized,
       apiHandler: apiHandler !== null,
       authMonitor: authMonitor !== null,
       storageCleanup: storageCleanup !== null,
       authStateManager: authStateManager !== null,
-    },
-    auth: sanitizeAuthState(authStateData),
-    activeTab,
-    activeTabState: getTabStateDiagnostics(activeTab?.id, activeTab?.url),
-    lastActiveTabId,
-    pendingDuplicateChecks: {
-      count: pendingDuplicateChecks.size,
-      urls: [...pendingDuplicateChecks.keys()],
-    },
-    storage: await getStorageDiagnostics(),
-    extraction: { ...lastExtractionDiagnostic },
-    preflight: { ...lastPreflightDiagnostic },
-    events: diagnosticTimingEvents.map(event => ({ ...event })),
-    icon: getIconApplicatorDiagnostics(),
+    }),
+    getAuthStateData: () => authStateManager?.getStateData() ?? null,
+    getCurrentAuthState,
+    getLastActiveTabId: () => lastActiveTabId,
+    getPendingDuplicateCheckUrls: () => [...pendingDuplicateChecks.keys()],
+    isCheckInFlightForTab,
+    getMissingOriginatorForTab,
+    getCachedDuplicateResultForTab,
+    hasTabScopedPresentation: (tabId: number) => tabScopedPresentationTabIds.has(tabId),
   };
+}
+
+function collectRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
+  return getRuntimeDiagnostics(runtimeDiagnosticsContext());
 }
 
 (globalThis as typeof globalThis & {
   __quotewiseDiagnostics?: () => Promise<RuntimeDiagnostics>;
-}).__quotewiseDiagnostics = getRuntimeDiagnostics;
+}).__quotewiseDiagnostics = collectRuntimeDiagnostics;
 
 async function showOverlayInTab(tab: chrome.tabs.Tab): Promise<void> {
   if (!tab.id) return;
@@ -996,7 +482,7 @@ async function showOverlayInTab(tab: chrome.tabs.Tab): Promise<void> {
   try {
     await chrome.tabs.sendMessage(tab.id, { type: MessageType.SHOW_OVERLAY });
   } catch (error) {
-    if (!isMissingContentScriptError(error) || !isTweetPageUrl(tab.url)) {
+    if (!isMissingContentScriptError(error) || !isPostPageUrl(tab.url)) {
       throw error;
     }
 
@@ -1037,7 +523,7 @@ async function applyResolvedIconForTab(
   const presentation = resolveIconPresentation(authState, resolvedDuplicateResult, {
     tabId,
     isSupportedPlatform: isSupportedPlatformUrl(url),
-    isTweetPage: isTweetPageUrl(url),
+    isTweetPage: isPostPageUrl(url),
     isCheckInFlight: isCheckInFlightForTab(tabId, url),
     isOriginatorMissing: getMissingOriginatorForTab(tabId, url) !== null,
   }, isPrivateModeEnabled());
@@ -1056,7 +542,7 @@ interface AffectedTab {
   url?: string;
 }
 
-interface TweetExtractionResponse {
+interface PostExtractionResponse {
   success?: boolean;
   data?: unknown;
   error?: string;
@@ -1091,11 +577,11 @@ async function getAffectedTabs(): Promise<AffectedTab[]> {
 }
 
 async function clearAutomaticWorkForPrivateMode(): Promise<void> {
-  for (const tabId of [...tweetExtractionRetryTimers.keys()]) {
-    clearTweetDataExtractionRetry(tabId);
+  for (const tabId of [...postExtractionRetryTimers.keys()]) {
+    clearPostDataExtractionRetry(tabId);
   }
 
-  automaticTweetExtractionRequests.clear();
+  automaticPostExtractionRequests.clear();
 
   for (const operation of [...tabInFlightOperations.values()]) {
     if (
@@ -1149,8 +635,8 @@ async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
         authState === AuthState.SESSION_EXPIRED ||
         authState === AuthState.INSUFFICIENT_PRIVILEGES
       ) {
-        clearTweetDataExtractionRetry(tab.id);
-        clearAutomaticTweetExtractionRequestsForTab(tab.id);
+        clearPostDataExtractionRetry(tab.id);
+        clearAutomaticPostExtractionRequestsForTab(tab.id);
         await clearInFlightOperation(tab.id);
         tabMissingOriginators.delete(tab.id);
       }
@@ -1232,7 +718,7 @@ function scheduleAutomaticOriginatorProbe(operation: InFlightIconOperation): voi
 }
 
 async function handleAutomaticPreflightTimeout(operation: InFlightIconOperation): Promise<void> {
-  if (!await isCurrentTweetOperation(operation)) {
+  if (!await isCurrentPostOperation(operation)) {
     await clearInFlightOperation(operation.tabId, { operationId: operation.operationId });
     recordPreflightDiagnostic({
       status: 'skipped',
@@ -1317,7 +803,7 @@ async function reconcileAutomaticPreflightOperations(): Promise<void> {
       continue;
     }
 
-    if (!await isCurrentTweetOperation(operation)) {
+    if (!await isCurrentPostOperation(operation)) {
       await clearInFlightOperation(operation.tabId, { operationId: operation.operationId });
       continue;
     }
@@ -1350,14 +836,14 @@ async function shouldApplyPreflightOperationResult(
     currentOperation &&
     operation &&
     currentOperation.operationId !== operation.operationId &&
-    !isSameTweetPageUrl(currentOperation.url, url)
+    !isSamePostPageUrl(currentOperation.url, url)
   ) {
     return false;
   }
 
   try {
     const tab = await chrome.tabs.get(tabId);
-    return isSameTweetPageUrl(url, tab.url);
+    return isSamePostPageUrl(url, tab.url);
   } catch {
     const matchingOperation = getMatchingInFlightOperation(tabId, url);
     return (
@@ -1371,7 +857,7 @@ async function shouldApplyPreflightOperationResult(
 async function isSenderTabStillOnSourceUrl(tabId: number, sourceUrl: string): Promise<boolean> {
   try {
     const tab = await chrome.tabs.get(tabId);
-    return isSameTweetPageUrl(sourceUrl, tab.url);
+    return isSamePostPageUrl(sourceUrl, tab.url);
   } catch {
     const matchingOperation = getMatchingInFlightOperation(tabId, sourceUrl);
     return matchingOperation !== null;
@@ -1458,8 +944,8 @@ async function applyAuthRequiredApiResponse(
       authRequired: true,
       ...(errorText ? { error: errorText } : {}),
     });
-    clearTweetDataExtractionRetry(tabId);
-    clearAutomaticTweetExtractionRequestsForTab(tabId);
+    clearPostDataExtractionRetry(tabId);
+    clearAutomaticPostExtractionRequestsForTab(tabId);
     clearTabDuplicateResult(tabId);
     tabMissingOriginators.delete(tabId);
     await clearInFlightOperation(tabId);
@@ -1468,30 +954,6 @@ async function applyAuthRequiredApiResponse(
   }
 
   return true;
-}
-
-function duplicateResultFromResponse(response: unknown): DuplicateCheckResult | null {
-  if (!response || typeof response !== 'object') {
-    return null;
-  }
-
-  const value = response as {
-    success?: unknown;
-    result?: unknown;
-    recommendation?: unknown;
-  };
-
-  const candidate = value.result ?? response;
-  if (
-    value.success !== true ||
-    !candidate ||
-    typeof candidate !== 'object' ||
-    typeof (candidate as { recommendation?: unknown }).recommendation !== 'string'
-  ) {
-    return null;
-  }
-
-  return candidate as DuplicateCheckResult;
 }
 
 async function resolveDuplicateResultForTab(
@@ -1522,7 +984,7 @@ async function resolveDuplicateResultForTab(
 
     if (
       typeof preloaded?.url === 'string' &&
-      isSameTweetPageUrl(preloaded.url, url) &&
+      isSamePostPageUrl(preloaded.url, url) &&
       typeof preloaded.timestamp === 'number' &&
       Date.now() - preloaded.timestamp < PRELOADED_DUPLICATE_MAX_AGE_MS
     ) {
@@ -1663,7 +1125,7 @@ chrome.runtime.onMessage.addListener((
   sendResponse
 ) => {
   if (message.type === MessageType.GET_DIAGNOSTICS) {
-    getRuntimeDiagnostics().then(diagnostics => {
+    collectRuntimeDiagnostics().then(diagnostics => {
       sendResponse({ success: true, data: diagnostics });
     }).catch(error => {
       sendResponse({ success: false, error: errorMessage(error) });
@@ -1687,13 +1149,13 @@ chrome.runtime.onMessage.addListener((
   ensureServicesInitialized().then(() => {
     switch (message.type) {
       case MessageType.POST_DATA_EXTRACTED:
-        handleTweetDataExtracted(message.data, sender.tab?.id, sendResponse, {
+        handlePostDataExtracted(message.data, sender.tab?.id, sendResponse, {
           keepAliveUntilIconApplied: true,
         });
         break;
 
       case MessageType.GET_POST_DATA:
-        handleGetTweetData(sender.tab?.id, sendResponse);
+        handleGetPostData(sender.tab?.id, sendResponse);
         break;
 
       case MessageType.SPA_NAV: {
@@ -1922,11 +1384,11 @@ chrome.runtime.onMessage.addListener((
   return true; // Keep message port open for async response
 });
 
-async function sendExtractTweetDataMessage(tabId: number, url?: string): Promise<TweetExtractionResponse | undefined> {
+async function sendExtractPostDataMessage(tabId: number, url?: string): Promise<PostExtractionResponse | undefined> {
   try {
     return await chrome.tabs.sendMessage(tabId, { type: MessageType.EXTRACT_POST_DATA });
   } catch (error) {
-    if (!isMissingContentScriptError(error) || !isTweetPageUrl(url)) {
+    if (!isMissingContentScriptError(error) || !isPostPageUrl(url)) {
       throw error;
     }
 
@@ -1940,21 +1402,21 @@ async function sendExtractTweetDataMessage(tabId: number, url?: string): Promise
   }
 }
 
-function scheduleTweetDataExtractionRetry(tabId: number, url: string | undefined, attempt: number): void {
-  const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
-  if (!isTweetPageUrl(url) || retryAfterMs === undefined) {
+function schedulePostDataExtractionRetry(tabId: number, url: string | undefined, attempt: number): void {
+  const retryAfterMs = POST_EXTRACTION_RETRY_DELAYS_MS[attempt];
+  if (!isPostPageUrl(url) || retryAfterMs === undefined) {
     return;
   }
 
-  clearTweetDataExtractionRetry(tabId);
+  clearPostDataExtractionRetry(tabId);
 
   const timer = setTimeout(() => {
     const nextAttempt = attempt + 2;
-    tweetExtractionRetryTimers.delete(tabId);
+    postExtractionRetryTimers.delete(tabId);
     void (async () => {
       try {
         const tab = await chrome.tabs.get(tabId);
-        if (!isSameTweetPageUrl(url, tab.url)) {
+        if (!isSamePostPageUrl(url, tab.url)) {
           recordExtractionDiagnostic({
             status: 'skipped',
             tabId,
@@ -1973,7 +1435,7 @@ function scheduleTweetDataExtractionRetry(tabId: number, url: string | undefined
           return;
         }
 
-        await requestTweetDataExtraction(tabId, url, attempt + 1);
+        await requestPostDataExtraction(tabId, url, attempt + 1);
       } catch (error) {
         recordExtractionDiagnostic({
           status: 'failed',
@@ -1997,12 +1459,12 @@ function scheduleTweetDataExtractionRetry(tabId: number, url: string | undefined
     })();
   }, retryAfterMs);
 
-  tweetExtractionRetryTimers.set(tabId, timer);
+  postExtractionRetryTimers.set(tabId, timer);
 }
 
-async function requestTweetDataExtraction(tabId: number, url?: string, attempt = 0): Promise<void> {
+async function requestPostDataExtraction(tabId: number, url?: string, attempt = 0): Promise<void> {
   if (isPrivateModeEnabled()) {
-    clearTweetDataExtractionRetry(tabId);
+    clearPostDataExtractionRetry(tabId);
     recordExtractionDiagnostic({
       status: 'skipped',
       tabId,
@@ -2022,9 +1484,9 @@ async function requestTweetDataExtraction(tabId: number, url?: string, attempt =
     return;
   }
 
-  const extractionKey = attempt === 0 ? automaticTweetOperationKey(tabId, url) : null;
+  const extractionKey = attempt === 0 ? automaticPostOperationKey(tabId, url) : null;
   if (extractionKey) {
-    const pendingExtraction = automaticTweetExtractionRequests.get(extractionKey);
+    const pendingExtraction = automaticPostExtractionRequests.get(extractionKey);
     if (pendingExtraction) {
       recordDiagnosticTimingEvent({
         event: 'extraction_request_deduped',
@@ -2039,23 +1501,23 @@ async function requestTweetDataExtraction(tabId: number, url?: string, attempt =
     }
   }
 
-  const extractionPromise = performTweetDataExtraction(tabId, url, attempt);
+  const extractionPromise = performPostDataExtraction(tabId, url, attempt);
   if (!extractionKey) {
     await extractionPromise;
     return;
   }
 
-  automaticTweetExtractionRequests.set(extractionKey, extractionPromise);
+  automaticPostExtractionRequests.set(extractionKey, extractionPromise);
   try {
     await extractionPromise;
   } finally {
-    clearAutomaticTweetExtractionRequestIfCurrent(extractionKey, extractionPromise);
+    clearAutomaticPostExtractionRequestIfCurrent(extractionKey, extractionPromise);
   }
 }
 
-async function performTweetDataExtraction(tabId: number, url?: string, attempt = 0): Promise<void> {
-  if (!isTweetPageUrl(url)) {
-    clearTweetDataExtractionRetry(tabId);
+async function performPostDataExtraction(tabId: number, url?: string, attempt = 0): Promise<void> {
+  if (!isPostPageUrl(url)) {
+    clearPostDataExtractionRetry(tabId);
     recordExtractionDiagnostic({
       status: 'skipped',
       tabId,
@@ -2074,7 +1536,7 @@ async function performTweetDataExtraction(tabId: number, url?: string, attempt =
   }
 
   if (attempt === 0) {
-    clearTweetDataExtractionRetry(tabId);
+    clearPostDataExtractionRetry(tabId);
   }
 
   recordExtractionDiagnostic({
@@ -2092,10 +1554,10 @@ async function performTweetDataExtraction(tabId: number, url?: string, attempt =
   });
 
   try {
-    const response = await sendExtractTweetDataMessage(tabId, url);
+    const response = await sendExtractPostDataMessage(tabId, url);
     if (response?.success && response.data) {
-      if (!isExtractedTweetDataForUrl(response.data, url)) {
-        const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
+      if (!isExtractedPostDataForUrl(response.data, url)) {
+        const retryAfterMs = POST_EXTRACTION_RETRY_DELAYS_MS[attempt];
         recordExtractionDiagnostic({
           status: 'no_data',
           tabId,
@@ -2116,20 +1578,20 @@ async function performTweetDataExtraction(tabId: number, url?: string, attempt =
           retryAfterMs,
         });
         debugLog('Tweet extraction returned stale data for a different status ID');
-        scheduleTweetDataExtractionRetry(tabId, url, attempt);
+        schedulePostDataExtractionRetry(tabId, url, attempt);
         return;
       }
 
-      clearTweetDataExtractionRetry(tabId);
+      clearPostDataExtractionRetry(tabId);
       recordExtractionDiagnostic({
         status: 'succeeded',
         tabId,
         url,
         attempt: attempt + 1,
       });
-      await handleTweetDataExtracted(response.data, tabId, () => undefined);
+      await handlePostDataExtracted(response.data, tabId, () => undefined);
     } else if (response?.error) {
-      const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
+      const retryAfterMs = POST_EXTRACTION_RETRY_DELAYS_MS[attempt];
       recordExtractionDiagnostic({
         status: 'no_data',
         tabId,
@@ -2150,9 +1612,9 @@ async function performTweetDataExtraction(tabId: number, url?: string, attempt =
         retryAfterMs,
       });
       debugLog('Tweet extraction request returned no data:', response.error);
-      scheduleTweetDataExtractionRetry(tabId, url, attempt);
+      schedulePostDataExtractionRetry(tabId, url, attempt);
     } else {
-      const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
+      const retryAfterMs = POST_EXTRACTION_RETRY_DELAYS_MS[attempt];
       recordExtractionDiagnostic({
         status: 'no_data',
         tabId,
@@ -2172,10 +1634,10 @@ async function performTweetDataExtraction(tabId: number, url?: string, attempt =
         attempt: attempt + 1,
         retryAfterMs,
       });
-      scheduleTweetDataExtractionRetry(tabId, url, attempt);
+      schedulePostDataExtractionRetry(tabId, url, attempt);
     }
   } catch (error) {
-    const retryAfterMs = TWEET_EXTRACTION_RETRY_DELAYS_MS[attempt];
+    const retryAfterMs = POST_EXTRACTION_RETRY_DELAYS_MS[attempt];
     recordExtractionDiagnostic({
       status: 'failed',
       tabId,
@@ -2197,16 +1659,16 @@ async function performTweetDataExtraction(tabId: number, url?: string, attempt =
       retryAfterMs,
     });
     debugLog('Unable to request tweet extraction for icon preflight:', error);
-    scheduleTweetDataExtractionRetry(tabId, url, attempt);
+    schedulePostDataExtractionRetry(tabId, url, attempt);
   }
 }
 
 /**
  * Clear tweet-specific icon updates
  */
-async function clearTweetPageIcon(tabId: number, url?: string): Promise<void> {
+async function clearPostPageIcon(tabId: number, url?: string): Promise<void> {
   try {
-    clearTweetDataExtractionRetry(tabId);
+    clearPostDataExtractionRetry(tabId);
     clearTabDuplicateResult(tabId);
     tabMissingOriginators.delete(tabId);
     await clearInFlightOperation(tabId);
@@ -2219,11 +1681,11 @@ async function clearTweetPageIcon(tabId: number, url?: string): Promise<void> {
 // Handle tab updates to detect tweet pages (full page loads)
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
-    const isTweetPage = isTweetPageUrl(tab.url);
+    const isPostPage = isPostPageUrl(tab.url);
 
     await ensureServicesInitialized();
 
-    if (isTweetPage) {
+    if (isPostPage) {
       recordDiagnosticTimingEvent({
         event: 'tweet_navigation_detected',
         tabId,
@@ -2232,9 +1694,9 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
         reason: 'tabs_on_updated_complete',
       });
       await applyResolvedIconForTab(tabId, tab.url);
-      await requestTweetDataExtraction(tabId, tab.url);
+      await requestPostDataExtraction(tabId, tab.url);
     } else {
-      await clearTweetPageIcon(tabId, tab.url);
+      await clearPostPageIcon(tabId, tab.url);
     }
   }
 });
@@ -2245,12 +1707,12 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   if (lastActiveTabId !== null && lastActiveTabId !== tabId) {
     try {
       const previousTab = await chrome.tabs.get(lastActiveTabId);
-      if (!isTweetPageUrl(previousTab.url)) {
-        await clearTweetPageIcon(lastActiveTabId, previousTab.url);
+      if (!isPostPageUrl(previousTab.url)) {
+        await clearPostPageIcon(lastActiveTabId, previousTab.url);
       }
     } catch {
-      clearTweetDataExtractionRetry(lastActiveTabId);
-      clearAutomaticTweetExtractionRequestsForTab(lastActiveTabId);
+      clearPostDataExtractionRetry(lastActiveTabId);
+      clearAutomaticPostExtractionRequestsForTab(lastActiveTabId);
       clearTabDuplicateResult(lastActiveTabId);
       tabMissingOriginators.delete(lastActiveTabId);
       await clearInFlightOperation(lastActiveTabId);
@@ -2269,8 +1731,8 @@ chrome.tabs.onActivated.addListener(async ({ tabId }) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  clearTweetDataExtractionRetry(tabId);
-  clearAutomaticTweetExtractionRequestsForTab(tabId);
+  clearPostDataExtractionRetry(tabId);
+  clearAutomaticPostExtractionRequestsForTab(tabId);
   clearTabDuplicateResult(tabId);
   tabMissingOriginators.delete(tabId);
   void clearInFlightOperation(tabId);
@@ -2288,10 +1750,10 @@ async function handleSpaNavigation(details: { tabId: number; url: string; frameI
   // Only process main frame navigations
   if (details.frameId !== undefined && details.frameId !== 0) return;
 
-  const isTweetPage = isTweetPageUrl(details.url);
+  const isPostPage = isPostPageUrl(details.url);
 
-  if (isTweetPage) {
-    debugLog('SPA navigation detected to tweet page:', details.url);
+  if (isPostPage) {
+    debugLog('SPA navigation detected to post page:', details.url);
 
     await ensureServicesInitialized();
     recordDiagnosticTimingEvent({
@@ -2302,10 +1764,10 @@ async function handleSpaNavigation(details: { tabId: number; url: string; frameI
       reason: 'history_state_updated',
     });
     await applyResolvedIconForTab(details.tabId, details.url);
-    await requestTweetDataExtraction(details.tabId, details.url);
+    await requestPostDataExtraction(details.tabId, details.url);
   } else {
     await ensureServicesInitialized();
-    await clearTweetPageIcon(details.tabId, details.url);
+    await clearPostPageIcon(details.tabId, details.url);
   }
 }
 
@@ -2323,7 +1785,7 @@ if (typeof chrome.webNavigation?.onHistoryStateUpdated?.addListener === 'functio
  * Handle tweet data extracted from content script
  * Validates incoming data before storage for security
  */
-async function runAutomaticPreflightForExtractedTweet(
+async function runAutomaticPreflightForExtractedPost(
   validatedData: CapturedPostData,
   tabId: number | undefined,
 ): Promise<void> {
@@ -2394,8 +1856,8 @@ async function runAutomaticPreflightForExtractedTweet(
   await checkQuoteCollectionStatus(validatedData, tabId, preflightOperation, cacheWriteEpoch);
 }
 
-async function handleTweetDataExtracted(
-  tweetData: unknown,
+async function handlePostDataExtracted(
+  postData: unknown,
   tabId: number | undefined,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendResponse: (response: any) => void,
@@ -2406,7 +1868,7 @@ async function handleTweetDataExtracted(
   try {
     // Validate incoming data before processing (security hardening)
     try {
-      validateCapturedPostData(tweetData);
+      validateCapturedPostData(postData);
     } catch (validationError) {
       if (validationError instanceof ValidationError) {
         console.error('Post data validation failed:', validationError.message, validationError.field);
@@ -2425,7 +1887,7 @@ async function handleTweetDataExtracted(
     }
 
     // Type assertion safe after validation
-    const validatedData = tweetData as CapturedPostData;
+    const validatedData = postData as CapturedPostData;
     const sourceUrl = captureSourceUrl(validatedData);
     const sourceId = captureSourceId(validatedData);
     const handle = captureAuthorHandle(validatedData);
@@ -2445,7 +1907,7 @@ async function handleTweetDataExtracted(
       reason: 'tweet_data_received',
     });
     if (tabId) {
-      clearTweetDataExtractionRetry(tabId);
+      clearPostDataExtractionRetry(tabId);
       tabMissingOriginators.delete(tabId);
     }
 
@@ -2476,7 +1938,7 @@ async function handleTweetDataExtracted(
 
     // Keep the message port alive long enough for the automatic icon write. Without this,
     // MV3 may suspend the worker after the content-script response while the tray is closed.
-    const checkPromise = runAutomaticPreflightForExtractedTweet(validatedData, tabId);
+    const checkPromise = runAutomaticPreflightForExtractedPost(validatedData, tabId);
     pendingDuplicateChecks.set(cacheKey, checkPromise);
 
     void checkPromise
@@ -2539,7 +2001,7 @@ async function updateIconAfterDuplicateCheckResponse(
 
   const duplicateResult = duplicateResultFromResponse(response);
   setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
-  clearTweetDataExtractionRetry(tabId);
+  clearPostDataExtractionRetry(tabId);
   tabMissingOriginators.delete(tabId);
   await clearInFlightOperation(tabId, {
     url: sourceUrl,
@@ -2576,7 +2038,7 @@ async function applyOriginatorLookupLoading(
 ): Promise<void> {
   const tabId = sender.tab?.id;
   const sourceUrl = sourceUrlFromMessage(message, sender);
-  if (!tabId || !sourceUrl || !isTweetPageUrl(sourceUrl)) {
+  if (!tabId || !sourceUrl || !isPostPageUrl(sourceUrl)) {
     return;
   }
 
@@ -2755,7 +2217,7 @@ async function updateIconAfterOriginatorLookupResponse(
 ): Promise<void> {
   const tabId = sender.tab?.id;
   const sourceUrl = sourceUrlFromMessage(message, sender);
-  if (!tabId || !sourceUrl || !isTweetPageUrl(sourceUrl)) {
+  if (!tabId || !sourceUrl || !isPostPageUrl(sourceUrl)) {
     return;
   }
 
@@ -2767,50 +2229,6 @@ async function updateIconAfterOriginatorLookupResponse(
     trigger: 'originator-lookup',
     handle,
   });
-}
-
-function originatorNameFromLookup(lookup: { originator?: unknown }): string | undefined {
-  const originator = lookup.originator;
-  if (!originator || typeof originator !== 'object') {
-    return undefined;
-  }
-
-  const value = originator as { full_name?: unknown };
-  return typeof value.full_name === 'string' ? value.full_name : undefined;
-}
-
-function originatorSlugFromLookup(lookup: { originator?: unknown }): string | undefined {
-  const originator = lookup.originator;
-  if (!originator || typeof originator !== 'object') {
-    return undefined;
-  }
-
-  const value = originator as { unique_id?: unknown; slug?: unknown };
-  if (typeof value.unique_id === 'string') {
-    return value.unique_id;
-  }
-
-  return typeof value.slug === 'string' ? value.slug : undefined;
-}
-
-function summarizeHandleLookupResult(
-  lookup: { found?: unknown; handle?: unknown; platform?: unknown; match_platform?: unknown; confidence?: unknown; create_url?: unknown; originator?: unknown },
-  fallbackHandle?: string,
-): OriginatorDiagnostic | null {
-  if (typeof lookup.found !== 'boolean') {
-    return null;
-  }
-
-  return {
-    found: lookup.found,
-    handle: typeof lookup.handle === 'string' ? lookup.handle : fallbackHandle,
-    platform: typeof lookup.platform === 'string' ? lookup.platform : 'twitter',
-    matchPlatform: typeof lookup.match_platform === 'string' ? lookup.match_platform : undefined,
-    confidence: typeof lookup.confidence === 'number' ? lookup.confidence : undefined,
-    fullName: originatorNameFromLookup(lookup),
-    slug: originatorSlugFromLookup(lookup),
-    createUrl: typeof lookup.create_url === 'string' ? lookup.create_url : undefined,
-  };
 }
 
 async function cacheFoundOriginatorFromLookup(
@@ -3293,7 +2711,7 @@ async function handleCheckDuplicate(
   const tabId = sender.tab?.id;
   const sourceUrl = sourceUrlFromMessage(message, sender);
 
-  if (tabId && isTweetPageUrl(sourceUrl)) {
+  if (tabId && isPostPageUrl(sourceUrl)) {
     recordPreflightDiagnostic({
       status: 'loading',
       trigger: 'explicit-duplicate-check',
@@ -3362,7 +2780,7 @@ async function handleCheckNow(
     ? data.platform as CapturePlatform
     : captureIdentityFromUrl(sourceUrl)?.platform ?? 'twitter';
 
-  if (!sourceUrl || !isTweetPageUrl(sourceUrl)) {
+  if (!sourceUrl || !isPostPageUrl(sourceUrl)) {
     sendResponse({ success: false, skipped: true, error: 'No current post' });
     return;
   }
@@ -3833,7 +3251,7 @@ async function checkQuoteCollectionStatus(
 /**
  * Handle request for current tweet data from popup
  */
-async function handleGetTweetData(
+async function handleGetPostData(
   tabId: number | undefined,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sendResponse: (response: any) => void

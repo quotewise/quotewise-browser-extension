@@ -22,7 +22,7 @@ export const USER_IDENTIFYING_CACHE_KEYS = [
   'originator_search_history',
 ] as const;
 
-interface StoredTweetData {
+interface StoredPostData {
   data: Record<string, unknown>;
   timestamp: number;
   url: string;
@@ -135,8 +135,8 @@ export class StorageCleanupService {
   private async cleanupTweets(now: number): Promise<number> {
     try {
       const result = await chrome.storage.local.get(['currentPost', 'currentTweet']);
-      const currentPost = result.currentPost as StoredTweetData | undefined;
-      const currentTweet = result.currentTweet as StoredTweetData | undefined;
+      const currentPost = result.currentPost as StoredPostData | undefined;
+      const currentTweet = result.currentTweet as StoredPostData | undefined;
       const storedPost = currentPost ?? currentTweet;
       
       if (!storedPost) {
