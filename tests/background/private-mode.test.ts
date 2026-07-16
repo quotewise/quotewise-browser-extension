@@ -5,6 +5,11 @@ describe('private-mode service-worker gating', () => {
     require.resolve('../../src/background/service-worker'),
     'utf8',
   );
+  // scheduleAutomaticOriginatorProbe now lives in the extracted originator-probe module.
+  const probeSource = fs.readFileSync(
+    require.resolve('../../src/background/originator-probe'),
+    'utf8',
+  );
 
   it('threads synced settings into icon resolution and automatic gates', () => {
     expect(source).toContain("import { getSettings, onSettingsChanged } from '../settings/settings-store'");
@@ -18,13 +23,13 @@ describe('private-mode service-worker gating', () => {
     const extractionIndex = source.indexOf('async function requestPostDataExtraction');
     const preflightIndex = source.indexOf('async function runAutomaticPreflightForExtractedPost');
     const statusIndex = source.indexOf('async function checkQuoteCollectionStatus');
-    const probeIndex = source.indexOf('function scheduleAutomaticOriginatorProbe');
+    const probeIndex = probeSource.indexOf('function scheduleAutomaticOriginatorProbe');
     const checkNowIndex = source.indexOf('async function handleCheckNow');
 
     expect(source.slice(extractionIndex, extractionIndex + 900)).toContain('reason: \'private_mode\'');
     expect(source.slice(preflightIndex, preflightIndex + 900)).toContain('reason: \'private_mode\'');
     expect(source.slice(statusIndex, statusIndex + 1200)).toContain('reason: \'private_mode\'');
-    expect(source.slice(probeIndex, probeIndex + 900)).toContain('reason: \'private_mode\'');
+    expect(probeSource.slice(probeIndex, probeIndex + 900)).toContain('reason: \'private_mode\'');
     expect(source.slice(checkNowIndex, checkNowIndex + 1800)).toContain('MessageType.PREFLIGHT_CHECK');
   });
 
