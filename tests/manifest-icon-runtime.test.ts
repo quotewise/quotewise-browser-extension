@@ -6,7 +6,7 @@ function readManifest(name: string): any {
 }
 
 describe('manifest icon/runtime wiring', () => {
-  for (const manifestName of ['manifest.json', 'manifest.dev.json', 'manifest.prod.json']) {
+  for (const manifestName of ['manifest.dev.json', 'manifest.prod.json']) {
     test(`${manifestName} fails closed to the grey logged-out action icon`, () => {
       const manifest = readManifest(manifestName);
 

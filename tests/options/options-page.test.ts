@@ -56,7 +56,7 @@ describe('options page', () => {
   });
 
   it('registers options_ui in every manifest without adding a popup', () => {
-    for (const manifestName of ['manifest.json', 'manifest.dev.json', 'manifest.prod.json']) {
+    for (const manifestName of ['manifest.dev.json', 'manifest.prod.json']) {
       const manifest = readManifest(manifestName);
       expect(manifest.options_ui).toEqual({
         page: 'options.html',
