@@ -1,0 +1,38 @@
+name: Release
+
+# Tag a release (e.g. `git tag v1.6.5 && git push origin v1.6.5`) to build both
+# store packages and attach them to the GitHub release. Keep the tag in sync with
+# the manifest/package version (`bun run bump-version <version>` first).
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.4
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build Chrome package
+        run: bun run package        # -> quotewise-extension-v<version>.zip
+
+      - name: Build Firefox package
+        run: bun run build:firefox   # -> web-ext-artifacts/*.zip
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            quotewise-extension-*.zip
+            web-ext-artifacts/*.zip
+          generate_release_notes: true
