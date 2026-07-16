@@ -47,20 +47,6 @@ class ContentOrchestrator {
         return true;
       }
 
-      if (message.type === MessageType.EXTRACT_TWEET_DATA) {
-        this.extractLatestData(true).then((data) => {
-          if (data) {
-            sendResponse({ success: true, data });
-          } else {
-            sendResponse({ success: false, error: 'No post data available on this page.' });
-          }
-        }).catch(error => {
-          console.error('Error extracting data', error);
-          sendResponse({ success: false, error: error?.message || 'Failed to extract data' });
-        });
-        return true;
-      }
-
       if (message.type === MessageType.EXTRACT_POST_DATA) {
         this.extractLatestData(true).then((data) => {
           if (data) {

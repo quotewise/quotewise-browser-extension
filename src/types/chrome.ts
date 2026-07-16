@@ -25,23 +25,14 @@ declare namespace chrome {
 
 // Extension-specific message types
 export enum MessageType {
-  // Content script to background (platform-neutral)
+  // Content script to background
   POST_DATA_EXTRACTED = 'POST_DATA_EXTRACTED',
 
-  // Background to content script (platform-neutral)
+  // Background to content script
   EXTRACT_POST_DATA = 'EXTRACT_POST_DATA',
 
-  // Popup to background (platform-neutral)
-  GET_POST_DATA = 'GET_POST_DATA',
-
-  // Content script to background
-  TWEET_DATA_EXTRACTED = 'TWEET_DATA_EXTRACTED',
-  
-  // Background to content script
-  EXTRACT_TWEET_DATA = 'EXTRACT_TWEET_DATA',
-  
   // Popup to background
-  GET_TWEET_DATA = 'GET_TWEET_DATA',
+  GET_POST_DATA = 'GET_POST_DATA',
   CHECK_AUTH_STATUS = 'CHECK_AUTH_STATUS',
   SUBMIT_QUOTE = 'SUBMIT_QUOTE',
   SEARCH_ORIGINATORS = 'SEARCH_ORIGINATORS',

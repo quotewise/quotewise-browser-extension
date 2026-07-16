@@ -46,7 +46,7 @@ export class ThreadsAdapter implements PlatformAdapter<CapturedPostData> {
     message: ExtensionMessage,
     sendResponse: (response: unknown) => void,
   ): Promise<boolean> {
-    if (message.type !== MessageType.EXTRACT_POST_DATA && message.type !== MessageType.EXTRACT_TWEET_DATA) {
+    if (message.type !== MessageType.EXTRACT_POST_DATA) {
       return false;
     }
 

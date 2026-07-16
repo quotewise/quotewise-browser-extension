@@ -239,8 +239,8 @@ describe('validateTwitterData', () => {
 
 describe('validateExtensionMessage', () => {
   describe('valid message acceptance', () => {
-    test('accepts valid TWEET_DATA_EXTRACTED message', () => {
-      const message = { type: 'TWEET_DATA_EXTRACTED', data: {} };
+    test('accepts valid POST_DATA_EXTRACTED message', () => {
+      const message = { type: 'POST_DATA_EXTRACTED', data: {} };
       expect(() => validateExtensionMessage(message)).not.toThrow();
     });
 
@@ -250,15 +250,15 @@ describe('validateExtensionMessage', () => {
     });
 
     test('accepts message with requestId', () => {
-      const message = { type: 'GET_TWEET_DATA', requestId: 'abc123' };
+      const message = { type: 'GET_POST_DATA', requestId: 'abc123' };
       expect(() => validateExtensionMessage(message)).not.toThrow();
     });
 
     test('accepts all valid message types', () => {
       const validTypes = [
-        'TWEET_DATA_EXTRACTED',
-        'EXTRACT_TWEET_DATA',
-        'GET_TWEET_DATA',
+        'POST_DATA_EXTRACTED',
+        'EXTRACT_POST_DATA',
+        'GET_POST_DATA',
         'CHECK_AUTH_STATUS',
         'SUBMIT_QUOTE',
         'SEARCH_ORIGINATORS',
@@ -309,7 +309,7 @@ describe('validateExtensionMessage', () => {
     });
 
     test('rejects non-string requestId', () => {
-      expect(() => validateExtensionMessage({ type: 'GET_TWEET_DATA', requestId: 123 }))
+      expect(() => validateExtensionMessage({ type: 'GET_POST_DATA', requestId: 123 }))
         .toThrow('requestId must be a string');
     });
   });

@@ -142,7 +142,7 @@ describe('TwitterAdapter extraction', () => {
     const sendResponse = jest.fn();
 
     const handled = await adapter.handleMessage(
-      { type: MessageType.EXTRACT_TWEET_DATA },
+      { type: MessageType.EXTRACT_POST_DATA },
       sendResponse
     );
 
@@ -166,7 +166,7 @@ describe('TwitterAdapter extraction', () => {
       expect(outcome.data?.platform_data.tweet_id).toBe('1234567890');
     }
     expect(mockedSendMessageToBackground).toHaveBeenCalledWith({
-      type: MessageType.TWEET_DATA_EXTRACTED,
+      type: MessageType.POST_DATA_EXTRACTED,
       data: expect.objectContaining({
         platform_data: expect.objectContaining({
           tweet_id: '1234567890',
@@ -183,7 +183,7 @@ describe('TwitterAdapter extraction', () => {
     const sendResponse = jest.fn();
 
     const handled = await adapter.handleMessage(
-      { type: MessageType.EXTRACT_TWEET_DATA },
+      { type: MessageType.EXTRACT_POST_DATA },
       sendResponse
     );
 

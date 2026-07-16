@@ -266,7 +266,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(22, {
-      type: 'EXTRACT_TWEET_DATA',
+      type: 'EXTRACT_POST_DATA',
     });
     expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 22, text: '●' });
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '=' });
@@ -491,7 +491,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     const sendResponse = jest.fn();
     runtimeListener(
       {
-        type: MessageType.TWEET_DATA_EXTRACTED,
+        type: MessageType.POST_DATA_EXTRACTED,
         data: tweetData,
       },
       {
@@ -555,7 +555,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
 
     runtimeListener(
       {
-        type: MessageType.TWEET_DATA_EXTRACTED,
+        type: MessageType.POST_DATA_EXTRACTED,
         data: tweetData,
       },
       {
@@ -568,7 +568,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     );
     runtimeListener(
       {
-        type: MessageType.TWEET_DATA_EXTRACTED,
+        type: MessageType.POST_DATA_EXTRACTED,
         data: tweetData,
       },
       {
@@ -1859,7 +1859,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
       await flushPromises(10);
 
       expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(22, {
-        type: 'EXTRACT_TWEET_DATA',
+        type: 'EXTRACT_POST_DATA',
       });
       expect(handleMessage).not.toHaveBeenCalled();
       expect(chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 22, text: '★' });
