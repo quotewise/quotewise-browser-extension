@@ -1,0 +1,8 @@
+{
+  "categories": {
+    "firefox": ["social-communication", "bookmarks"]
+  },
+  "version": {
+    "license": "MPL-2.0"
+  }
+}

@@ -18,8 +18,7 @@ import type {
   ApiError
 } from '../types/api';
 import { getEnvironmentConfig, debugLog } from '../config/environment';
-import { getAccessToken } from '../auth/token-storage';
-import { attemptTokenRefresh } from '../auth/token-refresh';
+import { authBackend } from '../auth/auth-backend';
 
 /** Max characters of quote text sent to the preflight endpoint (enough for duplicate matching). */
 const MAX_PREFLIGHT_TEXT_LENGTH = 2000;
@@ -127,26 +126,29 @@ function normalizeCollectionsListResponse(result: unknown): CollectionsListRespo
  */
 export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   public readonly baseUrl: string;
-  private isRetrying: boolean = false;
 
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || getEnvironmentConfig().apiBaseUrl;
   }
 
   /**
-   * Get headers for API requests with Bearer token authentication
+   * Get headers for an authenticated API request. Fail-closed: if no token is available (signed
+   * out, or on Safari a dropped/failed bridge response), THROW rather than send the request
+   * unauthenticated — otherwise capture/preflight data would egress anonymously before the 401
+   * (Constitution III; contracts/native-messaging.md, api-consumption.md). `forceRefresh` rotates
+   * the token (used on the one 401 retry).
    */
-  private async getAuthHeaders(): Promise<Record<string, string>> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    const accessToken = await getAccessToken();
-    if (accessToken) {
-      headers['Authorization'] = `Bearer ${accessToken}`;
+  private async getAuthHeaders(forceRefresh = false): Promise<Record<string, string>> {
+    const accessToken = await authBackend.accessToken(forceRefresh);
+    if (!accessToken) {
+      const authError = new Error('Authentication required') as Error & { name: string };
+      authError.name = 'AuthenticationError';
+      throw authError as AuthenticationError;
     }
-
-    return headers;
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`,
+    };
   }
 
   /**
@@ -159,13 +161,14 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
   private async makeRequest<T>(
     endpoint: string,
     options: RequestInit = {},
-    _requireCSRF: boolean = true
+    _requireCSRF: boolean = true,
+    retried: boolean = false
   ): Promise<T> {
     try {
       const method = (options.method || 'GET').toUpperCase();
 
-      // Get headers with Bearer token
-      const headers = await this.getAuthHeaders();
+      // Bearer token (force-refreshed on the retry). Throws AuthenticationError if none — fail-closed.
+      const headers = await this.getAuthHeaders(retried);
 
       const requestOptions: RequestInit = {
         headers: { ...headers, ...(options.headers || {}) },
@@ -187,22 +190,15 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       });
 
       if (!response.ok) {
-        // Handle 401 Unauthorized - attempt token refresh and retry
-        if (response.status === 401 && !this.isRetrying) {
-          debugLog('Got 401, attempting token refresh');
-
-          const refreshResult = await attemptTokenRefresh();
-          if (refreshResult.success) {
-            // Retry the request with new token
-            this.isRetrying = true;
-            try {
-              return await this.makeRequest<T>(endpoint, options, _requireCSRF);
-            } finally {
-              this.isRetrying = false;
-            }
+        // 401 → force ONE token refresh (Safari: the app rotates via the broker; Chrome: refresh
+        // grant) and retry once. `retried` is threaded through this request's own recursion, not a
+        // shared client flag, so concurrent requests don't suppress each other's recovery.
+        if (response.status === 401) {
+          if (!retried) {
+            debugLog('Got 401, forcing token refresh and retrying once');
+            return await this.makeRequest<T>(endpoint, options, _requireCSRF, true);
           }
-
-          // Refresh failed - throw auth error
+          // Still 401 after a forced refresh → genuinely unauthenticated.
           const authError = new Error('Authentication required') as Error & { name: string };
           authError.name = 'AuthenticationError';
           throw authError as AuthenticationError;

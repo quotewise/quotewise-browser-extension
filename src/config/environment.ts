@@ -211,22 +211,36 @@ export const OAUTH_SCOPES = [
 ];
 
 /**
+ * Browser-correct OAuth redirect URI.
+ *
+ * chrome.identity.getRedirectURL('callback') returns the host the *running* browser actually
+ * intercepts in launchWebAuthFlow, so one build works across stores:
+ *   - Chrome:  https://<extension-id>.chromiumapp.org/callback
+ *   - Firefox: https://<token>.extensions.allizom.org/callback  (derived from gecko.id)
+ * The backend OAuth client must whitelist each browser's redirect (see
+ * docs/server-launch-adrs/ADR-0008-firefox-oauth-redirect.md). Falls back to the chromiumapp.org
+ * form only when identity.getRedirectURL is unavailable (jsdom tests; Safari signs in via a tab and
+ * never uses this path).
+ */
+function getRedirectUri(): string {
+    if (typeof chrome !== 'undefined' && typeof chrome.identity?.getRedirectURL === 'function') {
+        return chrome.identity.getRedirectURL('callback');
+    }
+    const extensionId = (typeof chrome !== 'undefined' && chrome.runtime?.id) || 'development-extension-id';
+    return `https://${extensionId}.chromiumapp.org/callback`;
+}
+
+/**
  * Get OAuth configuration for current environment
  */
 export function getOAuthConfig(): OAuthConfig {
     const envConfig = getEnvironmentConfig();
 
-    // Get extension ID for redirect URI
-    // In development, chrome.runtime.id may be undefined
-    const extensionId = typeof chrome !== 'undefined' && chrome.runtime?.id
-        ? chrome.runtime.id
-        : 'development-extension-id';
-
     return {
         clientId: OAUTH_CLIENT_ID,
         authorizeUrl: `${envConfig.webBaseUrl}/oauth/authorize`,
         tokenUrl: `${envConfig.webBaseUrl}/oauth/token`,
-        redirectUri: `https://${extensionId}.chromiumapp.org/callback`,
+        redirectUri: getRedirectUri(),
         scopes: OAUTH_SCOPES,
     };
 }

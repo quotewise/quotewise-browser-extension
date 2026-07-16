@@ -17,6 +17,7 @@ These ADRs capture the **backend changes the extension needs** for a solid publi
 | [ADR-0005](ADR-0005-privacy-policy-data-disclosure.md) | Privacy policy + data-handling disclosure update | P1 | `qw-0psq.15` | **Yes** (Chrome Web Store gate) |
 | [ADR-0006](ADR-0006-collections-membership.md) | Collections: add existing quote to a collection + membership in duplicate-check | P1 | `qw-si1t` | No — fast-follow feature |
 | [ADR-0007](ADR-0007-quotes-by-sighting-url.md) | Duplicate-check: return all distinct quotes for a sighting URL (text + link) | P2 | `qw-1jzc` | No — fast-follow feature |
+| [ADR-0008](ADR-0008-firefox-oauth-redirect.md) | Firefox OAuth redirect URI (register Gecko redirect on the OAuth client) | P2 | `qw-2kxt3` | Firefox-launch only |
 
 ## Launch-critical vs. fast-follow
 

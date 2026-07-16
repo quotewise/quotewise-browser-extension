@@ -64,7 +64,7 @@ export class AccountMenu {
 
   private render(): void {
     this.container.innerHTML = `
-      <button type="button" class="toggle" id="account-menu-btn" aria-label="Account menu" aria-haspopup="menu" aria-expanded="false">⚙</button>
+      <button type="button" class="toggle" id="account-menu-btn" aria-label="Account menu" aria-haspopup="menu" aria-expanded="false"><span class="gear-glyph">⚙</span></button>
       <div class="account-menu" id="account-menu" role="menu" hidden></div>
     `;
     this.button = this.container.querySelector('#account-menu-btn') as HTMLButtonElement;
@@ -266,9 +266,11 @@ export class AccountMenu {
       button.setAttribute('aria-busy', 'true');
     }
 
+    let succeeded = false;
     try {
       const response = await this.sendMessage({ type });
       if (response.success) {
+        succeeded = true;
         this.authState = isAuthenticated ? AuthState.UNAUTHENTICATED : AuthState.AUTHENTICATED;
         this.username = isAuthenticated ? null : this.username;
         this.statusMessage = isAuthenticated ? 'Logged out.' : 'Logged in.';
@@ -283,7 +285,13 @@ export class AccountMenu {
 
     await this.waitForMinimumBusyTime(startedAt);
     this.renderMenu();
-    this.open();
+    // Dismiss the menu once the action completes (it was orphaning open after logout); keep it open
+    // only to surface a failure message.
+    if (succeeded) {
+      this.close();
+    } else {
+      this.open();
+    }
   }
 
   private async waitForMinimumBusyTime(startedAt: number): Promise<void> {

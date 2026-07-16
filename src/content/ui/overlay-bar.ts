@@ -400,8 +400,16 @@ export class OverlayBar {
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          font-size: 15px;
           background: rgba(255,255,255,0.12);
           color: #e2e8f0;
+        }
+        /* The ⚙ glyph's ink sits below its line-box center, so it reads low even when flex-centered;
+           nudge the glyph (not the button/circle) up ~1px for optical centering. */
+        .toggle .gear-glyph {
+          display: block;
+          line-height: 1;
+          transform: translateY(-1px);
         }
         #account-menu-btn {
           padding: 0;
@@ -826,10 +834,10 @@ export class OverlayBar {
       this.captureState.expanded &&
       !this.captureState.originator
     ) {
-      // User just logged in while overlay is showing login required
-      // Re-attempt the capture flow
-      this.collapseCapture();
-      this.expandCapture();
+      // User just logged in while overlay is showing login required. Re-attempt the capture flow,
+      // but confirm auth has actually settled first (a fresh round-trip) so the re-fired originator
+      // lookup doesn't race the just-completed login and get a partial response (bead v5e).
+      void this.reattemptCaptureAfterAuth();
     }
 
     // If user logged out while overlay is showing, show login required
@@ -843,6 +851,18 @@ export class OverlayBar {
       this.captureState.lookupResult = null;
       this.showLoginRequired();
     }
+  }
+
+  /** Re-run the capture flow after a login, once auth is confirmed settled (bead v5e). */
+  private async reattemptCaptureAfterAuth(): Promise<void> {
+    const status = await this.checkAuthStatus();
+    if (!status.isAuthenticated) return;
+    // Brief settle before re-firing: AUTHENTICATED state can broadcast a moment before the
+    // background's token is usable for the API call, which would flash a transient "Lookup failed"
+    // before the retry succeeds (bead v5e follow-on). This closes that window.
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    this.collapseCapture();
+    this.expandCapture();
   }
 
   private async loadSettings(): Promise<void> {

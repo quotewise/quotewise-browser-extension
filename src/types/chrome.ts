@@ -58,6 +58,10 @@ export enum MessageType {
   GET_STORAGE_STATS = 'GET_STORAGE_STATS',
   GET_DIAGNOSTICS = 'GET_DIAGNOSTICS',
 
+  // SPA navigation signal from the content script (replaces webNavigation.onHistoryStateUpdated,
+  // which Safari does not support — spec 002 T006/T007). Carries { url } in `data`.
+  SPA_NAV = 'SPA_NAV',
+
   // UI control
   OPEN_POPUP = 'OPEN_POPUP',
   SHOW_OVERLAY = 'SHOW_OVERLAY',

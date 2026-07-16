@@ -108,7 +108,10 @@ export class OriginatorLookup {
       if (response.success && response.found && response.originator) {
         const originator = this.normalizeOriginator(response.originator);
         if (!originator) {
-          throw new Error('Resolved originator is missing a slug');
+          // Only reached if the originator has no usable reference (unique_id/slug) or no name —
+          // a genuinely unusable record. (The old "missing a slug" was misfiring on a missing
+          // numeric id, which capture doesn't need; normalizeOriginator no longer requires it.)
+          throw new Error('Resolved originator is missing a usable identifier');
         }
 
         this.cache.set(cacheKey, originator);
@@ -209,7 +212,9 @@ export class OriginatorLookup {
         ? originator.slug
         : undefined;
 
-    if (typeof originator.id !== 'number' || typeof originator.full_name !== 'string' || !uniqueId) {
+    // `id` is NOT required: /v1/originators/by-handle/ omits the numeric id, and capture references
+    // originators by unique_id/slug. Reject only when there's no usable reference or no name.
+    if (typeof originator.full_name !== 'string' || !uniqueId) {
       return null;
     }
 
@@ -222,7 +227,7 @@ export class OriginatorLookup {
     }
 
     return {
-      id: originator.id,
+      id: typeof originator.id === 'number' ? originator.id : undefined,
       unique_id: uniqueId,
       full_name: originator.full_name,
       sort_name_display: typeof originator.sort_name_display === 'string'

@@ -7,8 +7,13 @@ import type { OAuthTokens, OAuthTokenResponse, OAuthError, AuthCallbackResult } 
 import { getOAuthConfig } from '../config/environment';
 import { debugLog } from '../config/environment';
 import { generatePKCEParams, storeFlowState, retrieveAndClearFlowState, validateState } from './pkce';
-import { storeTokens, clearTokens } from './token-storage';
+import { storeTokens, hasValidRefreshToken } from './token-storage';
 import { scheduleTokenRefresh } from './token-refresh';
+import { isSafariExtension } from './native-bridge';
+// Static imports (NOT dynamic import()): Safari's extension background can't load runtime webpack
+// chunks, so a dynamic import fails with "Loading chunk N failed".
+import { safariSignIn } from './safari-signin';
+import { authBackend } from './auth-backend';
 
 /**
  * Error thrown during OAuth flow
@@ -29,6 +34,15 @@ export class OAuthFlowError extends Error {
  * Opens a popup for user authentication via launchWebAuthFlow
  */
 export async function initiateOAuthFlow(): Promise<OAuthTokens> {
+  // Safari has no chrome.identity.launchWebAuthFlow — sign in via a Safari tab; the container app
+  // exchanges the code into the shared Keychain (bead em9). Tokens never live in extension JS, so we
+  // return a token-less shell carrying only the granted scopes (the OAUTH_LOGIN handler reads .scopes;
+  // the real session lives in the app and is read back over the bridge).
+  if (isSafariExtension()) {
+    const scopes = await safariSignIn();
+    return { accessToken: '', refreshToken: '', accessTokenExpiresAt: 0, refreshTokenExpiresAt: 0, scopes };
+  }
+
   const config = getOAuthConfig();
   debugLog('Starting OAuth flow with config:', { ...config, clientId: config.clientId });
 
@@ -235,12 +249,13 @@ async function exchangeCodeForTokens(
  * Logout - clear all stored tokens and revoke if possible
  */
 export async function logout(): Promise<void> {
-  debugLog('Logging out - clearing tokens');
+  debugLog('Logging out - clearing session');
 
-  // Clear stored tokens
-  await clearTokens();
+  // Wipe the session via the selected backend: Safari tells the container app (native SIGN_OUT and
+  // drops the cached access token — otherwise the extension keeps submitting for ~1h); Chrome
+  // clears its local tokens. Then clear any local refresh alarm.
+  await authBackend.signOut();
 
-  // Clear any scheduled refresh alarms
   await chrome.alarms.clear('token-refresh');
 
   debugLog('Logout complete');
@@ -251,6 +266,5 @@ export async function logout(): Promise<void> {
  * Returns true if there's no refresh token or it's expired
  */
 export async function needsReauthentication(): Promise<boolean> {
-  const { hasValidRefreshToken } = await import('./token-storage');
   return !(await hasValidRefreshToken());
 }

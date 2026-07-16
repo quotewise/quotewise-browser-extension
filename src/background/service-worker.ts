@@ -1698,6 +1698,17 @@ chrome.runtime.onMessage.addListener((
         handleGetTweetData(sender.tab?.id, sendResponse);
         break;
 
+      case MessageType.SPA_NAV: {
+        // Safari's stand-in for webNavigation.onHistoryStateUpdated (spec 002 T007).
+        const spaUrl = (message.data as { url?: string } | undefined)?.url;
+        const spaTabId = sender.tab?.id;
+        if (spaUrl && spaTabId !== undefined) {
+          void handleSpaNavigation({ tabId: spaTabId, url: spaUrl, frameId: 0 });
+        }
+        sendResponse({ success: true });
+        break;
+      }
+
       // CHECK_AUTH_STATUS is now handled by AuthStateManager's message listener
       // (via AUTH_STATE_GET which returns the same info in a cleaner format)
       // The AuthStateManager listener responds synchronously before we get here,
@@ -2271,11 +2282,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   }
 });
 
-// Handle SPA navigations (Twitter uses History API for client-side routing)
-// This catches navigations from feed to tweet that don't trigger tabs.onUpdated
-chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
+// Handle SPA navigations (Twitter uses History API for client-side routing).
+// This catches feed→tweet navigations that don't trigger tabs.onUpdated. Two sources feed it:
+//   - chrome.webNavigation.onHistoryStateUpdated (Chrome/Firefox), and
+//   - a SPA_NAV message from the content script (Safari, which lacks that API — spec 002).
+async function handleSpaNavigation(details: { tabId: number; url: string; frameId?: number }): Promise<void> {
   // Only process main frame navigations
-  if (details.frameId !== 0) return;
+  if (details.frameId !== undefined && details.frameId !== 0) return;
 
   const isTweetPage = isTweetPageUrl(details.url);
 
@@ -2296,7 +2309,17 @@ chrome.webNavigation.onHistoryStateUpdated.addListener(async (details) => {
     await ensureServicesInitialized();
     await clearTweetPageIcon(details.tabId, details.url);
   }
-}, { url: WEB_NAVIGATION_PLATFORM_FILTERS });
+}
+
+// Feature-guard the registration: Safari does not support webNavigation.onHistoryStateUpdated, and
+// a bare top-level reference to it throws at background load ("background failed to load", SC-004).
+// The content-script SPA_NAV message covers the same navigations where this API is absent.
+if (typeof chrome.webNavigation?.onHistoryStateUpdated?.addListener === 'function') {
+  chrome.webNavigation.onHistoryStateUpdated.addListener(
+    (details) => { void handleSpaNavigation(details); },
+    { url: WEB_NAVIGATION_PLATFORM_FILTERS },
+  );
+}
 
 /**
  * Handle tweet data extracted from content script

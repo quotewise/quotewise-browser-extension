@@ -20,7 +20,8 @@ export interface AuthStatusResult {
 }
 
 export interface OriginatorSearchResult {
-  id: number;                    // Django API returns numeric ID
+  id?: number;                   // Numeric ID — OPTIONAL: /v1/originators/by-handle/ omits it, and
+                                 // capture references originators by unique_id/slug, not this id.
   unique_id: string;             // Slug-style identifier (e.g., "albert-einstein")
   full_name: string;             // Display name (e.g., "Albert Einstein")
   sort_name_display: string;     // Formatted sort name (e.g., "Einstein, Albert")
