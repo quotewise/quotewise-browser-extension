@@ -400,12 +400,16 @@ export class OverlayBar {
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          /* The ⚙ glyph centers its line-box, not its ink; tighten line-height + a fixed size so it
-             sits centered in the circle rather than riding high. */
-          line-height: 1;
           font-size: 15px;
           background: rgba(255,255,255,0.12);
           color: #e2e8f0;
+        }
+        /* The ⚙ glyph's ink sits below its line-box center, so it reads low even when flex-centered;
+           nudge the glyph (not the button/circle) up ~1px for optical centering. */
+        .toggle .gear-glyph {
+          display: block;
+          line-height: 1;
+          transform: translateY(-1px);
         }
         #account-menu-btn {
           padding: 0;

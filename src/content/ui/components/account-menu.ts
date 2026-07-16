@@ -64,7 +64,7 @@ export class AccountMenu {
 
   private render(): void {
     this.container.innerHTML = `
-      <button type="button" class="toggle" id="account-menu-btn" aria-label="Account menu" aria-haspopup="menu" aria-expanded="false">⚙</button>
+      <button type="button" class="toggle" id="account-menu-btn" aria-label="Account menu" aria-haspopup="menu" aria-expanded="false"><span class="gear-glyph">⚙</span></button>
       <div class="account-menu" id="account-menu" role="menu" hidden></div>
     `;
     this.button = this.container.querySelector('#account-menu-btn') as HTMLButtonElement;
