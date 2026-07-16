@@ -7,10 +7,10 @@
   "homepage": "https://quotewise.io",
   "repository": {
     "type": "git",
-    "url": "https://github.com/quotewise/chrome-extension.git"
+    "url": "https://github.com/quotewise/quotewise-chrome-extension.git"
   },
   "bugs": {
-    "url": "https://github.com/quotewise/chrome-extension/issues"
+    "url": "https://github.com/quotewise/quotewise-chrome-extension/issues"
   },
   "scripts": {
     "build": "webpack --mode production",

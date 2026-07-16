@@ -1,6 +1,6 @@
 # Quotewise Quote Capture
 
-[![CI](https://github.com/quotewise/chrome-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/quotewise/chrome-extension/actions/workflows/ci.yml)
+[![CI](https://github.com/quotewise/quotewise-chrome-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/quotewise/quotewise-chrome-extension/actions/workflows/ci.yml)
 
 A browser extension (Chrome and Firefox, Manifest V3) for capturing quotes from
 social posts and saving them to your [Quotewise](https://quotewise.io) library —
