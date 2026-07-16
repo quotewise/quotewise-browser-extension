@@ -400,6 +400,10 @@ export class OverlayBar {
           display: inline-flex;
           align-items: center;
           justify-content: center;
+          /* The ⚙ glyph centers its line-box, not its ink; tighten line-height + a fixed size so it
+             sits centered in the circle rather than riding high. */
+          line-height: 1;
+          font-size: 15px;
           background: rgba(255,255,255,0.12);
           color: #e2e8f0;
         }
@@ -849,6 +853,10 @@ export class OverlayBar {
   private async reattemptCaptureAfterAuth(): Promise<void> {
     const status = await this.checkAuthStatus();
     if (!status.isAuthenticated) return;
+    // Brief settle before re-firing: AUTHENTICATED state can broadcast a moment before the
+    // background's token is usable for the API call, which would flash a transient "Lookup failed"
+    // before the retry succeeds (bead v5e follow-on). This closes that window.
+    await new Promise((resolve) => setTimeout(resolve, 350));
     this.collapseCapture();
     this.expandCapture();
   }
