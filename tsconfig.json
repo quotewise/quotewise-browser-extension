@@ -20,7 +20,9 @@
       "@api/*": ["api/*"],
       "@types/*": ["types/*"],
       "@content/*": ["content/*"],
-      "@background/*": ["background/*"]
+      "@background/*": ["background/*"],
+      "@config/*": ["config/*"],
+      "@platforms/*": ["platforms/*"]
     }
   },
   "include": ["src/**/*"],

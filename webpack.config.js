@@ -28,7 +28,8 @@ module.exports = (env, argv) => {
         '@types': path.resolve(__dirname, 'src/types'),
         '@content': path.resolve(__dirname, 'src/content'),
         '@background': path.resolve(__dirname, 'src/background'),
-        '@config': path.resolve(__dirname, 'src/config')
+        '@config': path.resolve(__dirname, 'src/config'),
+        '@platforms': path.resolve(__dirname, 'src/platforms')
       }
     },
     
