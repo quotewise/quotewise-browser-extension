@@ -1,6 +1,7 @@
 import { appendFile } from 'node:fs/promises';
 import { chromium, errors } from 'playwright';
 import { TWITTER_DOM_SELECTORS } from '../src/platforms/twitter/selectors.ts';
+import { inspectTwitterDom } from './drift-check-dom.ts';
 
 const TIMEOUT_MS = 30_000;
 
@@ -40,23 +41,22 @@ async function checkTarget(browser, target) {
       return { ...target, status: 'inconclusive', detail };
     }
 
-    const missing = await page.evaluate(({ selectors, kind }) => {
-      const articles = [...document.querySelectorAll(selectors.articleCandidates.join(', '))];
-      if (articles.length === 0) return ['article discovery'];
+    const inspection = await page.evaluate(
+      inspectTwitterDom,
+      { selectors: TWITTER_DOM_SELECTORS, kind: target.kind },
+    );
 
-      const matches = (selector) => articles.some(article => article.querySelector(selector));
-      return [
-        !matches(selectors.authorLink) && 'author link',
-        !matches(selectors.statusLink) && 'status link',
-        kind === 'status' && !matches(selectors.tweetText) && 'tweet text',
-        kind === 'article' && !matches(selectors.articleMarkers) && 'article marker',
-        kind === 'article' && !matches(selectors.articleBody) && 'article body',
-      ].filter(Boolean);
-    }, { selectors: TWITTER_DOM_SELECTORS, kind: target.kind });
+    if (inspection.renderer === 'public') {
+      return {
+        ...target,
+        status: 'inconclusive',
+        detail: 'X served its logged-out semantic renderer; signed-in extension DOM was not observable',
+      };
+    }
 
-    return missing.length === 0
+    return inspection.missing.length === 0
       ? { ...target, status: 'pass', detail: 'required selectors matched' }
-      : { ...target, status: 'drift', detail: `missing: ${missing.join(', ')}` };
+      : { ...target, status: 'drift', detail: `missing: ${inspection.missing.join(', ')}` };
   } catch (error) {
     return { ...target, status: 'inconclusive', detail: `check failed: ${error.message}` };
   } finally {
