@@ -15,8 +15,8 @@ describe('private-mode service-worker gating', () => {
   });
 
   it('gates every automatic capture/preflight entry point while keeping CHECK_NOW explicit', () => {
-    const extractionIndex = source.indexOf('async function requestTweetDataExtraction');
-    const preflightIndex = source.indexOf('async function runAutomaticPreflightForExtractedTweet');
+    const extractionIndex = source.indexOf('async function requestPostDataExtraction');
+    const preflightIndex = source.indexOf('async function runAutomaticPreflightForExtractedPost');
     const statusIndex = source.indexOf('async function checkQuoteCollectionStatus');
     const probeIndex = source.indexOf('function scheduleAutomaticOriginatorProbe');
     const checkNowIndex = source.indexOf('async function handleCheckNow');
