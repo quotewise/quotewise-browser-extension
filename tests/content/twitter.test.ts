@@ -164,9 +164,9 @@ describe('Twitter Content Script', () => {
 
   describe('Message Types', () => {
     test('should have correct message type constants', () => {
-      expect(MessageType.TWEET_DATA_EXTRACTED).toBe('TWEET_DATA_EXTRACTED');
-      expect(MessageType.GET_TWEET_DATA).toBe('GET_TWEET_DATA');
-      expect(MessageType.EXTRACT_TWEET_DATA).toBe('EXTRACT_TWEET_DATA');
+      expect(MessageType.POST_DATA_EXTRACTED).toBe('POST_DATA_EXTRACTED');
+      expect(MessageType.GET_POST_DATA).toBe('GET_POST_DATA');
+      expect(MessageType.EXTRACT_POST_DATA).toBe('EXTRACT_POST_DATA');
     });
   });
 

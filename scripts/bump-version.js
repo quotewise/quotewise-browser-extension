@@ -18,7 +18,6 @@ const root = process.cwd();
 const pkgPath = path.join(root, 'package.json');
 const requiredProjectVersionFiles = [
   'package.json',
-  'manifest.json',
   'manifest.dev.json',
   'manifest.prod.json',
 ];
@@ -188,7 +187,6 @@ if (versionArg === 'check') {
 const newVersion = getNewVersion(versionArg);
 
 updatePackageJson(newVersion);
-updateManifest('manifest.json', newVersion);
 updateManifest('manifest.dev.json', newVersion);
 updateManifest('manifest.prod.json', newVersion);
 updatePackageLock(newVersion);

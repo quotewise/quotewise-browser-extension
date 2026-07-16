@@ -44,7 +44,6 @@ bun run build
 Other version files (for reference only):
 - `manifest.dev.json` - dev builds only
 - `package.json` - npm metadata, keep in sync manually
-- `manifest.json` - unused by webpack
 
 ## Architecture
 
@@ -200,7 +199,7 @@ When user reports a bug, don't start by trying to fix it. Instead:
 
 ## Key Files
 
-- `manifest.json` - Extension permissions, content script matching (twitter.com/x.com status pages)
+- `manifest.prod.json` - Extension permissions, content script matching (shipped manifest; webpack copies it to `dist/manifest.json`)
 - `src/content/ui/overlay-bar.ts` - Overlay bar orchestrator (Shadow DOM, state, capture flow)
 - `src/content/ui/components/` - UI components: duplicate-badge, quote-preview, originator-lookup, action-button
 - `src/api/quotewise-api.ts` - Quotewise API client with OAuth Bearer-token auth

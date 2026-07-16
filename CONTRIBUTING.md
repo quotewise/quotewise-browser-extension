@@ -60,12 +60,10 @@ compatibility silently.
 
 ## Coding style
 
-- TypeScript-first; keep modules small. 2-space indentation; match surrounding files.
-- Use the webpack path aliases (`@api`, `@background`, `@content`, `@config`,
-  `@types`, `@platforms`) instead of deep relative imports.
-- Naming: PascalCase for classes/enums, camelCase for functions/variables,
-  SCREAMING_SNAKE_CASE for constants/message types.
-- Keep side effects in the background/content entry points; prefer pure helpers in `utils/`.
+See [CODING_STANDARDS.md](./CODING_STANDARDS.md) for naming, type-safety, and the
+Manifest V3 / cross-browser conventions. In short: TypeScript strict + ESLint are
+the source of truth (`bun run type-check && bun run lint`); keep modules small,
+use the path aliases, and call `chrome.*` directly (no polyfill).
 
 ## Pull requests
 

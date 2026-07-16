@@ -53,7 +53,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     message: ExtensionMessage,
     sendResponse: (response: any) => void
   ): Promise<boolean> {
-    if (message.type !== MessageType.EXTRACT_TWEET_DATA) {
+    if (message.type !== MessageType.EXTRACT_POST_DATA) {
       return false;
     }
 
@@ -144,7 +144,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
         this.cachedData = data;
 
         void sendMessageToBackground({
-          type: MessageType.TWEET_DATA_EXTRACTED,
+          type: MessageType.POST_DATA_EXTRACTED,
           data
         })
           .then(() => {

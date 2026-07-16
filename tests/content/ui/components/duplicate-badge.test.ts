@@ -542,14 +542,18 @@ describe('DuplicateBadge', () => {
   });
 
   it('inherits visible focus, reduced-motion, contrast, and fixed overlay coverage', () => {
+    const templateSource = readFileSync(
+      join(process.cwd(), 'src', 'content', 'ui', 'overlay-template.ts'),
+      'utf8',
+    );
     const overlaySource = readFileSync(
       join(process.cwd(), 'src', 'content', 'ui', 'overlay-bar.ts'),
       'utf8',
     );
 
-    expect(overlaySource).toContain('.duplicate-badge a:focus-visible');
-    expect(overlaySource).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(overlaySource).toContain('@media (prefers-contrast: more)');
+    expect(templateSource).toContain('.duplicate-badge a:focus-visible');
+    expect(templateSource).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(templateSource).toContain('@media (prefers-contrast: more)');
     expect(overlaySource).toContain("this.root.style.position = 'fixed'");
   });
 });

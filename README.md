@@ -79,7 +79,8 @@ Temporary Add-on**, or install the built zip from `web-ext-artifacts/`.
 
 ## Development
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for the build/test/PR workflow and
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the build/test/PR workflow,
+[CODING_STANDARDS.md](./CODING_STANDARDS.md) for style conventions, and
 [SECURITY.md](./SECURITY.md) to report a vulnerability.
 
 ```bash

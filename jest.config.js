@@ -10,9 +10,9 @@ module.exports = {
     '^@api/(.*)$': '<rootDir>/src/api/$1',
     '^@types/(.*)$': '<rootDir>/src/types/$1',
     '^@content/(.*)$': '<rootDir>/src/content/$1',
-    '^@popup/(.*)$': '<rootDir>/src/popup/$1',
     '^@background/(.*)$': '<rootDir>/src/background/$1',
     '^@config/(.*)$': '<rootDir>/src/config/$1',
+    '^@platforms/(.*)$': '<rootDir>/src/platforms/$1',
     // Mock environment module for all tests
     '^(\\.\\./)*config/environment$': '<rootDir>/tests/__mocks__/environment.ts'
   },

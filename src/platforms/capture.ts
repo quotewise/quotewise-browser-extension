@@ -1,47 +1,62 @@
-import type {
-  CapturedPostData,
-  CapturePlatform,
-  CapturePlatformCode,
-} from '../types/chrome';
+import type { CapturedPostData } from '../types/chrome';
 
+/**
+ * A supported capture platform. Adding a platform is a single edit here plus an
+ * adapter and manifest `matches` — see docs/adding-a-platform.md. Everything else
+ * (the `CapturePlatform`/`CapturePlatformCode` unions, the URL→platform match, the
+ * source-id extraction) derives from this table.
+ */
 export interface PlatformDefinition {
-  id: CapturePlatform;
-  code: CapturePlatformCode;
+  /** Backend platform code (e.g. 'TX'). */
+  code: string;
+  /** Human-facing platform name. */
   displayName: string;
+  /** Whether the platform's adapter is active. */
   enabled: boolean;
+  /** Hostnames (and their subdomains) this platform serves from. */
   hostSuffixes: string[];
+  /** Extract the platform's stable post id from a URL pathname, or null. */
+  sourceId(path: string): string | null;
 }
 
-export const PLATFORM_DEFINITIONS: Record<CapturePlatform, PlatformDefinition> = {
+export const PLATFORM_DEFINITIONS = {
   twitter: {
-    id: 'twitter',
     code: 'TX',
     displayName: 'X/Twitter',
     enabled: true,
     hostSuffixes: ['twitter.com', 'x.com'],
+    sourceId: (path: string) => path.match(/\/status\/(\d+)/)?.[1] ?? null,
   },
   threads: {
-    id: 'threads',
     code: 'TH',
     displayName: 'Threads',
     enabled: true,
     hostSuffixes: ['threads.com', 'threads.net'],
+    sourceId: (path: string) => path.match(/\/(?:post|t)\/([^/?#]+)/)?.[1] ?? null,
   },
   bluesky: {
-    id: 'bluesky',
     code: 'BS',
     displayName: 'Bluesky',
     enabled: true,
     hostSuffixes: ['bsky.app'],
+    sourceId: (path: string) => path.match(/\/profile\/[^/]+\/post\/([^/?#]+)/)?.[1] ?? null,
   },
   substack_notes: {
-    id: 'substack_notes',
     code: 'SS',
     displayName: 'Substack Notes',
     enabled: true,
     hostSuffixes: ['substack.com'],
+    sourceId: (path: string) =>
+      path.match(/\/(?:note|p)\/([^/?#]+)/)?.[1] ??
+      path.match(/\/notes?\/([^/?#]+)/)?.[1] ??
+      null,
   },
-};
+} as const satisfies Record<string, PlatformDefinition>;
+
+/** Supported capture platforms, derived from PLATFORM_DEFINITIONS (single source of truth). */
+export type CapturePlatform = keyof typeof PLATFORM_DEFINITIONS;
+/** Backend platform codes, derived from PLATFORM_DEFINITIONS. */
+export type CapturePlatformCode = (typeof PLATFORM_DEFINITIONS)[CapturePlatform]['code'];
 
 export interface CaptureIdentity {
   platform: CapturePlatform;
@@ -49,12 +64,9 @@ export interface CaptureIdentity {
 }
 
 export function isCapturePlatform(value: unknown): value is CapturePlatform {
-  return (
-    value === 'twitter' ||
-    value === 'threads' ||
-    value === 'bluesky' ||
-    value === 'substack_notes'
-  );
+  // Own-key membership against the single source of truth. (A bare `value in
+  // PLATFORM_DEFINITIONS` would also accept prototype keys like 'toString'.)
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(PLATFORM_DEFINITIONS, value);
 }
 
 export function platformCodeFor(platform: CapturePlatform): CapturePlatformCode {
@@ -76,9 +88,9 @@ export function platformFromUrl(url?: string): CapturePlatform | null {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
 
-    for (const definition of Object.values(PLATFORM_DEFINITIONS)) {
+    for (const [id, definition] of Object.entries(PLATFORM_DEFINITIONS)) {
       if (definition.hostSuffixes.some(suffix => hostnameMatches(host, suffix))) {
-        return definition.id;
+        return id as CapturePlatform;
       }
     }
   } catch {
@@ -94,22 +106,8 @@ export function sourceIdFromUrl(url?: string): string | null {
   try {
     const parsed = new URL(url);
     const platform = platformFromUrl(url);
-    const path = parsed.pathname;
-
-    switch (platform) {
-      case 'twitter':
-        return path.match(/\/status\/(\d+)/)?.[1] ?? null;
-      case 'threads':
-        return path.match(/\/(?:post|t)\/([^/?#]+)/)?.[1] ?? null;
-      case 'bluesky':
-        return path.match(/\/profile\/[^/]+\/post\/([^/?#]+)/)?.[1] ?? null;
-      case 'substack_notes':
-        return path.match(/\/(?:note|p)\/([^/?#]+)/)?.[1] ??
-          path.match(/\/notes?\/([^/?#]+)/)?.[1] ??
-          null;
-      default:
-        return null;
-    }
+    if (!platform) return null;
+    return PLATFORM_DEFINITIONS[platform].sourceId(parsed.pathname);
   } catch {
     return null;
   }

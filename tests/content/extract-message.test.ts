@@ -9,7 +9,7 @@ describe('Content extraction message wiring', () => {
     const messageIndex = source.indexOf('message.type === MessageType.SHOW_OVERLAY');
     expect(messageIndex).toBeGreaterThan(-1);
 
-    const blockEnd = source.indexOf('if (message.type === MessageType.EXTRACT_TWEET_DATA)', messageIndex);
+    const blockEnd = source.indexOf('if (message.type === MessageType.EXTRACT_POST_DATA)', messageIndex);
     const showBlock = source.substring(messageIndex, blockEnd);
 
     expect(showBlock).toContain('this.toggleOverlay()');
@@ -19,14 +19,14 @@ describe('Content extraction message wiring', () => {
     expect(source).toContain('this.overlay.hide()');
   });
 
-  test('EXTRACT_TWEET_DATA returns data without showing the overlay', () => {
+  test('EXTRACT_POST_DATA returns data without showing the overlay', () => {
     const fs = require('fs');
     const source = fs.readFileSync(
       require.resolve('../../src/content/index'),
       'utf8'
     );
 
-    const messageIndex = source.indexOf('message.type === MessageType.EXTRACT_TWEET_DATA');
+    const messageIndex = source.indexOf('message.type === MessageType.EXTRACT_POST_DATA');
     expect(messageIndex).toBeGreaterThan(-1);
 
     const blockEnd = source.indexOf('const handler = this.activeAdapter', messageIndex);

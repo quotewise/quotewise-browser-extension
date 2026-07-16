@@ -1686,14 +1686,12 @@ chrome.runtime.onMessage.addListener((
   // This handles MV3 service worker termination and recovery
   ensureServicesInitialized().then(() => {
     switch (message.type) {
-      case MessageType.TWEET_DATA_EXTRACTED:
       case MessageType.POST_DATA_EXTRACTED:
         handleTweetDataExtracted(message.data, sender.tab?.id, sendResponse, {
           keepAliveUntilIconApplied: true,
         });
         break;
 
-      case MessageType.GET_TWEET_DATA:
       case MessageType.GET_POST_DATA:
         handleGetTweetData(sender.tab?.id, sendResponse);
         break;
@@ -1926,7 +1924,7 @@ chrome.runtime.onMessage.addListener((
 
 async function sendExtractTweetDataMessage(tabId: number, url?: string): Promise<TweetExtractionResponse | undefined> {
   try {
-    return await chrome.tabs.sendMessage(tabId, { type: MessageType.EXTRACT_TWEET_DATA });
+    return await chrome.tabs.sendMessage(tabId, { type: MessageType.EXTRACT_POST_DATA });
   } catch (error) {
     if (!isMissingContentScriptError(error) || !isTweetPageUrl(url)) {
       throw error;
@@ -1938,7 +1936,7 @@ async function sendExtractTweetDataMessage(tabId: number, url?: string): Promise
       files: [CONTENT_SCRIPT_FILE]
     });
 
-    return await chrome.tabs.sendMessage(tabId, { type: MessageType.EXTRACT_TWEET_DATA });
+    return await chrome.tabs.sendMessage(tabId, { type: MessageType.EXTRACT_POST_DATA });
   }
 }
 
