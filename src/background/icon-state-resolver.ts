@@ -6,7 +6,7 @@ import { mapRecommendationToQuoteStatus, passageCountForUrl } from '../utils/dup
 export interface TabContext {
   tabId: number;
   isSupportedPlatform: boolean;
-  isTweetPage: boolean;
+  isPostPage: boolean;
   isCheckInFlight: boolean;
   isOriginatorMissing?: boolean;
 }
@@ -55,7 +55,7 @@ export function resolveIconPresentation(
 
   if (
     tab.isSupportedPlatform &&
-    tab.isTweetPage &&
+    tab.isPostPage &&
     tab.isCheckInFlight &&
     quoteStatus === 'None' &&
     !tab.isOriginatorMissing
@@ -75,11 +75,11 @@ export function resolveIconPresentation(
     return ICON_STATES.UnsupportedPage;
   }
 
-  if (auth === AuthState.AUTHENTICATED && !tab.isTweetPage) {
+  if (auth === AuthState.AUTHENTICATED && !tab.isPostPage) {
     return ICON_STATES.SupportedIdle;
   }
 
-  if (auth === AuthState.AUTHENTICATED && tab.isTweetPage) {
+  if (auth === AuthState.AUTHENTICATED && tab.isPostPage) {
     if (dup) {
       const passageCount = passageCountForUrl(dup);
       if (passageCount === 'unknown') {

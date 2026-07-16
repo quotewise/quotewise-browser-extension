@@ -48,7 +48,7 @@ export class DuplicateBadge {
   update(
     state: { checking: true } | { result: DuplicateCheckResult } | null,
     capturedText?: string,
-    tweetDate?: string | null,
+    postDate?: string | null,
   ): void {
     this.container.innerHTML = '';
     this.container.className = 'duplicate-badge';
@@ -95,7 +95,7 @@ export class DuplicateBadge {
 
     if (resolution === 'similar') {
       const similarView = capturedText
-        ? buildSimilarMatchView(result, capturedText, tweetDate)
+        ? buildSimilarMatchView(result, capturedText, postDate)
         : null;
 
       if (!similarView) {

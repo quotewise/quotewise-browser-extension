@@ -508,7 +508,7 @@ async function applyResolvedIconForTab(
   const presentation = resolveIconPresentation(authState, resolvedDuplicateResult, {
     tabId,
     isSupportedPlatform: isSupportedPlatformUrl(url),
-    isTweetPage: isPostPageUrl(url),
+    isPostPage: isPostPageUrl(url),
     isCheckInFlight: isCheckInFlightForTab(tabId, url),
     isOriginatorMissing: getMissingOriginatorForTab(tabId, url) !== null,
   }, isPrivateModeEnabled());
@@ -602,7 +602,7 @@ async function applyAuthStatePresentation(authState: AuthState): Promise<void> {
   const presentation = resolveIconPresentation(authState, null, {
     tabId: 0,
     isSupportedPlatform: false,
-    isTweetPage: false,
+    isPostPage: false,
     isCheckInFlight: false,
   }, isPrivateModeEnabled());
 

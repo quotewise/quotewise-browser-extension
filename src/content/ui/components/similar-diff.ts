@@ -26,7 +26,7 @@ export function isNearMatchRecommendation(recommendation: string): boolean {
 export function buildSimilarMatchView(
   result: DuplicateCheckResult,
   capturedText: string,
-  tweetDate?: string | null,
+  postDate?: string | null,
 ): SimilarMatchView | null {
   if (classifyMatchResolution(result, capturedText) !== 'similar') {
     return null;
@@ -47,7 +47,7 @@ export function buildSimilarMatchView(
   }
 
   const existingQuoteText = match.text?.trim() ? match.text : null;
-  const sightingState = addSightingState(tweetDate, match.quote_date);
+  const sightingState = addSightingState(postDate, match.quote_date);
 
   return {
     quoteId,
@@ -167,7 +167,7 @@ function quotePageUrl(match: DuplicateCheckResult['matches'][number]): string | 
 }
 
 function addSightingState(
-  tweetDate: string | null | undefined,
+  postDate: string | null | undefined,
   quoteDate: string | undefined,
 ): { eligible: boolean; hint: string | null } {
   if (!quoteDate) {
@@ -177,9 +177,9 @@ function addSightingState(
     };
   }
 
-  const tweetTime = tweetDate ? new Date(tweetDate).getTime() : NaN;
+  const postTime = postDate ? new Date(postDate).getTime() : NaN;
   const quoteTime = new Date(quoteDate).getTime();
-  const eligible = Number.isFinite(tweetTime) && Number.isFinite(quoteTime) && tweetTime < quoteTime;
+  const eligible = Number.isFinite(postTime) && Number.isFinite(quoteTime) && postTime < quoteTime;
 
   return {
     eligible,
