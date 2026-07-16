@@ -100,36 +100,18 @@ export class OriginatorLookup {
     this.renderLoading(handle);
 
     try {
-      const requestData = { handle, platform, source_url: currentUrl };
-      // A resolved originator missing a slug is impossible for a real originator — it happens
-      // transiently right after login, when the request lands before the session has settled (the
-      // bridge round-trip makes this window longer on Safari). These originators DO have slugs, so
-      // retry a few times before surfacing an error.
-      let response = await this.sendMessage({ type: 'LOOKUP_ORIGINATOR_BY_HANDLE', data: requestData });
-      let originator = response.success && response.found && response.originator
-        ? this.normalizeOriginator(response.originator)
-        : null;
-      for (
-        let attempt = 0;
-        attempt < 3 && response.success && response.found && response.originator && !originator;
-        attempt++
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        response = await this.sendMessage({ type: 'LOOKUP_ORIGINATOR_BY_HANDLE', data: requestData });
-        originator = response.success && response.found && response.originator
-          ? this.normalizeOriginator(response.originator)
-          : null;
-      }
+      const response = await this.sendMessage({
+        type: 'LOOKUP_ORIGINATOR_BY_HANDLE',
+        data: { handle, platform, source_url: currentUrl }
+      });
 
       if (response.success && response.found && response.originator) {
+        const originator = this.normalizeOriginator(response.originator);
         if (!originator) {
-          // Diagnostic: dump the raw originator shape so we can see WHY normalize rejected it
-          // (missing slug/unique_id? non-numeric id? missing full_name?). Shows in the page console.
-          console.error(
-            '[Quotewise] Resolved originator missing slug after retries — raw response.originator:',
-            JSON.stringify(response.originator),
-          );
-          throw new Error('Resolved originator is missing a slug');
+          // Only reached if the originator has no usable reference (unique_id/slug) or no name —
+          // a genuinely unusable record. (The old "missing a slug" was misfiring on a missing
+          // numeric id, which capture doesn't need; normalizeOriginator no longer requires it.)
+          throw new Error('Resolved originator is missing a usable identifier');
         }
 
         this.cache.set(cacheKey, originator);
@@ -230,7 +212,9 @@ export class OriginatorLookup {
         ? originator.slug
         : undefined;
 
-    if (typeof originator.id !== 'number' || typeof originator.full_name !== 'string' || !uniqueId) {
+    // `id` is NOT required: /v1/originators/by-handle/ omits the numeric id, and capture references
+    // originators by unique_id/slug. Reject only when there's no usable reference or no name.
+    if (typeof originator.full_name !== 'string' || !uniqueId) {
       return null;
     }
 
@@ -243,7 +227,7 @@ export class OriginatorLookup {
     }
 
     return {
-      id: originator.id,
+      id: typeof originator.id === 'number' ? originator.id : undefined,
       unique_id: uniqueId,
       full_name: originator.full_name,
       sort_name_display: typeof originator.sort_name_display === 'string'
