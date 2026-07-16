@@ -11,6 +11,10 @@ on:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
+    # Code scanning needs GitHub Advanced Security, which is free on public repos
+    # but not enabled on this (currently private) repo. Skip while private (a
+    # neutral skip, not a failure); this activates automatically on the public flip.
+    if: ${{ github.event.repository.visibility == 'public' }}
     runs-on: ubuntu-latest
     permissions:
       security-events: write
