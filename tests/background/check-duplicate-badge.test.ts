@@ -2409,6 +2409,51 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     }
   });
 
+  it('keeps a cached new-quote star visible during an explicit overlay re-check (qw-togyr)', async () => {
+    mockServiceWorkerDependencies({
+      handleMessage: jest.fn(async (_message, _sender, sendResponse) => {
+        sendResponse({
+          success: true,
+          result: newQuoteResult,
+          ...newQuoteResult,
+        });
+      }),
+    });
+
+    chrome.storage.local.get = jest.fn().mockResolvedValue({
+      preloadedDuplicateCheck: {
+        url: 'https://x.com/test/status/123',
+        result: newQuoteResult,
+        timestamp: Date.now(),
+      },
+    });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const listener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+    const sendResponse = jest.fn();
+
+    listener(
+      {
+        type: MessageType.CHECK_DUPLICATE,
+        data: {
+          text: 'Test quote',
+          source_url: 'https://x.com/test/status/123',
+        },
+      },
+      { tab: { id: 22, url: 'https://x.com/test/status/123' } },
+      sendResponse,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // The explicit re-check must NOT flash Loading (●) over an already-resolved star.
+    expect(chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 22, text: '●' });
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '★' });
+  });
+
   it('preserves a cached tweet badge during authenticated auth presentation refreshes', async () => {
     mockServiceWorkerDependencies();
 

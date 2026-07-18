@@ -2381,7 +2381,13 @@ async function handleCheckDuplicate(
     await startInFlightOperation(tabId, sourceUrl, 'explicit-duplicate-check');
     tabScopedPresentationTabIds.add(tabId);
     try {
-      await applyResolvedIconForTab(tabId, sourceUrl, null);
+      // Omit the result arg (undefined) so the resolver consults the in-memory
+      // cache + preloadedDuplicateCheck: a same-URL result already resolved (e.g. ★)
+      // survives re-verification instead of flashing Loading. Passing null would force
+      // quoteStatus 'None' and repaint ● over a known result (qw-togyr). A genuine
+      // first check (no cached result) still shows Loading; an actual URL change still
+      // clears the mismatched result and shows Loading.
+      await applyResolvedIconForTab(tabId, sourceUrl);
     } catch (error) {
       debugLog('Error applying duplicate-check loading icon:', error);
     }
