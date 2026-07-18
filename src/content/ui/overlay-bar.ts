@@ -1,7 +1,12 @@
 import type { CapturedPostData } from '../../types';
 import { DEFAULT_SETTINGS, MessageType, type Settings } from '../../types';
 import type { Collection, DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
-import { AuthState } from '../../auth/auth-state-machine';
+import {
+  AuthState,
+  getStateMessage,
+  isErrorState,
+  requiresLogin,
+} from '../../auth/auth-state-machine';
 import type { AuthStateData } from '../../auth/auth-state-machine';
 import { DuplicateBadge } from './components/duplicate-badge';
 import type { SubmitStateDirective } from './components/duplicate-badge';
@@ -151,6 +156,7 @@ export class OverlayBar {
     if (!this.shadow) return;
     const data = await this.dataProvider();
     this.currentData = data;
+    if (!data && this.captureState.expanded) this.collapseCapture();
     this.render(data);
   }
 
@@ -265,23 +271,24 @@ export class OverlayBar {
       void this.reattemptCaptureAfterAuth();
     }
 
-    // If user logged out while overlay is showing, show login required
+    // If auth is lost while overlay is showing, replace capture actions with login
     if (
-      stateData.state === AuthState.UNAUTHENTICATED &&
-      this.captureState.expanded &&
-      this.captureState.originator
+      (requiresLogin(stateData.state) || isErrorState(stateData.state)) &&
+      this.captureState.expanded
     ) {
-      // User logged out - show login required
       this.captureState.originator = null;
       this.captureState.lookupResult = null;
-      this.showLoginRequired();
+      this.showLoginRequired(getStateMessage(stateData.state));
     }
   }
 
   /** Re-run the capture flow after a login, once auth is confirmed settled (bead v5e). */
   private async reattemptCaptureAfterAuth(): Promise<void> {
-    const status = await this.checkAuthStatus();
-    if (!status.isAuthenticated) return;
+    const state = await this.checkAuthStatus();
+    if (state !== AuthState.AUTHENTICATED) {
+      this.showLoginRequired(getStateMessage(state));
+      return;
+    }
     // Brief settle before re-firing: AUTHENTICATED state can broadcast a moment before the
     // background's token is usable for the API call, which would flash a transient "Lookup failed"
     // before the retry succeeds (bead v5e follow-on). This closes that window.
@@ -351,9 +358,9 @@ export class OverlayBar {
     if (!this.shadow || !this.currentData) return;
 
     // Check authentication FIRST before doing any API calls
-    const authStatus = await this.checkAuthStatus();
-    if (!authStatus.isAuthenticated) {
-      this.showLoginRequired();
+    const authState = await this.checkAuthStatus();
+    if (authState !== AuthState.AUTHENTICATED) {
+      this.showLoginRequired(getStateMessage(authState));
       return;
     }
 
@@ -667,19 +674,19 @@ export class OverlayBar {
   /**
    * Check if user is authenticated via AuthStateManager
    */
-  private async checkAuthStatus(): Promise<{ isAuthenticated: boolean }> {
+  private async checkAuthStatus(): Promise<AuthState> {
     try {
       const response = await this.sendMessage({ type: MessageType.AUTH_STATE_GET });
-      return { isAuthenticated: response.data?.state === 'AUTHENTICATED' };
+      return response.data?.state ?? AuthState.UNAUTHENTICATED;
     } catch {
-      return { isAuthenticated: false };
+      return AuthState.UNAUTHENTICATED;
     }
   }
 
   /**
    * Show login required message with button to open popup for OAuth flow
    */
-  private showLoginRequired(): void {
+  private showLoginRequired(message = 'Login required to capture quotes'): void {
     this.hideCollectionPicker();
     const captureRow = this.shadow?.getElementById('capture-row');
     captureRow?.classList.add('expanded');
@@ -693,7 +700,7 @@ export class OverlayBar {
     if (originatorInfo) {
       originatorInfo.innerHTML = `
         <span class="badge warning">!</span>
-        <span>Login required to capture quotes</span>
+        <span>${this.escapeHtml(message)}</span>
       `;
 
       // Create Login button in right section
@@ -1553,7 +1560,7 @@ export class OverlayBar {
     default_collection_id?: string | null;
     isAuthenticated?: boolean;
     scopes?: string[];
-    data?: { state?: string; username?: string; error?: string };
+    data?: { state?: AuthState; username?: string; error?: string };
   }> {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, (response) => {
