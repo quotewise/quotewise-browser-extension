@@ -236,6 +236,61 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     }));
   });
 
+  it('marks the sender post as collected immediately after a successful quote submission', async () => {
+    mockServiceWorkerDependencies({
+      handleMessage: jest.fn(async (_message, _sender, sendResponse) => {
+        sendResponse({
+          success: true,
+          message: 'Quote submitted successfully',
+          quoteId: '456',
+        });
+      }),
+    });
+    chrome.tabs.get = jest.fn().mockResolvedValue({
+      id: 22,
+      url: tweetData.url,
+    });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const listener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+    const sendResponse = jest.fn();
+    listener(
+      {
+        type: MessageType.SUBMIT_QUOTE,
+        data: {
+          text: tweetData.text,
+          originator_slug: 'test-user',
+          source_url: tweetData.url,
+        },
+      },
+      { tab: { id: 22, url: tweetData.url } },
+      sendResponse,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '✓' });
+    expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
+      tabId: 22,
+      title: 'Already in your collection',
+    });
+    expect(chrome.storage.local.set).toHaveBeenCalledWith({
+      preloadedDuplicateCheck: {
+        url: tweetData.url,
+        result: expect.objectContaining({
+          recommendation: 'duplicate',
+          in_quotewise: true,
+          matches: [expect.objectContaining({ in_user_collections: true })],
+        }),
+        timestamp: expect.any(Number),
+      },
+    });
+  });
+
   it('requests tweet extraction on tab load and applies the preflight badge without clicking the toolbar', async () => {
     mockServiceWorkerDependencies({
       handleMessage: jest.fn(async (message, _sender, sendResponse) => {
