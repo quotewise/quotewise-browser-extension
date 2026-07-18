@@ -173,9 +173,12 @@ export function getWebBaseUrl(): string {
 }
 
 // OAuth Configuration
-// Pre-registered OAuth client ID (UUID) - same for all environments
-// This client is seeded via migration 0090_seed_chrome_extension_oauth_client.py
-// The redirect_uri pattern "https://*.chromiumapp.org/callback" allows any extension ID
+// Pre-registered public-PKCE OAuth client ID (UUID), same value across environments.
+// Seeded by quotewise migration 0001_initial.py (seed_chrome_extension_client).
+// redirect_uri is NOT wildcarded: per ADR-0004 the prod client allows only exact
+// per-extension-ID callbacks (the Chrome Store ID + Firefox gecko redirect were added
+// in quotewise migration 0075). getRedirectURL('callback') must byte-match a registered
+// URI at both the authorize and token steps.
 const OAUTH_CLIENT_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 
 /**
