@@ -528,7 +528,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
           }
         }
       </style>
-      <div class="container" aria-hidden="false">
+      <div class="container" role="dialog" aria-label="Quotewise capture tray" aria-hidden="false">
         <div class="bar">
           <div class="section left">
             <div class="badge label" id="source-badge">Source</div>
@@ -560,7 +560,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
                 <div class="badge label">Originator</div>
               </div>
               <div class="section center">
-                <div class="originator-info" id="originator-info">
+                <div class="originator-info" id="originator-info" aria-live="polite">
                   <span class="status-text">Looking up originator...</span>
                 </div>
               </div>

@@ -78,6 +78,26 @@ describe('TwitterAdapter extraction', () => {
     expect(data?.platform_data.is_protected).toBe(true);
   });
 
+  test('reports a textless post only to capture UI while latest data stays null', async () => {
+    window.history.pushState({}, '', '/alice/status/1234567890');
+    document.body.innerHTML = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name">
+          <div><span><span>Alice</span></span></div>
+          <a href="https://twitter.com/alice">Alice</a>
+        </div>
+        <div data-testid="tweetPhoto"><img src="https://pbs.twimg.com/media/photo.jpg" /></div>
+        <a href="https://twitter.com/alice/status/1234567890"><time datetime="2023-01-01T00:00:00Z"></time></a>
+      </article>
+    `;
+    const adapter = new TwitterAdapter();
+    const extractSpy = jest.spyOn(adapter as any, 'extractFromDom');
+
+    expect(await adapter.getLatestData()).toBeNull();
+    expect(await (adapter as any).getCaptureResult()).toEqual({ empty: 'no-text' });
+    expect(extractSpy).toHaveBeenCalledTimes(1);
+  });
+
   test('classifies a quote tweet via two tweetText nodes (no quoteTweet testid)', () => {
     document.body.innerHTML = `
       <article data-testid="tweet">

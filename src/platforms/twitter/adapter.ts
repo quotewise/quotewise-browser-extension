@@ -1,7 +1,7 @@
 import { cleanUrl, debugLog, extractTextContent, parseNumber, sendMessageToBackground } from '../../content/common';
 import type { ExtensionMessage, TwitterData } from '../../types';
 import { MessageType } from '../../types';
-import type { PlatformAdapter } from '../types';
+import type { CaptureEmptyReason, CaptureResult, PlatformAdapter } from '../types';
 import { TWITTER_DOM_SELECTORS } from './selectors';
 
 const TWEET_PATH_REGEX = /\/status\/\d+/;
@@ -11,6 +11,9 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
 
   private currentUrl: string = window.location.href;
   private cachedData: TwitterData | null = null;
+  private cachedCaptureResult: CaptureResult<TwitterData> | null = null;
+  private captureResultUrl: string | null = null;
+  private captureEmptyReason: CaptureEmptyReason = 'no-post';
   private mutationObserver: MutationObserver | null = null;
   private extractionInFlight = false;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -34,6 +37,8 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
 
   async teardown(): Promise<void> {
     this.cachedData = null;
+    this.cachedCaptureResult = null;
+    this.captureResultUrl = null;
     this.lastExtractedHash = null;
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -47,6 +52,15 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
 
   async getLatestData(): Promise<TwitterData | null> {
     return this.ensureData();
+  }
+
+  async getCaptureResult(): Promise<CaptureResult<TwitterData>> {
+    if (this.cachedCaptureResult && this.captureResultUrl === window.location.href) {
+      return this.cachedCaptureResult;
+    }
+
+    const data = await this.ensureData();
+    return this.cachedCaptureResult ?? (data ? { data } : { empty: 'no-post' });
   }
 
   async handleMessage(
@@ -128,6 +142,8 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
 
     try {
       const data = this.extractFromDom();
+      this.cachedCaptureResult = data ? { data } : { empty: this.captureEmptyReason };
+      this.captureResultUrl = window.location.href;
       if (!data) {
         debugLog('TwitterAdapter: no data extracted');
         return null;
@@ -167,6 +183,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
   }
 
   private extractFromDom(): TwitterData | null {
+    this.captureEmptyReason = 'no-post';
     const article = this.findPrimaryArticle();
     if (!article) {
       return null;
@@ -194,6 +211,7 @@ export class TwitterAdapter implements PlatformAdapter<TwitterData> {
     const isArticle = this.detectArticle(article);
 
     if (!text || !tweetId) {
+      if (tweetId && !text) this.captureEmptyReason = 'no-text';
       return null;
     }
 

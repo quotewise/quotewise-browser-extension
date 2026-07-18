@@ -1,7 +1,13 @@
 import type { CapturedPostData } from '../../types';
+import type { CaptureEmptyReason, CaptureResult } from '../../platforms/types';
 import { DEFAULT_SETTINGS, MessageType, type Settings } from '../../types';
 import type { Collection, DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
-import { AuthState } from '../../auth/auth-state-machine';
+import {
+  AuthState,
+  getStateMessage,
+  isErrorState,
+  requiresLogin,
+} from '../../auth/auth-state-machine';
 import type { AuthStateData } from '../../auth/auth-state-machine';
 import { DuplicateBadge } from './components/duplicate-badge';
 import type { SubmitStateDirective } from './components/duplicate-badge';
@@ -38,7 +44,7 @@ import {
   captureSourceUrl,
 } from '../../platforms/capture';
 
-type DataProvider = () => Promise<CapturedPostData | null>;
+type DataProvider = () => Promise<CapturedPostData | CaptureResult<CapturedPostData> | null>;
 
 const SUBMIT_PHASE_MIN_VISIBLE_MS = 350;
 
@@ -111,6 +117,7 @@ export class OverlayBar {
   }
 
   show(platformLabel: string): void {
+    const opening = this.hidden || !this.root;
     this.currentPlatformLabel = platformLabel;
     this.hidden = false;
     if (!this.root) {
@@ -122,6 +129,10 @@ export class OverlayBar {
     if (this.shadow) {
       const container = this.shadow.querySelector('.container');
       container?.setAttribute('aria-hidden', 'false');
+      container?.removeAttribute('inert');
+      if (opening) {
+        this.shadow.getElementById('refresh-btn')?.focus();
+      }
     }
     // Auto-expand capture when showing (user clicked icon = they want to capture)
     this.loadSettings().finally(() => this.refresh().then(() => {
@@ -140,6 +151,7 @@ export class OverlayBar {
     if (this.shadow) {
       const container = this.shadow.querySelector('.container');
       container?.setAttribute('aria-hidden', 'true');
+      container?.setAttribute('inert', '');
     }
   }
 
@@ -149,9 +161,15 @@ export class OverlayBar {
 
   async refresh(): Promise<void> {
     if (!this.shadow) return;
-    const data = await this.dataProvider();
+    const result = await this.dataProvider();
+    const emptyReason = result && 'empty' in result ? result.empty : null;
+    let data: CapturedPostData | null;
+    if (result && 'data' in result) data = result.data;
+    else if (result && 'empty' in result) data = null;
+    else data = result;
     this.currentData = data;
-    this.render(data);
+    if (!data && this.captureState.expanded) this.collapseCapture();
+    this.render(data, emptyReason);
   }
 
   private mount(): void {
@@ -172,7 +190,7 @@ export class OverlayBar {
     this.refresh();
   }
 
-  render(data: CapturedPostData | null): void {
+  render(data: CapturedPostData | null, emptyReason: CaptureEmptyReason | null = null): void {
     if (!this.shadow) return;
     const previewEl = this.shadow.getElementById('tweet-preview');
     const protectedBadge = this.shadow.getElementById('protected-badge');
@@ -183,7 +201,9 @@ export class OverlayBar {
 
     if (!previewEl) return;
     if (!data) {
-      previewEl.textContent = 'No supported post detected on this page.';
+      previewEl.textContent = emptyReason === 'no-text'
+        ? 'This post has no quotable text.'
+        : 'No supported post detected on this page.';
       if (protectedBadge) protectedBadge.setAttribute('style', 'display:none;');
       return;
     }
@@ -265,23 +285,24 @@ export class OverlayBar {
       void this.reattemptCaptureAfterAuth();
     }
 
-    // If user logged out while overlay is showing, show login required
+    // If auth is lost while overlay is showing, replace capture actions with login
     if (
-      stateData.state === AuthState.UNAUTHENTICATED &&
-      this.captureState.expanded &&
-      this.captureState.originator
+      (requiresLogin(stateData.state) || isErrorState(stateData.state)) &&
+      this.captureState.expanded
     ) {
-      // User logged out - show login required
       this.captureState.originator = null;
       this.captureState.lookupResult = null;
-      this.showLoginRequired();
+      this.showLoginRequired(getStateMessage(stateData.state));
     }
   }
 
   /** Re-run the capture flow after a login, once auth is confirmed settled (bead v5e). */
   private async reattemptCaptureAfterAuth(): Promise<void> {
-    const status = await this.checkAuthStatus();
-    if (!status.isAuthenticated) return;
+    const state = await this.checkAuthStatus();
+    if (state !== AuthState.AUTHENTICATED) {
+      this.showLoginRequired(getStateMessage(state));
+      return;
+    }
     // Brief settle before re-firing: AUTHENTICATED state can broadcast a moment before the
     // background's token is usable for the API call, which would flash a transient "Lookup failed"
     // before the retry succeeds (bead v5e follow-on). This closes that window.
@@ -351,9 +372,9 @@ export class OverlayBar {
     if (!this.shadow || !this.currentData) return;
 
     // Check authentication FIRST before doing any API calls
-    const authStatus = await this.checkAuthStatus();
-    if (!authStatus.isAuthenticated) {
-      this.showLoginRequired();
+    const authState = await this.checkAuthStatus();
+    if (authState !== AuthState.AUTHENTICATED) {
+      this.showLoginRequired(getStateMessage(authState));
       return;
     }
 
@@ -667,19 +688,19 @@ export class OverlayBar {
   /**
    * Check if user is authenticated via AuthStateManager
    */
-  private async checkAuthStatus(): Promise<{ isAuthenticated: boolean }> {
+  private async checkAuthStatus(): Promise<AuthState> {
     try {
       const response = await this.sendMessage({ type: MessageType.AUTH_STATE_GET });
-      return { isAuthenticated: response.data?.state === 'AUTHENTICATED' };
+      return response.data?.state ?? AuthState.UNAUTHENTICATED;
     } catch {
-      return { isAuthenticated: false };
+      return AuthState.UNAUTHENTICATED;
     }
   }
 
   /**
    * Show login required message with button to open popup for OAuth flow
    */
-  private showLoginRequired(): void {
+  private showLoginRequired(message = 'Login required to capture quotes'): void {
     this.hideCollectionPicker();
     const captureRow = this.shadow?.getElementById('capture-row');
     captureRow?.classList.add('expanded');
@@ -693,7 +714,7 @@ export class OverlayBar {
     if (originatorInfo) {
       originatorInfo.innerHTML = `
         <span class="badge warning">!</span>
-        <span>Login required to capture quotes</span>
+        <span>${this.escapeHtml(message)}</span>
       `;
 
       // Create Login button in right section
@@ -1286,7 +1307,7 @@ export class OverlayBar {
 
     return {
       quoteId: '',
-      error: 'API response omitted version_id.',
+      error: 'API response omitted quoteId.',
     };
   }
 
@@ -1553,7 +1574,7 @@ export class OverlayBar {
     default_collection_id?: string | null;
     isAuthenticated?: boolean;
     scopes?: string[];
-    data?: { state?: string; username?: string; error?: string };
+    data?: { state?: AuthState; username?: string; error?: string };
   }> {
     return new Promise((resolve) => {
       chrome.runtime.sendMessage(message, (response) => {

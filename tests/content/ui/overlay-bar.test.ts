@@ -1,4 +1,5 @@
 import { OverlayBar } from '../../../src/content/ui/overlay-bar';
+import { AuthState } from '../../../src/auth/auth-state-machine';
 import { MessageType } from '../../../src/types';
 import type { TwitterData } from '../../../src/types';
 import type { DuplicateCheckResult } from '../../../src/types/api';
@@ -153,6 +154,32 @@ describe('OverlayBar', () => {
     });
   }
 
+  it('exposes dialog semantics and manages focus and inert across visibility changes', () => {
+    const overlay = new OverlayBar(async () => tweetData);
+
+    overlay.show('Twitter');
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const container = shadow.querySelector('.container') as HTMLElement;
+    const refreshButton = shadow.getElementById('refresh-btn');
+    expect(container.getAttribute('role')).toBe('dialog');
+    expect(container.getAttribute('aria-label')).toBe('Quotewise capture tray');
+    expect(shadow.getElementById('originator-info')?.getAttribute('aria-live')).toBe('polite');
+    expect(container.hasAttribute('inert')).toBe(false);
+    expect(shadow.activeElement).toBe(refreshButton);
+
+    shadow.getElementById('close-btn')?.focus();
+    overlay.show('Twitter');
+    expect(shadow.activeElement).toBe(shadow.getElementById('close-btn'));
+
+    overlay.hide();
+    expect(container.hasAttribute('inert')).toBe(true);
+
+    overlay.show('Twitter');
+    expect(container.hasAttribute('inert')).toBe(false);
+    expect(shadow.activeElement).toBe(refreshButton);
+  });
+
   it('clears stale duplicate preload and auto-hides after 1000ms after successful submit', async () => {
     const overlay = new OverlayBar(async () => tweetData);
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
@@ -192,6 +219,105 @@ describe('OverlayBar', () => {
     (overlay as any).captureState.selectedText = 'just submitted';
     (overlay as any).syncSourcePreview();
     expect(sourceText.style.display).toBe('');
+  });
+
+  it('collapses an expanded capture when refresh no longer finds a post', async () => {
+    const overlay = setupReadyOverlay();
+    await flushPromises();
+    (overlay as any).captureState.expanded = true;
+    (overlay as any).updateSubmitButton(true);
+    (overlay as any).dataProvider = jest.fn().mockResolvedValue(null);
+
+    await overlay.refresh();
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect((overlay as any).captureState.expanded).toBe(false);
+    expect(submitButton.disabled).toBe(true);
+
+    submitButton.click();
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: MessageType.SUBMIT_QUOTE }),
+      expect.any(Function),
+    );
+  });
+
+  it('distinguishes a textless post from no supported post and disables Submit', async () => {
+    const overlay = setupReadyOverlay();
+    await flushPromises();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+
+    (overlay as any).captureState.expanded = true;
+    (overlay as any).updateSubmitButton(true);
+    (overlay as any).dataProvider = jest.fn().mockResolvedValue({ empty: 'no-text' });
+
+    await overlay.refresh();
+
+    expect(shadow.getElementById('tweet-preview')?.textContent).toBe('This post has no quotable text.');
+    expect((overlay as any).captureState.expanded).toBe(false);
+    expect((shadow.getElementById('submit-btn') as HTMLButtonElement | null)?.disabled ?? true).toBe(true);
+
+    (overlay as any).dataProvider = jest.fn().mockResolvedValue({ empty: 'no-post' });
+    await overlay.refresh();
+
+    expect(shadow.getElementById('tweet-preview')?.textContent)
+      .toBe('No supported post detected on this page.');
+  });
+
+  it('shows the expired-session login state when auth expires during capture', async () => {
+    const overlay = setupReadyOverlay();
+    await flushPromises();
+    (overlay as any).captureState.expanded = true;
+    (overlay as any).updateSubmitButton(true);
+
+    (overlay as any).handleAuthStateChanged({
+      state: AuthState.SESSION_EXPIRED,
+      lastCheckedAt: Date.now(),
+    });
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    expect(shadow.textContent).toContain('Session expired, please log in again');
+    expect(shadow.getElementById('submit-btn')).toBeNull();
+    expect(shadow.getElementById('login-btn')).toBeTruthy();
+  });
+
+  it('shows login when logout lands before originator lookup completes', async () => {
+    const overlay = setupReadyOverlay();
+    await flushPromises();
+    (overlay as any).captureState.expanded = true;
+    (overlay as any).captureState.originator = null;
+    (overlay as any).updateSubmitButton(true);
+
+    (overlay as any).handleAuthStateChanged({
+      state: AuthState.UNAUTHENTICATED,
+      lastCheckedAt: Date.now(),
+    });
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    expect(shadow.textContent).toContain('Click to log in');
+    expect(shadow.getElementById('submit-btn')).toBeNull();
+    expect(shadow.getElementById('login-btn')).toBeTruthy();
+  });
+
+  it('shows the specific auth state when an expired session is detected on initial open', async () => {
+    const overlay = new OverlayBar(async () => tweetData);
+    (overlay as any).mount();
+    await flushPromises();
+    (overlay as any).currentData = tweetData;
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.AUTH_STATE_GET) {
+        callback({ success: true, data: { state: AuthState.SESSION_EXPIRED } });
+        return;
+      }
+      callback({ success: true });
+    });
+
+    await (overlay as any).expandCapture();
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    expect(shadow.textContent).toContain('Session expired, please log in again');
+    expect(shadow.getElementById('submit-btn')).toBeNull();
+    expect(shadow.getElementById('login-btn')).toBeTruthy();
   });
 
   it('submits a similar match as a sighting with the linked quote id and confirmation copy', async () => {
@@ -255,6 +381,21 @@ describe('OverlayBar', () => {
 
     variantButton.click();
     variantButton.click();
+    await flushSubmitTimers();
+
+    const submitCalls = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .filter(c => c[0]?.type === MessageType.SUBMIT_QUOTE);
+    expect(submitCalls).toHaveLength(1);
+  });
+
+  it('double-clicking the plain Submit button submits exactly once', async () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).updateSubmitButton(true);
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+
+    submitButton.dispatchEvent(new MouseEvent('click'));
+    submitButton.dispatchEvent(new MouseEvent('click'));
     await flushSubmitTimers();
 
     const submitCalls = (chrome.runtime.sendMessage as jest.Mock).mock.calls
@@ -378,6 +519,39 @@ describe('OverlayBar', () => {
 
     expect((shadow.getElementById('submit-btn') as HTMLButtonElement).textContent).toBe('Done!');
     expect(shadow.getElementById('originator-info')?.textContent).toContain('Quote added successfully!');
+  });
+
+  it('shows submit failure and successfully retries', async () => {
+    let submitAttempts = 0;
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.SUBMIT_QUOTE) {
+        submitAttempts += 1;
+        callback(submitAttempts === 1
+          ? { success: false, error: 'Service unavailable' }
+          : { success: true, message: 'Quote submitted successfully', quoteId: 'q1' });
+        return;
+      }
+      callback({ success: true });
+    });
+    const overlay = setupReadyOverlay();
+    (overlay as any).updateSubmitButton(true);
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+
+    submitButton.click();
+    await flushSubmitTimers();
+
+    expect(shadow.getElementById('originator-info')?.textContent)
+      .toContain('Submit failed: Service unavailable');
+    expect(submitButton.textContent).toBe('Retry');
+    expect(submitButton.disabled).toBe(false);
+
+    submitButton.click();
+    await flushSubmitTimers();
+
+    expect(submitAttempts).toBe(2);
+    expect(shadow.getElementById('originator-info')?.textContent)
+      .toContain('Quote added successfully!');
   });
 
   it('blocks submit when the exact sighting already exists', async () => {
@@ -748,7 +922,7 @@ describe('OverlayBar', () => {
 
     await (overlay as any).expandCapture();
     const shadow = (overlay as any).shadow as ShadowRoot;
-    expect(shadow.textContent).toContain('Login required to capture quotes');
+    expect(shadow.textContent).toContain('Click to log in');
     expect(shadow.getElementById('login-btn')).toBeTruthy();
     expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: MessageType.CHECK_DUPLICATE }),
