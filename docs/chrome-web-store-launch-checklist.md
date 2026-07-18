@@ -38,13 +38,24 @@ Companion docs: [`chrome-web-store-listing.md`](./chrome-web-store-listing.md),
 
 ## Gate 4 — Production validation
 
-- [ ] `qw-0psq.20` (P1) Production OAuth smoke test with the real extension ID `mkdijeljnpdejecbaogcjkkpbjfeakhn`
-  - Redirect `https://mkdijeljnpdejecbaogcjkkpbjfeakhn.chromiumapp.org/callback` is **already whitelisted**
-    by the backend OAuth client's wildcard `https://*.chromiumapp.org/callback` (migration 0090, `environment.ts:178`),
-    so no per-ID registration is needed — this is now just the runtime round-trip: login → capture → submit →
-    verify → restart Chrome (auth restores) → force token refresh (stays logged in).
-  - Verify the **prod** OAuth DB has a real seeded client, not the placeholder-looking `OAUTH_CLIENT_ID`
-    (`environment.ts:179`). See `docs/server-launch-adrs/ADR-0004-oauth-production-redirect-readiness.md`.
+- [ ] **BLOCKER — extension ID ↔ redirect_uri mismatch** (must fix before `qw-0psq.20`). Backend PROD_RO
+  audit (2026-07-18): the OAuth client `a1b2c3d4-…` is real and seeded by `quotewise/migrations/0001_initial.py`
+  (NOT `0090`; that file doesn't exist). The `*.chromiumapp.org` wildcard was **removed** per ADR-0004 —
+  prod registers only two **exact** redirects: `boggjfjnnbkndnpbmengeeggijnkhhmn` and `bfdcpfflpeaoijdhdibaickafglhpgim`.
+  The CWS draft item ID is `mkdijeljnpdejecbaogcjkkpbjfeakhn` — **matches neither** → published Chrome OAuth
+  returns 400 at launch. Resolve the canonical Chrome ID and register its exact
+  `https://<id>.chromiumapp.org/callback` on the prod client (migration mirroring 0074). `manifest.prod.json`
+  has **no `key`**, so a locally-loaded unpacked build gets a path-derived ID that matches nothing — pin the
+  item's key or smoke-test against the published listing only.
+- [ ] **BLOCKER — Firefox `allizom` redirect unregistered.** `dist-firefox` ships `gecko.id`
+  `firefox@extensions.quotewise.io`; its redirect resolves to `https://<token>.extensions.allizom.org/callback`,
+  which is not registered and not pattern-covered. ADR-0008 accepted the fix but it was never applied to the
+  prod client. Register it before the Firefox launch (ADR-0008's "load temp add-on → read getRedirectURL" recipe).
+- [ ] `qw-0psq.20` (P1) Production OAuth smoke test — only AFTER both redirects above are registered. Round-trip:
+  login → capture → submit → verify → restart Chrome (auth restores) → force token refresh (stays logged in).
+  See `docs/server-launch-adrs/ADR-0004-oauth-production-redirect-readiness.md` and `ADR-0008-firefox-oauth-redirect.md`.
+  - Stale code comments to fix: `environment.ts:177` cites the wrong migration (`0090`→`0001`); `:178` claims a
+    `*.chromiumapp.org` wildcard that no longer exists. Correct both so they don't mislead mid-incident again.
 
 ## Hardening — not launch-blocking (P2/P3)
 
