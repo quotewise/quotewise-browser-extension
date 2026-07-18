@@ -64,6 +64,10 @@ export enum MessageType {
   // OAuth authentication
   OAUTH_LOGIN = 'OAUTH_LOGIN',
   OAUTH_LOGOUT = 'OAUTH_LOGOUT',
+  // In-Safari sign-in callback, sent by the content script on the extension-callback page (bead em9).
+  // The background can be torn down mid-flow, so completion is driven by this message — which wakes
+  // the background — rather than an in-memory listener that dies with it.
+  OAUTH_CALLBACK = 'OAUTH_CALLBACK',
 
   // Privacy and settings
   CLEAR_USER_DATA = 'CLEAR_USER_DATA',
