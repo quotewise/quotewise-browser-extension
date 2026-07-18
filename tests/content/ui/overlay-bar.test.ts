@@ -154,6 +154,32 @@ describe('OverlayBar', () => {
     });
   }
 
+  it('exposes dialog semantics and manages focus and inert across visibility changes', () => {
+    const overlay = new OverlayBar(async () => tweetData);
+
+    overlay.show('Twitter');
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const container = shadow.querySelector('.container') as HTMLElement;
+    const refreshButton = shadow.getElementById('refresh-btn');
+    expect(container.getAttribute('role')).toBe('dialog');
+    expect(container.getAttribute('aria-label')).toBe('Quotewise capture tray');
+    expect(shadow.getElementById('originator-info')?.getAttribute('aria-live')).toBe('polite');
+    expect(container.hasAttribute('inert')).toBe(false);
+    expect(shadow.activeElement).toBe(refreshButton);
+
+    shadow.getElementById('close-btn')?.focus();
+    overlay.show('Twitter');
+    expect(shadow.activeElement).toBe(shadow.getElementById('close-btn'));
+
+    overlay.hide();
+    expect(container.hasAttribute('inert')).toBe(true);
+
+    overlay.show('Twitter');
+    expect(container.hasAttribute('inert')).toBe(false);
+    expect(shadow.activeElement).toBe(refreshButton);
+  });
+
   it('clears stale duplicate preload and auto-hides after 1000ms after successful submit', async () => {
     const overlay = new OverlayBar(async () => tweetData);
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');

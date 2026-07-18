@@ -116,6 +116,7 @@ export class OverlayBar {
   }
 
   show(platformLabel: string): void {
+    const opening = this.hidden || !this.root;
     this.currentPlatformLabel = platformLabel;
     this.hidden = false;
     if (!this.root) {
@@ -127,6 +128,10 @@ export class OverlayBar {
     if (this.shadow) {
       const container = this.shadow.querySelector('.container');
       container?.setAttribute('aria-hidden', 'false');
+      container?.removeAttribute('inert');
+      if (opening) {
+        this.shadow.getElementById('refresh-btn')?.focus();
+      }
     }
     // Auto-expand capture when showing (user clicked icon = they want to capture)
     this.loadSettings().finally(() => this.refresh().then(() => {
@@ -145,6 +150,7 @@ export class OverlayBar {
     if (this.shadow) {
       const container = this.shadow.querySelector('.container');
       container?.setAttribute('aria-hidden', 'true');
+      container?.setAttribute('inert', '');
     }
   }
 
