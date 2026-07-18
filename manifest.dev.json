@@ -44,6 +44,16 @@
         "content/index.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://quotewise.io/oauth/extension-callback*",
+        "https://*.quotewise.io/oauth/extension-callback*"
+      ],
+      "js": [
+        "content/oauth-callback.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "action": {

@@ -15,6 +15,8 @@ import { validateCapturedPostData, ValidationError } from '../utils/validators';
 import { debugLog, getWebBaseUrl } from '../config/environment';
 import { initializeTokenRefresh, handleTokenRefreshAlarm } from '../auth/token-refresh';
 import { initiateOAuthFlow } from '../auth/auth-flow';
+import { startSafariSignIn, completeSafariSignIn } from '../auth/safari-signin';
+import { isSafariExtension } from '../auth/native-bridge';
 import {
   initializeAuthStateManager,
   AuthStateManager,
@@ -1217,6 +1219,24 @@ chrome.runtime.onMessage.addListener((
         // Initiate OAuth login flow
         // Notify AuthStateManager that we're starting authentication
         authStateManager?.startAuthenticating();
+        if (isSafariExtension()) {
+          // Safari: open the sign-in tab and return. The tray popup closes when the auth tab opens,
+          // which removes the message port keeping this background alive — so we CANNOT await the
+          // result here. Completion arrives asynchronously via OAUTH_CALLBACK (a content script on
+          // the callback page), which wakes whatever background instance is alive (bead em9).
+          startSafariSignIn().then(() => {
+            sendResponse({ success: true, pending: true });
+          }).catch(async error => {
+            console.error('Safari sign-in could not start:', error);
+            await authStateManager?.onAuthFailure(error?.message ?? 'Sign-in could not start.');
+            sendResponse({
+              success: false,
+              error: error?.message ?? 'Sign-in could not start.',
+              recoverable: true,
+            });
+          });
+          break;
+        }
         initiateOAuthFlow().then(async tokens => {
           debugLog('OAuth login successful');
           // Notify AuthStateManager of successful auth (handles badge)
@@ -1244,6 +1264,29 @@ chrome.runtime.onMessage.addListener((
           });
         });
         break;
+
+      case MessageType.OAUTH_CALLBACK: {
+        // Sent by the content script on the extension-callback page (bead em9). Completing HERE — on
+        // whatever background instance is alive when the callback arrives — is what makes in-Safari
+        // sign-in survive the background being torn down mid-flow. Flow state (PKCE verifier + CSRF
+        // state) is read from chrome.storage.session, which outlives the background. The tray learns
+        // the result via the AuthStateManager broadcast, since its popup is long gone by now.
+        const callback = (message.data ?? {}) as import('../auth/safari-signin').SafariCallbackParams;
+        const callbackTabId = sender.tab?.id;
+        completeSafariSignIn(callback).then(async scopes => {
+          debugLog('In-Safari sign-in completed via callback');
+          await authStateManager?.onAuthSuccess(undefined, scopes);
+          if (callbackTabId !== undefined) {
+            chrome.tabs.remove(callbackTabId).catch(() => { /* tab may already be closed */ });
+          }
+          sendResponse({ success: true });
+        }).catch(async error => {
+          console.error('In-Safari sign-in callback failed:', error);
+          await authStateManager?.onAuthFailure(error?.message ?? 'Sign-in could not be completed.');
+          sendResponse({ success: false, error: error?.message ?? 'Sign-in could not be completed.' });
+        });
+        break;
+      }
 
       case MessageType.OAUTH_LOGOUT:
         // Logout, clear tokens, and wipe user-identifying caches.

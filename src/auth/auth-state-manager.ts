@@ -99,11 +99,24 @@ export class AuthStateManager {
    * Token refresh scheduling is owned by initializeTokenRefresh(), not this method.
    */
   private async restoreState(): Promise<void> {
-    // Safari: auth lives in the container app, not the extension. Persisted extension state is
-    // unreliable — the user can sign in/out in the app while the extension isn't looking (and the
-    // extension has no OAuth of its own) — so always re-derive from the native bridge instead of
-    // trusting a possibly-stale stored UNAUTHENTICATED that would wrongly show a Login CTA (spec 002).
+    // Safari: auth lives in the container app, not the extension. But the event-page background is
+    // killed on idle, so a cold start must NOT block the popup on a bridge round-trip or flash
+    // CHECKING — that is what made the tray show logged-out for a moment before self-correcting
+    // (bead quotewise-apple-9b7). Optimistically restore the last-known AUTHENTICATED session so the
+    // tray shows signed-in immediately, then confirm via the bridge silently (downgrade only on a
+    // definitive signed-out). Any other stored state (or none) is re-derived from the bridge as
+    // before — the app can sign in/out while the extension isn't looking, and a Login CTA there is
+    // correct (spec 002).
     if (isSafariExtension()) {
+      const stored = (await chrome.storage.local.get(AUTH_STATE_STORAGE_KEY))[
+        AUTH_STATE_STORAGE_KEY
+      ] as AuthStateData | undefined;
+      if (stored?.state === AuthState.AUTHENTICATED) {
+        this.stateData = stored;
+        await this.updateBadge();
+        void this.revalidateSilently();
+        return;
+      }
       await this.checkAuthState();
       return;
     }
@@ -293,6 +306,37 @@ export class AuthStateManager {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       return AuthState.UNAUTHENTICATED;
+    }
+  }
+
+  /**
+   * Re-validate the session via the native bridge WITHOUT flashing CHECKING — used after an
+   * optimistic Safari restore (bead quotewise-apple-9b7). Downgrades only on a definitive
+   * signed-out; a transient network error keeps the optimistic AUTHENTICATED (the app still holds
+   * the session). Confirmation refreshes username/scopes and broadcasts nothing if unchanged.
+   */
+  private async revalidateSilently(): Promise<void> {
+    try {
+      const authResult = await this.authChecker.checkAuthStatus();
+      if ('type' in authResult) {
+        if (authResult.type === 'network_error') return; // transient — keep AUTHENTICATED
+        const next =
+          authResult.type === 'session_expired'
+            ? AuthState.SESSION_EXPIRED
+            : authResult.type === 'insufficient_privileges'
+              ? AuthState.INSUFFICIENT_PRIVILEGES
+              : AuthState.UNAUTHENTICATED;
+        await this.transitionTo(next, { error: authResult.message });
+        return;
+      }
+      const tokens = await getStoredTokens();
+      await this.transitionTo(AuthState.AUTHENTICATED, {
+        username: authResult.username,
+        scopes: tokens?.scopes ?? authResult.scopes,
+        error: undefined,
+      });
+    } catch (error) {
+      debugLog('Silent auth re-validation failed, keeping optimistic state:', error);
     }
   }
 

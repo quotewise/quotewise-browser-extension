@@ -10,9 +10,6 @@ import { generatePKCEParams, storeFlowState, retrieveAndClearFlowState, validate
 import { storeTokens, hasValidRefreshToken } from './token-storage';
 import { scheduleTokenRefresh } from './token-refresh';
 import { isSafariExtension } from './native-bridge';
-// Static imports (NOT dynamic import()): Safari's extension background can't load runtime webpack
-// chunks, so a dynamic import fails with "Loading chunk N failed".
-import { safariSignIn } from './safari-signin';
 import { authBackend } from './auth-backend';
 
 /**
@@ -34,13 +31,16 @@ export class OAuthFlowError extends Error {
  * Opens a popup for user authentication via launchWebAuthFlow
  */
 export async function initiateOAuthFlow(): Promise<OAuthTokens> {
-  // Safari has no chrome.identity.launchWebAuthFlow — sign in via a Safari tab; the container app
-  // exchanges the code into the shared Keychain (bead em9). Tokens never live in extension JS, so we
-  // return a token-less shell carrying only the granted scopes (the OAUTH_LOGIN handler reads .scopes;
-  // the real session lives in the app and is read back over the bridge).
+  // Safari has no chrome.identity.launchWebAuthFlow, and its background can be torn down mid sign-in,
+  // so the in-Safari flow is NOT a single awaitable call: the OAUTH_LOGIN handler starts it
+  // (startSafariSignIn) and the OAUTH_CALLBACK handler completes it asynchronously (bead em9). This
+  // function is the Chrome/launchWebAuthFlow path only.
   if (isSafariExtension()) {
-    const scopes = await safariSignIn();
-    return { accessToken: '', refreshToken: '', accessTokenExpiresAt: 0, refreshTokenExpiresAt: 0, scopes };
+    throw new OAuthFlowError(
+      'In-Safari sign-in is driven by OAUTH_LOGIN/OAUTH_CALLBACK, not initiateOAuthFlow',
+      'safari_flow_misuse',
+      false
+    );
   }
 
   const config = getOAuthConfig();

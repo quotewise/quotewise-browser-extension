@@ -12,6 +12,7 @@ module.exports = (env, argv) => {
     entry: {
       'background/service-worker': './src/background/service-worker.ts',
       'content/index': './src/content/index.ts',
+      'content/oauth-callback': './src/content/oauth-callback.ts',
       'options/index': './src/options/index.ts'
     },
     
