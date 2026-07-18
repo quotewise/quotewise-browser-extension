@@ -346,6 +346,21 @@ describe('OverlayBar', () => {
     expect(shadow.getElementById('originator-info')?.textContent).toContain('Sighting added');
   });
 
+  it('keeps the full-source preview intact beside a similar-match diff', () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).updateQuotePreview();
+    (overlay as any).updateDuplicateInfo({ result: similarResult() });
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const center = shadow.querySelector('.quote-preview-row .section.center') as HTMLElement;
+    const preview = shadow.getElementById('quote-preview') as HTMLElement;
+    const diff = center.querySelector(':scope > .similar-diff') as HTMLElement;
+
+    expect([...center.children]).toEqual(expect.arrayContaining([preview, diff]));
+    expect(preview.contains(diff)).toBe(false);
+    expect(preview.querySelector('.quote-text')?.textContent).toBe(tweetData.text);
+  });
+
   it('submits a similar match as a variant with the linked quote id and confirmation copy', async () => {
     const overlay = setupReadyOverlay();
     (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {

@@ -806,6 +806,91 @@ function sourceUrlFromMessage(message: ExtensionMessage, sender: chrome.runtime.
   return typeof sourceUrl === 'string' ? sourceUrl : undefined;
 }
 
+function collectedDuplicateResultFromSubmission(
+  message: ExtensionMessage,
+  response: unknown,
+  sourceUrl: string,
+): DuplicateCheckResult {
+  const data = message.data as Record<string, unknown> | undefined;
+  const submission = response as { quoteId?: unknown };
+  const quoteId = typeof submission.quoteId === 'string' ? submission.quoteId : '';
+  const versionId = Number(quoteId);
+  const text = typeof data?.text === 'string' ? data.text : '';
+  const originatorSlug = typeof data?.originator_slug === 'string' ? data.originator_slug : '';
+
+  return {
+    recommendation: 'duplicate',
+    confidence: 1,
+    in_quotewise: true,
+    matches: [{
+      quote_id: quoteId,
+      version_id: Number.isSafeInteger(versionId) ? versionId : 0,
+      text,
+      similarity: 1,
+      match_type: 'exact',
+      in_user_collections: true,
+      member_collections: [],
+      originator: {
+        id: originatorSlug,
+        full_name: originatorSlug,
+        sort_name: null,
+        birth_year: null,
+        death_year: null,
+      },
+      workflow_status: 'published',
+      likes_count: 0,
+      // Synthesized post-submit result: no canonical quote-page URL is known here
+      // (we have quote_id, not short_code), so omit the link rather than point it at
+      // the source post. A real duplicate check on tray-reopen fills it in.
+      match_source: 'url',
+      match_class: 'exact',
+      existing_sighting_for_this_url: true,
+      sighting_status: 'exact_url',
+    }],
+    existing_sightings_for_url: [{
+      id: 0,
+      quote_id: quoteId,
+      source_url: sourceUrl,
+      text,
+    }],
+    existing_sightings_total: 1,
+    reasoning: 'Quote submitted successfully',
+    search_metadata: {
+      source_url_checked: true,
+      total_matches: 1,
+    },
+  };
+}
+
+async function applySuccessfulSubmitCollectedState(
+  response: unknown,
+  message: ExtensionMessage,
+  sender: chrome.runtime.MessageSender,
+): Promise<void> {
+  const submission = response as { success?: unknown } | null;
+  const tabId = sender.tab?.id;
+  const sourceUrl = sourceUrlFromMessage(message, sender);
+  if (submission?.success !== true || !tabId || !sourceUrl || !isPostPageUrl(sourceUrl)) {
+    return;
+  }
+
+  if (!await isSenderTabStillOnSourceUrl(tabId, sourceUrl)) {
+    return;
+  }
+
+  const duplicateResult = collectedDuplicateResultFromSubmission(message, response, sourceUrl);
+  setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
+  tabScopedPresentationTabIds.add(tabId);
+  await chrome.storage.local.set({
+    preloadedDuplicateCheck: {
+      url: sourceUrl,
+      result: duplicateResult,
+      timestamp: Date.now(),
+    },
+  });
+  await applyResolvedIconForTab(tabId, sourceUrl, duplicateResult);
+}
+
 function authRequiredResponseState(response: unknown): AuthState | null {
   if (!response || typeof response !== 'object') {
     return null;
@@ -1120,8 +1205,13 @@ chrome.runtime.onMessage.addListener((
             tabId: sender.tab?.id,
             url: sourceUrlFromMessage(message, sender),
           })
+            .then(authRequired => {
+              if (!authRequired && message.type === MessageType.SUBMIT_QUOTE) {
+                return applySuccessfulSubmitCollectedState(response, message, sender);
+              }
+            })
             .catch(error => {
-              debugLog('Error applying API auth-required icon state:', error);
+              debugLog('Error applying API response icon state:', error);
             })
             .finally(() => {
               sendResponse(response);
@@ -2291,7 +2381,13 @@ async function handleCheckDuplicate(
     await startInFlightOperation(tabId, sourceUrl, 'explicit-duplicate-check');
     tabScopedPresentationTabIds.add(tabId);
     try {
-      await applyResolvedIconForTab(tabId, sourceUrl, null);
+      // Omit the result arg (undefined) so the resolver consults the in-memory
+      // cache + preloadedDuplicateCheck: a same-URL result already resolved (e.g. ★)
+      // survives re-verification instead of flashing Loading. Passing null would force
+      // quoteStatus 'None' and repaint ● over a known result (qw-togyr). A genuine
+      // first check (no cached result) still shows Loading; an actual URL change still
+      // clears the mismatched result and shows Loading.
+      await applyResolvedIconForTab(tabId, sourceUrl);
     } catch (error) {
       debugLog('Error applying duplicate-check loading icon:', error);
     }

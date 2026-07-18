@@ -54,6 +54,12 @@ export function buildOverlayMarkup(platformLabel: string): string {
           background: rgba(15,23,42,0.26);
           border-bottom: 1px solid rgba(255,255,255,0.06);
         }
+        .quote-preview-row .section.center {
+          flex-wrap: wrap;
+        }
+        .quote-preview-row .section.center > .similar-diff {
+          flex-basis: 100%;
+        }
         .quote-preview {
           display: flex;
           align-items: flex-start;
