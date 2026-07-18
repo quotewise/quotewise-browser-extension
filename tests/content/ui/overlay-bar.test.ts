@@ -242,6 +242,28 @@ describe('OverlayBar', () => {
     );
   });
 
+  it('distinguishes a textless post from no supported post and disables Submit', async () => {
+    const overlay = setupReadyOverlay();
+    await flushPromises();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+
+    (overlay as any).captureState.expanded = true;
+    (overlay as any).updateSubmitButton(true);
+    (overlay as any).dataProvider = jest.fn().mockResolvedValue({ empty: 'no-text' });
+
+    await overlay.refresh();
+
+    expect(shadow.getElementById('tweet-preview')?.textContent).toBe('This post has no quotable text.');
+    expect((overlay as any).captureState.expanded).toBe(false);
+    expect((shadow.getElementById('submit-btn') as HTMLButtonElement | null)?.disabled ?? true).toBe(true);
+
+    (overlay as any).dataProvider = jest.fn().mockResolvedValue({ empty: 'no-post' });
+    await overlay.refresh();
+
+    expect(shadow.getElementById('tweet-preview')?.textContent)
+      .toBe('No supported post detected on this page.');
+  });
+
   it('shows the expired-session login state when auth expires during capture', async () => {
     const overlay = setupReadyOverlay();
     await flushPromises();

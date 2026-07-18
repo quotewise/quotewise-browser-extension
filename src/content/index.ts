@@ -125,7 +125,8 @@ class ContentOrchestrator {
     }
 
     if (!this.overlay) {
-      this.overlay = new OverlayBar(() => this.activeAdapter!.getLatestData!());
+      this.overlay = new OverlayBar(() => this.activeAdapter!.getCaptureResult?.()
+        ?? this.activeAdapter!.getLatestData!());
     }
 
     const data = await this.getDataWithRetry(forceRefresh ? 3 : 1);

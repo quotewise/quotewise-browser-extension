@@ -1,4 +1,5 @@
 import type { CapturedPostData } from '../../types';
+import type { CaptureEmptyReason, CaptureResult } from '../../platforms/types';
 import { DEFAULT_SETTINGS, MessageType, type Settings } from '../../types';
 import type { Collection, DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
 import {
@@ -43,7 +44,7 @@ import {
   captureSourceUrl,
 } from '../../platforms/capture';
 
-type DataProvider = () => Promise<CapturedPostData | null>;
+type DataProvider = () => Promise<CapturedPostData | CaptureResult<CapturedPostData> | null>;
 
 const SUBMIT_PHASE_MIN_VISIBLE_MS = 350;
 
@@ -160,10 +161,15 @@ export class OverlayBar {
 
   async refresh(): Promise<void> {
     if (!this.shadow) return;
-    const data = await this.dataProvider();
+    const result = await this.dataProvider();
+    const emptyReason = result && 'empty' in result ? result.empty : null;
+    let data: CapturedPostData | null;
+    if (result && 'data' in result) data = result.data;
+    else if (result && 'empty' in result) data = null;
+    else data = result;
     this.currentData = data;
     if (!data && this.captureState.expanded) this.collapseCapture();
-    this.render(data);
+    this.render(data, emptyReason);
   }
 
   private mount(): void {
@@ -184,7 +190,7 @@ export class OverlayBar {
     this.refresh();
   }
 
-  render(data: CapturedPostData | null): void {
+  render(data: CapturedPostData | null, emptyReason: CaptureEmptyReason | null = null): void {
     if (!this.shadow) return;
     const previewEl = this.shadow.getElementById('tweet-preview');
     const protectedBadge = this.shadow.getElementById('protected-badge');
@@ -195,7 +201,9 @@ export class OverlayBar {
 
     if (!previewEl) return;
     if (!data) {
-      previewEl.textContent = 'No supported post detected on this page.';
+      previewEl.textContent = emptyReason === 'no-text'
+        ? 'This post has no quotable text.'
+        : 'No supported post detected on this page.';
       if (protectedBadge) protectedBadge.setAttribute('style', 'display:none;');
       return;
     }
@@ -1299,7 +1307,7 @@ export class OverlayBar {
 
     return {
       quoteId: '',
-      error: 'API response omitted version_id.',
+      error: 'API response omitted quoteId.',
     };
   }
 
