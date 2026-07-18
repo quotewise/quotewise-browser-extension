@@ -7,8 +7,9 @@ consistent with the live policy at https://quotewise.io/privacy/ and with
 Relates: ADR-0005, beads `qw-0psq.16` (this tab), `qw-0psq.17` (permission justifications).
 
 > Backend Limited-Use audit complete (2026-06-22): all three certifications confirmed. The
-> data flows that must be disclosed first are in "Limited Use basis & required disclosures".
-> Do not submit this tab until the privacy policy reflects those flows (tracked separately).
+> data flows requiring disclosure are in "Limited Use basis & required disclosures" — the live
+> policy now reflects them (PR #177, `qw-0psq.15`; verified live 2026-07-18). This tab is
+> **unblocked**; remaining paperwork is tracked in `qw-0psq.16`.
 
 ## Single purpose (Dashboard "Single purpose" field)
 
@@ -78,7 +79,11 @@ No selling, ad networks, or ad targeting exist in any capture path (confirmed by
 **External dashboard sync required:** the Chrome Web Store privacy-practices form is external to this
 repository. Its store-listing maintainer must add the automatic-preflight bound above before submission.
 
-**Blocking action:** the live policy at `quotewise.io/privacy/` currently says quotes are
-saved "to your account / your Quotewise library," which under-discloses public publication,
-human curation, and the AWS sub-processor flows. Update the extension section of the policy
-(main repo, `templates/quotewise/privacy.html`) before submitting this tab.
+**Resolved (was blocking):** the live policy at `quotewise.io/privacy/` now discloses public
+publication, human curation, the AWS sub-processor flow, and the Chrome Web Store Limited Use
+statement — shipped in PR #177 (`qw-0psq.15`, `templates/quotewise/privacy.html`), verified
+live 2026-07-18. This tab is unblocked.
+
+_Minor:_ the PostHog flow above is listed "for completeness," but the extension's capture paths
+emit no PostHog event, so it is intentionally omitted from the policy — leave as-is unless a
+future capture path starts emitting analytics.
