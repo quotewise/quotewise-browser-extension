@@ -127,13 +127,20 @@ flowchart TD
 **Passage count outranks quote status.** A post with 2+ captured passages shows
 the count, not `★`/`~`/`=` — "what's on this post" beats "what is this quote".
 
-> **Sharp edge (verified, not fixed).** `passageCountForUrl()` returns `'unknown'`
-> when `search_metadata.error` is true, and `'unknown'` maps to `HasCaptures`. So
-> a *failed* duplicate check on a post page resolves to a green `=` "this post has
-> captured passages" — asserting captures exist on the strength of a check that
-> didn't complete. The tray gets this right (`couldnt_verify` → ⚠ + Retry); the
-> icon does not. Reproduce with
-> `resolveIconPresentation(AUTHENTICATED, {search_metadata:{error:true}}, {isPostPage:true, isSupportedPlatform:true, isCheckInFlight:false})`.
+**`passageCountForUrl()` is three-valued, and the distinction is load-bearing:**
+
+| return | means | caller may claim |
+|---|---|---|
+| `number` | counted | exact count |
+| `'unknown'` | captures exist, count unavailable (≥50, malformed total) | "this post has captures" |
+| `null` | **no information** — absent result, or `search_metadata.error` | nothing, in either direction |
+
+The last two shared the `'unknown'` sentinel until v1.7.0, so a check that never
+completed rendered as positive evidence: a green `=` on the toolbar, and a "This
+post already has captures" line sitting under the tray's own "Couldn't verify
+duplicates" warning. `null` is deliberately not `0` — `0` is a claim ("no
+captures") that a failed check hasn't earned either, and the nullable type makes
+the compiler demand every caller handle it.
 
 ### Quote status mapping
 

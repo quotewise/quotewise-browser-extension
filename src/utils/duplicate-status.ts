@@ -81,9 +81,26 @@ export function matchedSightingForText(
   ));
 }
 
-export function passageCountForUrl(result?: DuplicateCheckResult | null): number | 'unknown' {
+/**
+ * How many passages are already captured from this URL.
+ *
+ * Three-valued on purpose:
+ * - a `number` — counted.
+ * - `'unknown'` — captures exist, but the count is unavailable (too many to
+ *   enumerate, or a malformed total). Callers may say "this post has captures".
+ * - `null` — **no information**: no result, or the check errored. Callers must
+ *   claim nothing in either direction.
+ *
+ * The last two used to share the `'unknown'` sentinel, so a check that never
+ * completed rendered as positive evidence of captures — a green "=" on the
+ * toolbar and a "This post already has captures" line under the tray's own
+ * "Couldn't verify duplicates" warning.
+ */
+export function passageCountForUrl(
+  result?: DuplicateCheckResult | null,
+): number | 'unknown' | null {
   if (!result || typeof result !== 'object' || result.search_metadata?.error === true) {
-    return 'unknown';
+    return null;
   }
 
   if (Object.prototype.hasOwnProperty.call(result, 'existing_sightings_total')) {

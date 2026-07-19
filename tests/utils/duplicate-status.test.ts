@@ -509,10 +509,13 @@ describe('passage count for URL', () => {
   }));
 
   it('implements the canonical count truth table', () => {
-    expect(passageCountForUrl(null)).toBe('unknown');
+    // null = no information. Distinct from 'unknown', which means captures exist
+    // but cannot be counted — only the latter licenses a "has captures" claim.
+    expect(passageCountForUrl(null)).toBeNull();
+    expect(passageCountForUrl(undefined)).toBeNull();
     expect(passageCountForUrl(duplicate('new_quote', {
       search_metadata: { error: true },
-    }))).toBe('unknown');
+    }))).toBeNull();
     expect(passageCountForUrl(duplicate('duplicate', {
       existing_sightings_total: 12,
       existing_sightings_for_url: 'malformed' as never,

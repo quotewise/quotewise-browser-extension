@@ -142,7 +142,9 @@ export class DuplicateBadge {
 
   private renderPassagesPanel(result: DuplicateCheckResult): void {
     const count = passageCountForUrl(result);
-    if (count === 0) return;
+    // null is "the check told us nothing" — render no panel rather than assert
+    // captures. This path runs on the couldnt_verify branch too.
+    if (count === 0 || count === null) return;
 
     this.container.classList.add('has-passages');
 

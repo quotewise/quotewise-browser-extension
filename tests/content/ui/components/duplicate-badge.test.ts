@@ -321,6 +321,17 @@ describe('DuplicateBadge', () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
+  it('does not claim the post has captures when the check could not complete', () => {
+    // The passages panel renders on every branch including couldnt_verify, so a
+    // failed check used to read "Couldn't verify duplicates" with "This post
+    // already has captures" directly beneath it.
+    badge.update({ result: couldntVerifyDuplicateResult() });
+
+    expect(container.textContent).toContain("Couldn't verify duplicates");
+    expect(container.textContent).not.toContain('captures');
+    expect(container.querySelector('.passages-panel')).toBeNull();
+  });
+
   it('renders an attribution conflict notice with resolve link and no decision buttons', () => {
     badge.update({ result: conflictDuplicateResult() });
 
