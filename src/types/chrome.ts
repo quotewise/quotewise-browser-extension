@@ -92,6 +92,7 @@ export interface ExtensionMessage {
 
 export interface Settings {
   privateMode: boolean;
+  statsForNerds: boolean;
   autoAddToCollection: boolean;
   defaultCollectionSlug: string | null;
   lastUsedCollectionSlugs: string[];
@@ -100,6 +101,7 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   privateMode: false,
+  statsForNerds: false,
   autoAddToCollection: false,
   defaultCollectionSlug: null,
   lastUsedCollectionSlugs: [],

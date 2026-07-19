@@ -325,6 +325,13 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     });
     expect(chrome.action.setBadgeText).toHaveBeenCalledWith({ tabId: 22, text: '●' });
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '=' });
+    expect(chrome.storage.local.set).toHaveBeenCalledWith({
+      preloadedDuplicateCheck: expect.objectContaining({
+        url: tweetData.url,
+        result: duplicateResult,
+        preflightMs: expect.any(Number),
+      }),
+    });
 
     const getDiagnostics = (globalThis as {
       __quotewiseDiagnostics?: () => Promise<Record<string, any>>;

@@ -20,6 +20,7 @@ import { ActionButton } from './components/action-button';
 import { CaptureProgressIndicator } from './components/progress-indicator';
 import { FirstRunNotice } from './components/first-run-notice';
 import { AccountMenu } from './components/account-menu';
+import { StatsRow, type CaptureStats } from './components/stats-row';
 import { buildOverlayMarkup } from './overlay-template';
 import {
   classifyDuplicateSighting,
@@ -92,6 +93,8 @@ export class OverlayBar {
   private progressIndicator: CaptureProgressIndicator | null = null;
   private firstRunNotice: FirstRunNotice | null = null;
   private accountMenu: AccountMenu | null = null;
+  private statsRow: StatsRow | null = null;
+  private stats: CaptureStats = {};
   private settings: Settings = { ...DEFAULT_SETTINGS };
   private unsubscribeSettings: (() => void) | null = null;
   private selectionChangeHandler: (() => void) | null = null;
@@ -319,6 +322,39 @@ export class OverlayBar {
     }
   }
 
+  private syncStatsRow(): void {
+    const container = this.shadow?.getElementById('stats-row') as HTMLElement | null;
+    if (!container) return;
+
+    if (!this.settings.statsForNerds) {
+      this.statsRow?.clear();
+      container.textContent = '';
+      container.hidden = true;
+      return;
+    }
+
+    this.statsRow ??= new StatsRow(container);
+    this.statsRow.update(this.stats);
+  }
+
+  private updateStats(stats: Partial<CaptureStats>): void {
+    this.stats = { ...this.stats, ...stats };
+    this.syncStatsRow();
+  }
+
+  private updateDuplicateStats(
+    result: DuplicateCheckResult,
+    cacheHit: boolean,
+    preMs?: number,
+  ): void {
+    this.updateStats({
+      dupRttMs: result.search_metadata?.client_rtt_ms,
+      srvMs: result.search_metadata?.query_time_ms,
+      cacheHit,
+      ...(preMs !== undefined ? { preMs } : {}),
+    });
+  }
+
   private async refreshFromTray(): Promise<void> {
     await this.refresh();
     await this.collectionPicker?.refresh();
@@ -352,6 +388,7 @@ export class OverlayBar {
           this.showPrivateModePaused();
         }
       }
+      this.syncStatsRow();
     });
   }
 
@@ -387,6 +424,7 @@ export class OverlayBar {
     const captureRow = this.shadow.getElementById('capture-row');
     captureRow?.classList.add('expanded');
     this.captureState.expanded = true;
+    this.syncStatsRow();
 
     // Update the quote preview to show selected text if any
     this.updateQuotePreview();
@@ -675,6 +713,7 @@ export class OverlayBar {
 
       if (response.duplicate_check) {
         this.captureState.duplicateResult = response.duplicate_check;
+        this.updateDuplicateStats(response.duplicate_check, false);
         this.updateDuplicateInfo({ result: response.duplicate_check });
       }
       progress.setPhase('success');
@@ -854,6 +893,8 @@ export class OverlayBar {
       isCheckingDuplicate: false,
       duplicateResult: null
     };
+    this.stats = {};
+    this.statsRow?.clear();
 
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.progressIndicator?.reset();
@@ -881,6 +922,10 @@ export class OverlayBar {
       const platform = this.currentData ? capturePlatform(this.currentData) : 'twitter';
       const outcome = await this.originatorLookup.lookup(handle, sourceUrl, platform, forceRefresh);
 
+      if (outcome.originatorRttMs !== undefined) {
+        this.updateStats({ origRttMs: outcome.originatorRttMs });
+      }
+
       this.captureState.lookupResult = outcome.status;
 
       if (outcome.status === 'found' && outcome.originator) {
@@ -899,6 +944,7 @@ export class OverlayBar {
             const result = outcome.preloadedDuplicateCheck.result as DuplicateCheckResult;
             this.captureState.isCheckingDuplicate = false;
             this.captureState.duplicateResult = result;
+            this.updateDuplicateStats(result, true, outcome.preloadedDuplicateCheck.preflightMs);
             this.updateDuplicateInfo({ result });
             void this.checkDuplicate(outcome.originator.unique_id);
           } else {
@@ -1467,6 +1513,7 @@ export class OverlayBar {
 
       if (response.success && response.result) {
         this.captureState.duplicateResult = response.result as DuplicateCheckResult;
+        this.updateDuplicateStats(this.captureState.duplicateResult, false);
         this.updateDuplicateInfo({ result: this.captureState.duplicateResult });
       } else {
         // Clear spinner even if no result

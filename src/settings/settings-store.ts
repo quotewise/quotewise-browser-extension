@@ -33,6 +33,7 @@ function normalizeSettings(value: unknown): Settings {
     privateMode: typeof partial.privateMode === 'boolean'
       ? partial.privateMode
       : DEFAULT_SETTINGS.privateMode,
+    statsForNerds: typeof partial.statsForNerds === 'boolean' ? partial.statsForNerds : DEFAULT_SETTINGS.statsForNerds,
     autoAddToCollection: typeof partial.autoAddToCollection === 'boolean'
       ? partial.autoAddToCollection
       : DEFAULT_SETTINGS.autoAddToCollection,

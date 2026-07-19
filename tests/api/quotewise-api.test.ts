@@ -322,7 +322,7 @@ describe('QuotewiseApiClient', () => {
           likes_count: 10
         }],
         reasoning: 'Exact duplicate found',
-        search_metadata: { total_matches: 1 }
+        search_metadata: { total_matches: 1, query_time_ms: 96 }
       };
 
       mockFetch.mockResolvedValue({
@@ -333,7 +333,14 @@ describe('QuotewiseApiClient', () => {
 
       const result = await client.checkQuoteDuplicate('Test quote', 'kpaxs');
 
-      expect(result).toEqual(mockDuplicateResult);
+      expect(result).toEqual({
+        ...mockDuplicateResult,
+        search_metadata: {
+          ...mockDuplicateResult.search_metadata,
+          client_rtt_ms: expect.any(Number),
+        },
+      });
+      expect(result.search_metadata.query_time_ms).toBe(96);
       expect(mockFetch).toHaveBeenCalledWith(
         'http://api.quotewise.test:8000/v1/quotes/check_duplicate/',
         expect.objectContaining({
@@ -872,6 +879,7 @@ describe('QuotewiseApiClient', () => {
       expect(result.originator).toBeDefined();
       expect(result.originator?.id).toBe(123);
       expect(result.originator?.full_name).toBe('Test Person');
+      expect(result.client_rtt_ms).toEqual(expect.any(Number));
     });
 
     test('strips @ prefix from handle', async () => {

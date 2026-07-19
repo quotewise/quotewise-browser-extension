@@ -345,6 +345,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
       };
     }
     
+    const requestStartedAt = Date.now();
     try {
       const payload = {
         text: text.trim(),
@@ -360,8 +361,15 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
           body: JSON.stringify(payload)
         }
       );
-      
-      return normalizeDuplicateCheckResult(result);
+      const clientRttMs = Date.now() - requestStartedAt;
+      const normalized = normalizeDuplicateCheckResult(result);
+      return {
+        ...normalized,
+        search_metadata: {
+          ...normalized.search_metadata,
+          client_rtt_ms: clientRttMs,
+        },
+      };
     } catch (error) {
       console.error('Error checking duplicates:', error);
       if (error instanceof Error && error.name === 'AuthenticationError') {
@@ -375,7 +383,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         in_quotewise: false,
         matches: [],
         reasoning: "Couldn't verify duplicates",
-        search_metadata: { error: true }
+        search_metadata: { error: true, client_rtt_ms: Date.now() - requestStartedAt }
       };
     }
   }
@@ -517,6 +525,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
 
     // Normalize handle - strip @ prefix if present
     const cleanHandle = handle.trim().replace(/^@/, '');
+    const requestStartedAt = Date.now();
 
     try {
       const params = new URLSearchParams({
@@ -545,6 +554,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         { method: 'GET' },
         false  // No CSRF needed for GET
       );
+      const clientRttMs = Date.now() - requestStartedAt;
 
       if (result.found && result.originator) {
         const uniqueId = result.originator.unique_id ?? result.originator.slug;
@@ -553,7 +563,8 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
             found: false,
             handle: cleanHandle,
             platform,
-            create_url: result.create_url
+            create_url: result.create_url,
+            client_rtt_ms: clientRttMs
           };
         }
 
@@ -570,7 +581,8 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
           handle: cleanHandle,
           platform,
           match_platform: result.match_platform,
-          confidence: result.confidence
+          confidence: result.confidence,
+          client_rtt_ms: clientRttMs
         };
       } else {
         // Not found - return create URL
@@ -578,7 +590,8 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
           found: false,
           handle: cleanHandle,
           platform,
-          create_url: result.create_url
+          create_url: result.create_url,
+          client_rtt_ms: clientRttMs
         };
       }
     } catch (error) {
@@ -594,7 +607,8 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         found: false,
         handle: cleanHandle,
         platform,
-        create_url: undefined
+        create_url: undefined,
+        client_rtt_ms: Date.now() - requestStartedAt
       };
     }
   }

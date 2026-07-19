@@ -13,6 +13,7 @@ describe('logout privacy cleanup', () => {
     (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
       settings: {
         privateMode: true,
+        statsForNerds: false,
         autoAddToCollection: true,
         defaultCollectionSlug: 'favorites',
         lastUsedCollectionSlugs: ['favorites'],
@@ -29,6 +30,7 @@ describe('logout privacy cleanup', () => {
     expect(chrome.storage.sync.set).toHaveBeenCalledWith({
       settings: {
         privateMode: true,
+        statsForNerds: false,
         autoAddToCollection: true,
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],

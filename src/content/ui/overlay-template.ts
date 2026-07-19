@@ -44,6 +44,19 @@ export function buildOverlayMarkup(platformLabel: string): string {
           display: flex;
           flex-direction: column;
         }
+        .stats-row {
+          padding: 4px 12px 6px;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 11px;
+          line-height: 14px;
+          opacity: 0.6;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .stats-row[hidden] {
+          display: none;
+        }
         .quote-preview-row, .originator-row {
           display: flex;
           align-items: flex-start;
@@ -577,6 +590,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
               </div>
             </div>
             <div class="collection-picker-slot" id="collection-picker-slot" hidden></div>
+            <div class="stats-row" id="stats-row" hidden></div>
           </div>
         </div>
       </div>

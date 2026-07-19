@@ -26,12 +26,14 @@ describe('OriginatorLookup', () => {
       success: true,
       found: true,
       originator: mockOriginator,
+      client_rtt_ms: 210,
     });
 
     const outcome = await lookup.lookup('einstein');
 
     expect(outcome.status).toBe('found');
     expect(outcome.originator).toBe(mockOriginator);
+    expect(outcome.originatorRttMs).toBe(210);
     expect(container.innerHTML).toContain('Albert Einstein');
     expect(container.innerHTML).toContain('@einstein');
     expect(container.innerHTML).toContain('badge success');
@@ -317,6 +319,7 @@ describe('OriginatorLookup', () => {
       url: 'https://x.com/test/status/123',
       result: { recommendation: 'new_quote' },
       timestamp: Date.now() - 5000,
+      preflightMs: 780,
     };
     (chrome.storage.local.get as jest.Mock).mockResolvedValue({
       preloadedOriginator: {
@@ -330,6 +333,7 @@ describe('OriginatorLookup', () => {
     const outcome = await lookup.lookup('Einstein');
 
     expect(outcome.preloadedDuplicateCheck).toBe(dupCheck);
+    expect(outcome.preloadedDuplicateCheck?.preflightMs).toBe(780);
   });
 
   it('uses preloaded not-found result', async () => {
