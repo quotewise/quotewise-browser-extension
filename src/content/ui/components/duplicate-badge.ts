@@ -1,6 +1,7 @@
 import type { DuplicateCheckResult } from '../../../types/api';
 import { getWebBaseUrl } from '../../../config/environment';
 import {
+  blockingExactConflict,
   classifyMatchResolution,
   classifyDuplicateSighting,
   getMatchForDuplicateSightingState,
@@ -105,10 +106,20 @@ export class DuplicateBadge {
         return;
       }
 
-      renderSimilarDiff(this.container, similarView, {
-        onResolve: (decision) => this.callbacks.onResolveDecision?.(decision),
-      });
-      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Choose Action' });
+      // Submission is vetoed further down when this exact text is on record
+      // under another originator. Offering Sighting/Variant anyway would put a
+      // button on screen that silently does nothing when clicked — the panel
+      // below already explains why the capture can't proceed.
+      const blocked = !!blockingExactConflict(result);
+
+      renderSimilarDiff(
+        this.container,
+        blocked ? { ...similarView, sightingAvailable: false, variantAvailable: false } : similarView,
+        { onResolve: (decision) => this.callbacks.onResolveDecision?.(decision) },
+      );
+      this.callbacks.onSubmitStateChange(blocked
+        ? { type: 'submit', enabled: false, text: 'Resolve Attribution', style: 'warning' }
+        : { type: 'submit', enabled: false, text: 'Choose Action' });
       this.renderPassagesPanel(result);
       return;
     }

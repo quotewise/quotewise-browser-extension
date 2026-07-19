@@ -285,6 +285,91 @@ describe('OverlayBar', () => {
     );
   });
 
+  function similarPrimary() {
+    return duplicateMatch({
+      quote_id: '101',
+      text: 'A just submitted quotation',
+      match_class: 'similar',
+      match_source: 'similarity',
+      primary: true,
+    });
+  }
+
+  function crossOriginatorMatch(overrides: Record<string, unknown> = {}) {
+    return duplicateMatch({
+      quote_id: '901',
+      match_class: 'conflict',
+      match_type: 'near_different_originator',
+      different_originator: true,
+      originator: {
+        id: 'originator-2',
+        full_name: 'Different Author',
+        sort_name: null,
+        birth_year: null,
+        death_year: null,
+      },
+      ...overrides,
+    });
+  }
+
+  async function clickAddAsVariant(result: DuplicateCheckResult): Promise<ShadowRoot> {
+    const overlay = setupReadyOverlay();
+    (overlay as any).captureState.duplicateResult = result;
+    (overlay as any).updateDuplicateInfo({ result });
+    await flushPromises();
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const variant = Array.from(shadow.querySelectorAll('button'))
+      .find(button => button.textContent === 'Add as variant') as HTMLButtonElement | undefined;
+    variant?.click();
+    await flushSubmitTimers();
+    return shadow;
+  }
+
+  it('still submits a variant when an unrelated cross-originator match rides along', async () => {
+    // The vector sweep attaches cross-originator matches to every result now.
+    // A sighting another originator's quote happens to have on this platform
+    // must not veto the decision the user just made.
+    await clickAddAsVariant(duplicateResult({
+      recommendation: 'new_version',
+      in_quotewise: true,
+      matches: [
+        similarPrimary(),
+        crossOriginatorMatch({ sighting_status: 'has_platform_sighting' }),
+      ],
+    }));
+
+    expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: MessageType.SUBMIT_QUOTE,
+        data: expect.objectContaining({ user_intent: 'variant', link_to_quote_id: 101 }),
+      }),
+      expect.any(Function),
+    );
+  });
+
+  it('withholds the decision buttons rather than dead-ending them on an exact cross-originator match', async () => {
+    // Blocking here is correct — the text is verbatim someone else's — but an
+    // offered button that silently does nothing is not how to say so.
+    const shadow = await clickAddAsVariant(duplicateResult({
+      recommendation: 'new_version',
+      in_quotewise: true,
+      matches: [
+        similarPrimary(),
+        crossOriginatorMatch({ match_type: 'exact_different_originator' }),
+      ],
+    }));
+
+    expect(Array.from(shadow.querySelectorAll('button')).map(button => button.textContent))
+      .not.toContain('Add as variant');
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: MessageType.SUBMIT_QUOTE }),
+      expect.any(Function),
+    );
+    expect(shadow.getElementById('similar-panel')?.textContent)
+      .toContain('This exact quote is already attributed to Different Author');
+  });
+
   it('hides the duplicate top-bar source text only when the quote box shows the full source', () => {
     const overlay = setupReadyOverlay();
     const shadow = (overlay as any).shadow as ShadowRoot;

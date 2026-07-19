@@ -18,6 +18,24 @@ export interface DuplicateSightingMatch {
   existing_sighting_for_this_url?: boolean;
   match_source?: 'url' | 'similarity';
   primary?: boolean;
+  match_class?: 'exact' | 'conflict' | 'similar';
+  different_originator?: boolean;
+}
+
+function isCrossOriginator(match: DuplicateSightingMatch): boolean {
+  return match?.different_originator === true || match?.match_class === 'conflict';
+}
+
+/**
+ * Since ADR-0009 every check returns cross-originator matches alongside
+ * same-originator ones. Anything that reasons about *this* capture — is it
+ * already recorded, already collected, already sighted on this platform — must
+ * look only at matches under the originator being captured. Another
+ * originator's quote answers a different question.
+ */
+function sameOriginatorMatches<T extends DuplicateSightingMatch>(matches?: T[]): T[] {
+  if (!Array.isArray(matches)) return [];
+  return matches.filter(match => !!match && !isCrossOriginator(match));
 }
 
 /**
@@ -93,7 +111,7 @@ export function classifyDuplicateSighting(
     return 'exact_sighting';
   }
 
-  const matches = Array.isArray(result.matches) ? result.matches : [];
+  const matches = sameOriginatorMatches(result.matches);
 
   if (matches.some(match => match.sighting_status === 'has_platform_sighting')) {
     return 'same_platform_sighting';
@@ -110,7 +128,7 @@ export function getMatchForDuplicateSightingState<T extends DuplicateSightingMat
   result: { matches?: T[] },
   state: DuplicateSightingState
 ): T | undefined {
-  const matches = result.matches || [];
+  const matches = sameOriginatorMatches(result.matches);
 
   switch (state) {
     case 'exact_sighting':
@@ -132,10 +150,6 @@ export function getMatchForDuplicateSightingState<T extends DuplicateSightingMat
  * submission keeps the client free of similarity math.
  */
 export const EXACT_CONFLICT_MATCH_TYPE = 'exact_different_originator';
-
-function isCrossOriginator(match: QuoteMatch): boolean {
-  return match.different_originator === true || match.match_class === 'conflict';
-}
 
 /**
  * A match asserting this exact text is already on record under a *different*
@@ -209,16 +223,9 @@ export function mapRecommendationToQuoteStatus(result: DuplicateCheckResult | nu
     return 'None';
   }
 
-  // Scoped to same-originator matches: the mixed ADR-0009 list can carry another
-  // originator's quote that the user happens to have collected, which says
-  // nothing about the quote being captured here.
-  if ((result.matches || []).some(match => (
-    match.match_class !== 'conflict' &&
-    match.different_originator !== true &&
-    (
-      match.in_user_collections === true ||
-      (Array.isArray(match.member_collections) && match.member_collections.length > 0)
-    )
+  if (sameOriginatorMatches(result.matches).some(match => (
+    match.in_user_collections === true ||
+    (Array.isArray(match.member_collections) && match.member_collections.length > 0)
   ))) {
     return 'InCollection';
   }

@@ -176,6 +176,44 @@ describe('duplicate sighting status', () => {
     }, 'Different passage')).not.toBe('exact_sighting');
   });
 
+  it('ignores sighting status carried by cross-originator matches', () => {
+    // Another originator's quote having a sighting on this platform says nothing
+    // about whether the quote being captured is already recorded. Before the
+    // mixed ADR-0009 list these could not appear together.
+    expect(classifyDuplicateSighting({
+      matches: [
+        { sighting_status: 'unknown' },
+        { sighting_status: 'has_platform_sighting', different_originator: true },
+      ],
+    })).toBe('unknown');
+
+    expect(classifyDuplicateSighting({
+      matches: [
+        { sighting_status: 'unknown' },
+        { sighting_status: 'exact_url', match_class: 'conflict' },
+      ],
+    }, 'Some passage')).toBe('unknown');
+
+    // Same-originator matches in the same mixed list still classify.
+    expect(classifyDuplicateSighting({
+      matches: [
+        { sighting_status: 'has_platform_sighting', different_originator: true },
+        { sighting_status: 'has_platform_sighting' },
+      ],
+    })).toBe('same_platform_sighting');
+  });
+
+  it('does not select a cross-originator match for a sighting state', () => {
+    const match = getMatchForDuplicateSightingState({
+      matches: [
+        { id: 'cross', sighting_status: 'no_platform_sighting' as const, different_originator: true },
+        { id: 'same', sighting_status: 'no_platform_sighting' as const },
+      ],
+    }, 'other_platform_sighting');
+
+    expect(match?.id).toBe('same');
+  });
+
   it('classifies has_platform_sighting matches as same-platform sighting', () => {
     expect(classifyDuplicateSighting({
       matches: [{ sighting_status: 'has_platform_sighting' }],
