@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Quotewise Quote Capture",
-  "version": "1.6.8",
+  "version": "1.7.0",
   "description": "Save quotes from X, Threads, Bluesky & Substack Notes to your Quotewise library — attributed, sourced, duplicate-checked.",
   "permissions": [
     "storage",

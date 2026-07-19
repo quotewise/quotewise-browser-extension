@@ -1,7 +1,7 @@
 import type { CapturedPostData } from '../../types';
 import type { CaptureEmptyReason, CaptureResult } from '../../platforms/types';
 import { DEFAULT_SETTINGS, MessageType, type Settings } from '../../types';
-import type { Collection, DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
+import type { Collection, DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult, QuoteMatch } from '../../types/api';
 import {
   AuthState,
   getStateMessage,
@@ -23,10 +23,13 @@ import { AccountMenu } from './components/account-menu';
 import { StatsRow, type CaptureStats } from './components/stats-row';
 import { buildOverlayMarkup } from './overlay-template';
 import {
+  blockingExactConflict,
   classifyDuplicateSighting,
   classifyMatchResolution,
   getMatchForDuplicateSightingState,
+  primaryMatch,
 } from '../../utils/duplicate-status';
+import { SimilarPanel } from './components/similar-panel';
 import {
   getSettings,
   onSettingsChanged,
@@ -84,6 +87,7 @@ export class OverlayBar {
   private currentData: CapturedPostData | null = null;
   private duplicateBadge: DuplicateBadge | null = null;
   private duplicateBadgeContainer: HTMLElement | null = null;
+  private similarPanel: SimilarPanel | null = null;
   private collectionPicker: CollectionPicker | null = null;
   private collectionPickerContainer: HTMLElement | null = null;
   private existingQuoteTarget: { quoteId: string } | null = null;
@@ -601,11 +605,9 @@ export class OverlayBar {
 
     if (
       result.in_quotewise &&
-      classifyMatchResolution(result, currentText) !== 'conflict' &&
-      Array.isArray(result.matches) &&
-      result.matches.length > 0
+      classifyMatchResolution(result, currentText) !== 'conflict'
     ) {
-      return result.matches[0];
+      return primaryMatch(result.matches) ?? null;
     }
 
     return null;
@@ -1007,6 +1009,13 @@ export class OverlayBar {
       this.updateSubmitButton(false, 'Resolve Attribution');
       return;
     }
+    // This exact text is on record under a different originator (ADR-0009).
+    // Reachable when the primary match is a benign same-originator hit, so
+    // `matchResolution` above never sees it.
+    if (blockingExactConflict(duplicateResult)) {
+      this.updateSubmitButtonWarning(false, 'Resolve Attribution');
+      return;
+    }
 
     const sightingState = classifyDuplicateSighting(duplicateResult, quoteText);
     if (sightingState === 'exact_sighting') {
@@ -1093,6 +1102,14 @@ export class OverlayBar {
 
         // Clear duplicate badge and show success in originator row
         this.updateDuplicateInfo(null);
+
+        // Advisory only (ADR-0009 §5) — the capture succeeded either way. It
+        // reports what else is on record so a curator can follow up.
+        const attributionConflicts = Array.isArray(response.attributionConflicts)
+          ? response.attributionConflicts
+          : [];
+        this.ensureSimilarPanel()?.showPostSubmit(attributionConflicts);
+
         const successMessage = this.successMessageForSubmit(response, opts.userIntent);
         const collectionMessage = this.collectionMessage(successMessage, addSummary);
         this.setOriginatorHtml(
@@ -1127,8 +1144,10 @@ export class OverlayBar {
 
         const clearDuplicateCache = this.clearPreloadedDuplicateCheckForCurrentUrl();
 
-        // Auto-hide after full success; partial failures stay open for retry.
-        if (addSummary.failed.length === 0) {
+        // Auto-hide after full success; partial failures stay open for retry, as
+        // does an attribution advisory — a heads-up that flashes for a second and
+        // then vanishes is worse than none, since it can't be recalled.
+        if (addSummary.failed.length === 0 && attributionConflicts.length === 0) {
           setTimeout(() => this.hide(), 1000);
         }
         await clearDuplicateCache;
@@ -1502,6 +1521,8 @@ export class OverlayBar {
     this.captureState.isCheckingDuplicate = true;
     if (!hasCurrentResult) {
       this.updateDuplicateInfo({ checking: true });
+    } else {
+      this.duplicateBadge?.setRefining(true);
     }
 
     const quoteText = this.captureState.selectedText || this.currentData.text;
@@ -1541,6 +1562,7 @@ export class OverlayBar {
     } finally {
       if (checkSequence === this.duplicateCheckSequence) {
         this.captureState.isCheckingDuplicate = false;
+        this.duplicateBadge?.setRefining(false);
       }
     }
   }
@@ -1599,7 +1621,27 @@ export class OverlayBar {
       this.captureState.selectedText || this.currentData?.text,
       this.currentData ? capturePostedAt(this.currentData) : null,
     );
+
+    const result = state && 'result' in state ? state.result : null;
+    this.ensureSimilarPanel()?.update(result);
+
+    // Applied after the badge so it wins: the badge only sees the primary match
+    // and will happily enable Submit when the primary is a benign same-originator
+    // hit, even though an exact cross-originator match sits behind it.
+    if (blockingExactConflict(result)) {
+      this.updateSubmitButtonWarning(false, 'Resolve Attribution');
+    }
+
     this.syncCollectionPickerWithDuplicateState(state);
+  }
+
+  private ensureSimilarPanel(): SimilarPanel | null {
+    if (!this.similarPanel) {
+      const container = this.shadow?.getElementById('similar-panel');
+      if (!container) return null;
+      this.similarPanel = new SimilarPanel(container);
+    }
+    return this.similarPanel;
   }
 
   private async clearPreloadedDuplicateCheckForCurrentUrl(): Promise<void> {
@@ -1626,6 +1668,7 @@ export class OverlayBar {
     message?: string;
     collectionWarning?: string;
     action?: 'created' | 'sighting_added';
+    attributionConflicts?: QuoteMatch[];
     id?: string;
     quoteId?: string;
     alreadyMember?: boolean;

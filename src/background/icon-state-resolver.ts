@@ -81,11 +81,13 @@ export function resolveIconPresentation(
 
   if (auth === AuthState.AUTHENTICATED && tab.isPostPage) {
     if (dup) {
+      // null means the check told us nothing (it errored) — fall through to the
+      // quote-status tiers rather than badging captures we cannot vouch for.
       const passageCount = passageCountForUrl(dup);
       if (passageCount === 'unknown') {
         return ICON_STATES.HasCaptures;
       }
-      if (passageCount >= 2) {
+      if (passageCount !== null && passageCount >= 2) {
         return {
           ...ICON_STATES.Count,
           badgeText: passageCount <= 9 ? String(passageCount) : '9+',

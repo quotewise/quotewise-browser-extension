@@ -79,7 +79,7 @@ describe('DuplicateBadge', () => {
   it('shows spinner when checking', () => {
     badge.update({ checking: true });
     expect(container.querySelector('.spinner')).toBeTruthy();
-    expect(container.title).toBe('Checking for duplicates...');
+    expect(container.title).toBe('Checking Quotewise for duplicates…');
   });
 
   it('shows "Already captured" link for exact_url with url', () => {
@@ -321,6 +321,17 @@ describe('DuplicateBadge', () => {
     expect(retry).toHaveBeenCalledTimes(1);
   });
 
+  it('does not claim the post has captures when the check could not complete', () => {
+    // The passages panel renders on every branch including couldnt_verify, so a
+    // failed check used to read "Couldn't verify duplicates" with "This post
+    // already has captures" directly beneath it.
+    badge.update({ result: couldntVerifyDuplicateResult() });
+
+    expect(container.textContent).toContain("Couldn't verify duplicates");
+    expect(container.textContent).not.toContain('captures');
+    expect(container.querySelector('.passages-panel')).toBeNull();
+  });
+
   it('renders an attribution conflict notice with resolve link and no decision buttons', () => {
     badge.update({ result: conflictDuplicateResult() });
 
@@ -555,5 +566,35 @@ describe('DuplicateBadge', () => {
     expect(templateSource).toContain('@media (prefers-reduced-motion: reduce)');
     expect(templateSource).toContain('@media (prefers-contrast: more)');
     expect(overlaySource).toContain("this.root.style.position = 'fixed'");
+  });
+});
+
+describe('DuplicateBadge refining spinner + tooltips', () => {
+  it('labels the bare checking spinner with a tooltip', () => {
+    const container = document.createElement('div');
+    const badge = new DuplicateBadge(container, {} as ConstructorParameters<typeof DuplicateBadge>[1]);
+    badge.update({ checking: true });
+    const spinner = container.querySelector('.spinner') as HTMLElement;
+    expect(spinner).toBeTruthy();
+    expect(spinner.title).toBe('Checking Quotewise for duplicates…');
+    expect(spinner.getAttribute('role')).toBe('status');
+  });
+
+  it('setRefining appends a tooltip spinner beside existing content and removes it cleanly', () => {
+    const container = document.createElement('div');
+    container.innerHTML = '<span class="badge">existing</span>';
+    const badge = new DuplicateBadge(container, {} as ConstructorParameters<typeof DuplicateBadge>[1]);
+
+    badge.setRefining(true);
+    badge.setRefining(true); // idempotent — no duplicate spinners
+    expect(container.querySelectorAll('.refine-spinner').length).toBe(1);
+    expect(container.querySelector('.badge')?.textContent).toBe('existing');
+    const spinner = container.querySelector('.refine-spinner') as HTMLElement;
+    expect(spinner.title).toBe('Verifying against the full Quotewise library…');
+    expect(spinner.getAttribute('role')).toBe('status');
+
+    badge.setRefining(false);
+    expect(container.querySelector('.refine-spinner')).toBeNull();
+    expect(container.querySelector('.badge')?.textContent).toBe('existing');
   });
 });

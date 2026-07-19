@@ -1,11 +1,13 @@
 import type { DuplicateCheckResult } from '../../../types/api';
 import { getWebBaseUrl } from '../../../config/environment';
 import {
+  blockingExactConflict,
   classifyMatchResolution,
   classifyDuplicateSighting,
   getMatchForDuplicateSightingState,
   matchedSightingForText,
   passageCountForUrl,
+  primaryMatch,
 } from '../../../utils/duplicate-status';
 import { buildSimilarMatchView, renderSimilarDiff, type ResolutionDecision } from './similar-diff';
 import { safeHref, safeHttpsUrl } from './dom-utils';
@@ -59,8 +61,8 @@ export class DuplicateBadge {
     if (!state) return;
 
     if ('checking' in state) {
-      this.container.innerHTML = '<div class="spinner" style="width:12px;height:12px;"></div>';
-      this.container.title = 'Checking for duplicates...';
+      this.container.innerHTML = '<div class="spinner" style="width:12px;height:12px;" role="status" aria-label="Checking Quotewise for duplicates" title="Checking Quotewise for duplicates…"></div>';
+      this.container.title = 'Checking Quotewise for duplicates…';
       return;
     }
 
@@ -87,7 +89,7 @@ export class DuplicateBadge {
     }
 
     if (resolution === 'conflict') {
-      const match = Array.isArray(result.matches) ? result.matches[0] : undefined;
+      const match = primaryMatch(result.matches);
       this.renderConflict(match, this.getSafeQuotePageUrl(match));
       this.renderPassagesPanel(result);
       return;
@@ -104,10 +106,20 @@ export class DuplicateBadge {
         return;
       }
 
-      renderSimilarDiff(this.container, similarView, {
-        onResolve: (decision) => this.callbacks.onResolveDecision?.(decision),
-      });
-      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Choose Action' });
+      // Submission is vetoed further down when this exact text is on record
+      // under another originator. Offering Sighting/Variant anyway would put a
+      // button on screen that silently does nothing when clicked — the panel
+      // below already explains why the capture can't proceed.
+      const blocked = !!blockingExactConflict(result);
+
+      renderSimilarDiff(
+        this.container,
+        blocked ? { ...similarView, sightingAvailable: false, variantAvailable: false } : similarView,
+        { onResolve: (decision) => this.callbacks.onResolveDecision?.(decision) },
+      );
+      this.callbacks.onSubmitStateChange(blocked
+        ? { type: 'submit', enabled: false, text: 'Resolve Attribution', style: 'warning' }
+        : { type: 'submit', enabled: false, text: 'Choose Action' });
       this.renderPassagesPanel(result);
       return;
     }
@@ -130,7 +142,9 @@ export class DuplicateBadge {
 
   private renderPassagesPanel(result: DuplicateCheckResult): void {
     const count = passageCountForUrl(result);
-    if (count === 0) return;
+    // null is "the check told us nothing" — render no panel rather than assert
+    // captures. This path runs on the couldnt_verify branch too.
+    if (count === 0 || count === null) return;
 
     this.container.classList.add('has-passages');
 
@@ -232,6 +246,30 @@ export class DuplicateBadge {
       this.callbacks.onSubmitStateChange({ type: 'submit', enabled: true });
     }
     // No badge for new_quote — that's the expected case
+  }
+
+  /**
+   * Small spinner appended NEXT TO the currently displayed badge while the live
+   * duplicate check refines a preloaded result. Tooltip-only explanation — the
+   * action is trainable, so it earns no permanent text. Any subsequent update()
+   * re-render clears it implicitly.
+   */
+  setRefining(refining: boolean): void {
+    const existing = this.container.querySelector('.refine-spinner');
+    if (!refining) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner refine-spinner';
+    spinner.style.width = '12px';
+    spinner.style.height = '12px';
+    spinner.style.flexShrink = '0';
+    spinner.setAttribute('role', 'status');
+    spinner.setAttribute('aria-label', 'Verifying against the full Quotewise library');
+    spinner.title = 'Verifying against the full Quotewise library…';
+    this.container.appendChild(spinner);
   }
 
   private renderCouldntVerify(): void {

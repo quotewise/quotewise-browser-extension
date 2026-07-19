@@ -87,6 +87,33 @@ describe('resolveIconPresentation', () => {
     });
   });
 
+  it('claims nothing about captures when the duplicate check failed', () => {
+    // passageCountForUrl cannot count a check that never completed. Reporting
+    // "this post has captured passages" on the strength of a failure asserts
+    // something we do not know.
+    const presentation = resolveIconPresentation(
+      AuthState.AUTHENTICATED,
+      duplicate('new_quote', { search_metadata: { error: true } }),
+      tweetTab,
+    );
+
+    expect(presentation.badgeText).toBe('');
+    expect(presentation.title).not.toContain('captured passages');
+  });
+
+  it('still reports captures it cannot count', () => {
+    const presentation = resolveIconPresentation(
+      AuthState.AUTHENTICATED,
+      duplicate('new_quote', { existing_sightings_for_url: 'malformed' as never }),
+      tweetTab,
+    );
+
+    expect(presentation).toMatchObject({
+      badgeText: '=',
+      title: 'Quotewise — this post has captured passages',
+    });
+  });
+
   it('renders in-collection ahead of exact duplicate', () => {
     expect(resolveIconPresentation(
       AuthState.AUTHENTICATED,
@@ -153,8 +180,9 @@ describe('resolveIconPresentation', () => {
       title: 'Quotewise — ready to capture',
     });
 
+    // Positive evidence of captures whose count is unavailable — safe to badge.
+    // An errored check is NOT in this set; it is evidence of nothing.
     for (const result of [
-      duplicate('duplicate', { search_metadata: { error: true } }),
       duplicate('duplicate', { existing_sightings_total: -1 }),
       duplicate('duplicate', { existing_sightings_for_url: {} as never }),
       duplicate('duplicate', {
@@ -288,14 +316,17 @@ describe('resolveIconPresentation', () => {
     }
   });
 
-  it('uses the neutral captured state on errored checks and supported idle on non-tweet pages', () => {
+  it('falls back to the ambient state on errored checks and supported idle on non-tweet pages', () => {
+    // Previously badged "=" / "this post has captured passages" — a claim built
+    // on a check that never completed. The tray reports the failure; the icon
+    // simply declines to assert.
     expect(resolveIconPresentation(
       AuthState.AUTHENTICATED,
       duplicate('duplicate', { search_metadata: { error: true } }),
       tweetTab,
     )).toMatchObject({
-      badgeText: '=',
-      title: 'Quotewise — this post has captured passages',
+      badgeText: '',
+      title: 'Quotewise — ready to capture',
     });
 
     expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote'), supportedNonTweetTab)).toMatchObject({
