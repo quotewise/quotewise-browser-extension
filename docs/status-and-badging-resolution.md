@@ -57,20 +57,17 @@ flowchart TD
   equality — a fact, not a threshold.
 - `match_class: 'conflict'` means *matched a different originator*, per ADR-0001.
   It is not a strength signal, and it is deliberately **not** orthogonalized.
-- **Relation fields decorate, they never decide.** `quote_role`, `has_relations`
-  and `canonical_quote_id` exist so a variant group isn't rendered as several
-  independent duplicates. Only the positive direction is trustworthy:
+- **`relations` decides; the other relation fields only decorate.**
 
-  | field | trust |
-  |---|---|
-  | `canonical_quote_id` present | reliable (real FK) — absence proves nothing |
-  | `has_relations: true` | reliable |
-  | `has_relations: false` | **not** proof of "no relations" (948 rows lie) |
-  | `quote_role: 'variant'` | **not** proof of an edge (1,780 rows lie) |
+  | field | trust | use for |
+  |---|---|---|
+  | `relations` | **authoritative** — read from the graph, no drift. Scope is edges *between returned matches*; `[]` means "not linked to anything else here", never "unlinked" | grouping, gating a link action |
+  | `canonical_quote_id` present | reliable (real FK) — absence proves nothing | grouping (additive only) |
+  | `has_relations: true` | reliable | decoration |
+  | `has_relations: false` | **not** proof of "no relations" (948 rows lie) | nothing |
+  | `quote_role: 'variant'` | **not** proof of an edge (1,780 rows lie) | nothing |
 
-  Never conclude "unlinked, therefore safe to link" from these. Gate any write on
-  the server's response to the link action itself. Authoritative pairwise edges
-  are tracked in `qw-gqae3`.
+  Never conclude "unlinked, therefore safe to link" from the bottom three.
 
 ---
 
@@ -236,7 +233,7 @@ flowchart TD
     A([update result]) --> B["conflicts = secondaryConflicts(result)"]
     B --> C{"empty?"}
     C -->|yes| H([hidden])
-    C -->|no| GR["groupByCanonical()<br/>key = canonical_quote_id || quote_id<br/>leader = canonical, else closest"]
+    C -->|no| GR["groupRelatedMatches()<br/>connected components over<br/>relations ∪ canonical_quote_id<br/>leader = canonical, else closest"]
     GR --> D{"any match_type ===<br/>'exact_different_originator'?"}
     D -->|yes| E["⛔ expanded, warning tone<br/>'This exact quote is already<br/>attributed to X'<br/>blocking match's group leads"]
     D -->|no| F["ℹ️ collapsed &lt;details&gt;, info tone<br/>'Might be a duplicate of N quotes<br/>by other originators'<br/>N counts GROUPS, not matches"]
@@ -246,8 +243,42 @@ flowchart TD
     class E danger
 ```
 
-Grouping is display-only. `has_relations` and `quote_role` are never consulted —
-only `canonical_quote_id`, and only in the positive direction.
+Grouping uses `relations` (authoritative) unioned with `canonical_quote_id`
+(additive hint). `has_relations` and `quote_role` are never consulted. Components
+are transitive: A–B and B–C land in one group with no direct A–C edge.
+
+## 3a. No originator resolved
+
+A check may run with `originator_slug` omitted — supported since ADR-0009, ~10ms
+warm. With nothing claimed there is nothing to conflict *with*, so the server
+classifies on strength alone:
+
+| field | value |
+|---|---|
+| `different_originator` | always `false` |
+| `match_class` | `exact` or `similar` — **never** `conflict` |
+| `match.originator` | the matched quote's *real* attribution — read it from here |
+| `search_metadata.lexical_search_skipped_unscoped` | `true` |
+
+Consequences, all of which fall out of the selectors rather than needing special
+cases: `sameOriginatorMatches()` keeps everything, `blockingExactConflict()`
+never fires, and the similar panel stays hidden — correctly, since "other
+originators" is not a meaningful category without a target originator.
+
+Two things this path must respect:
+
+- **Submit can never be enabled.** The badge reasons about the quote, not the
+  attribution, so it will ask for an enabled Submit. `submitQuote` would return
+  in silence at its `!originator` guard, so the directive is vetoed in
+  `onSubmitStateChange` and the button reads "Add originator first".
+  `view_quote` directives pass through — the quote exists, reading it is useful.
+- **Collections still work.** Adding an *existing* quote to a collection routes
+  through `addExistingQuoteToSelectedCollections()`, which needs no originator.
+  That path is deliberately not vetoed.
+
+An empty result here is advisory, never proof the quote is new — the lexical pass
+that catches punctuation-only variants does not run. Re-check once an originator
+is chosen.
 
 Post-submit (`showPostSubmit`, ADR-0009 §5) reuses the panel in advisory tone —
 the quote was created regardless — and **suppresses the 1000ms auto-hide** so the

@@ -147,6 +147,79 @@ describe('SimilarPanel', () => {
     expect(container.querySelector('li')?.textContent).toContain('known variant');
   });
 
+  it('groups on relation edges even when neither side names a canonical', () => {
+    // canonical_quote_id is null on both, so the hint alone would have shown
+    // these as two independent duplicates. The edges are authoritative.
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({
+          quote_id: 'a',
+          text: 'One wording',
+          relations: [{ other_quote_id: 'b', relation_type: 'variant', direction: 'outgoing' }],
+        }),
+        crossOriginator({
+          quote_id: 'b',
+          text: 'Another wording',
+          relations: [{ other_quote_id: 'a', relation_type: 'variant', direction: 'incoming' }],
+        }),
+      ],
+    }));
+
+    const rows = container.querySelectorAll('li');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('+1 known variant');
+  });
+
+  it('names the actual relation type rather than assuming variant', () => {
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({
+          quote_id: 'a',
+          relations: [{ other_quote_id: 'b', relation_type: 'translation', direction: 'outgoing' }],
+        }),
+        crossOriginator({ quote_id: 'b' }),
+      ],
+    }));
+
+    expect(container.querySelector('li')?.textContent).toContain('+1 known translation');
+  });
+
+  it('merges transitively linked matches into one group', () => {
+    // A-B and B-C with no direct A-C edge still describe one group.
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({
+          quote_id: 'a',
+          relations: [{ other_quote_id: 'b', relation_type: 'variant', direction: 'outgoing' }],
+        }),
+        crossOriginator({
+          quote_id: 'b',
+          relations: [{ other_quote_id: 'c', relation_type: 'variant', direction: 'outgoing' }],
+        }),
+        crossOriginator({ quote_id: 'c' }),
+      ],
+    }));
+
+    const rows = container.querySelectorAll('li');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('+2 known variants');
+  });
+
+  it('treats an empty relations array as "not linked here", not as grouping evidence', () => {
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({ quote_id: 'a', relations: [] }),
+        crossOriginator({ quote_id: 'b', relations: [] }),
+      ],
+    }));
+
+    expect(container.querySelectorAll('li')).toHaveLength(2);
+  });
+
   it('never treats has_relations or quote_role as evidence', () => {
     // Both drift from the relation graph in production, so they must not group,
     // label, or suppress anything. Two unrelated quotes stay two rows.
