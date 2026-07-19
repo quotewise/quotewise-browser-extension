@@ -59,7 +59,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
         }
         .quote-preview-row {
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           gap: 12px;
           padding: 8px 12px;
         }
@@ -75,7 +75,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
         }
         .quote-preview {
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           gap: 8px;
           flex: 1;
           min-width: 0;
@@ -112,7 +112,6 @@ export function buildOverlayMarkup(platformLabel: string): string {
           cursor: pointer;
           font-size: 11px;
           flex-shrink: 0;
-          margin-top: 2px;
         }
         .clear-selection:hover {
           background: rgba(239,68,68,0.3);
@@ -141,6 +140,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
         .quote-preview-row .section.right {
           flex-direction: column;
           align-items: stretch;
+          align-self: center;
           gap: 6px;
           width: min(240px, 34vw);
           min-width: 190px;
