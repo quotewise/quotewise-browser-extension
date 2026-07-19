@@ -1,6 +1,6 @@
 import type { DuplicateCheckResult } from '../../../types/api';
 import { getWebBaseUrl } from '../../../config/environment';
-import { classifyMatchResolution } from '../../../utils/duplicate-status';
+import { classifyMatchResolution, primaryMatch } from '../../../utils/duplicate-status';
 import { diffWords, type WordDiffToken } from '../../../utils/word-diff';
 import { safeHttpsUrl } from './dom-utils';
 
@@ -32,7 +32,7 @@ export function buildSimilarMatchView(
     return null;
   }
 
-  const match = Array.isArray(result.matches) ? result.matches[0] : undefined;
+  const match = primaryMatch(result.matches);
   const quoteId = coerceQuoteId(match?.quote_id);
   if (!match) {
     return {

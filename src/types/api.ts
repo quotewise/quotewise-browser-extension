@@ -39,6 +39,45 @@ export interface HandleLookupResult {
   client_rtt_ms?: number;
 }
 
+/**
+ * One entry of the duplicate-check `matches` list. Since ADR-0009 the backend
+ * runs a pgvector sweep, so this list is a single distance-sorted mix of
+ * same-originator and cross-originator hits — never assume it is homogeneous,
+ * and never select from it by position (see `primaryMatch`).
+ */
+export interface QuoteMatch {
+  quote_id: string;
+  version_id?: number;   // Declared required historically; the server has never emitted it.
+  text: string;
+  similarity: number;    // 0-100, higher is better — including for semantic matches.
+  /**
+   * Free-form provenance label. `exact_different_originator` is the one value
+   * the client keys on: it is claimed only on proven byte equality, so it can
+   * hard-block submission without the client doing any similarity math.
+   * Deliberately not a union — legacy values (`exact`, `near`, `fuzzy`,
+   * `similar`, `exact_same_originator`) are still in circulation.
+   */
+  match_type: string;
+  in_user_collections: boolean;
+  member_collections: MemberCollection[];
+  originator: Originator;
+  workflow_status: string;
+  likes_count: number;
+  // Sighting status for platform awareness
+  short_code?: string;
+  url?: string;
+  quote_date?: string;
+  match_source?: 'url' | 'similarity';
+  match_class?: 'exact' | 'conflict' | 'similar';
+  existing_sighting_for_this_url?: boolean;
+  sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
+  platform_sighting_url?: string | null;
+  // ADR-0009 additions — optional so older server responses still typecheck.
+  primary?: boolean;
+  different_originator?: boolean;
+  match_engine?: 'lexical' | 'semantic' | 'url';
+}
+
 export interface DuplicateCheckResult {
   recommendation: 'duplicate' | 'new_version' | 'new_quote' | 'attribution_conflict' |
                   'new_quote_known_author' | 'duplicate_known_author' | 'new_version_known_author' | 'attribution_conflict_resolved';
@@ -53,27 +92,7 @@ export interface DuplicateCheckResult {
     match_confidence: number;
   };
   suggested_originator_id?: number;
-  matches: Array<{
-    quote_id: string;
-    version_id: number;
-    text: string;
-    similarity: number;
-    match_type: string;
-    in_user_collections: boolean;
-    member_collections: MemberCollection[];
-    originator: Originator;
-    workflow_status: string;
-    likes_count: number;
-    // Sighting status for platform awareness
-    short_code?: string;
-    url?: string;
-    quote_date?: string;
-    match_source?: 'url' | 'similarity';
-    match_class?: 'exact' | 'conflict' | 'similar';
-    existing_sighting_for_this_url?: boolean;
-    sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
-    platform_sighting_url?: string | null;
-  }>;
+  matches: QuoteMatch[];
   existing_sightings_for_url?: Array<{
     id: number;
     quote_id: string;
@@ -93,6 +112,12 @@ export interface DuplicateCheckResult {
     query_time_ms?: number;
     client_rtt_ms?: number;
     error?: boolean;
+    // ADR-0009 — informational. `vector_search_skipped_uncached` marks a
+    // preflight that ran without an embedding, so its absence of matches is not
+    // authoritative; the live check refines it.
+    vector_search_used?: boolean;
+    vector_search_skipped_uncached?: boolean;
+    cross_originator_match_found?: boolean;
   };
 }
 

@@ -5,6 +5,7 @@ import {
   mapRecommendationToQuoteStatus,
   matchedSightingForText,
   passageCountForUrl,
+  primaryMatch,
 } from '../../src/utils/duplicate-status';
 import type { DuplicateCheckResult } from '../../src/types/api';
 import {
@@ -31,6 +32,73 @@ function duplicate(
     ...overrides,
   };
 }
+
+const OTHER_ORIGINATOR = {
+  id: 'originator-2',
+  full_name: 'Different Author',
+  sort_name: null,
+  birth_year: null,
+  death_year: null,
+};
+
+function crossOriginatorMatch(
+  overrides: Partial<DuplicateCheckResult['matches'][number]> = {},
+): DuplicateCheckResult['matches'][number] {
+  return duplicateMatch({
+    quote_id: 'cross',
+    match_class: 'conflict',
+    match_type: 'near_different_originator',
+    different_originator: true,
+    originator: OTHER_ORIGINATOR,
+    ...overrides,
+  });
+}
+
+describe('primary match selection', () => {
+  it('selects the server-flagged primary regardless of position', () => {
+    const primary = duplicateMatch({ quote_id: 'same', primary: true });
+
+    expect(primaryMatch([crossOriginatorMatch(), primary])?.quote_id).toBe('same');
+  });
+
+  it('falls back to index 0 when no match is flagged (older servers)', () => {
+    expect(primaryMatch([crossOriginatorMatch(), duplicateMatch({ quote_id: 'same' })])?.quote_id)
+      .toBe('cross');
+  });
+
+  it('is total for absent and malformed lists', () => {
+    expect(primaryMatch(undefined)).toBeUndefined();
+    expect(primaryMatch([])).toBeUndefined();
+    expect(() => primaryMatch('not-an-array' as never)).not.toThrow();
+    expect(primaryMatch('not-an-array' as never)).toBeUndefined();
+  });
+
+  it('classifies a mixed list by the primary rather than by position', () => {
+    // The cross-originator hit sorts closer in embedding space, but the server
+    // flagged the same-originator match as primary. Position must not win.
+    const result = duplicateResult({
+      recommendation: 'new_version',
+      in_quotewise: true,
+      matches: [
+        crossOriginatorMatch(),
+        duplicateMatch({ quote_id: 'same', match_class: 'similar', primary: true }),
+      ],
+    });
+
+    expect(classifyMatchResolution(result)).toBe('similar');
+  });
+
+  it('falls back to the primary rather than index 0 for sighting-state selection', () => {
+    const match = getMatchForDuplicateSightingState({
+      matches: [
+        crossOriginatorMatch({ sighting_status: 'unknown' }),
+        duplicateMatch({ quote_id: 'same', primary: true, sighting_status: 'unknown' }),
+      ],
+    }, 'same_platform_sighting');
+
+    expect(match?.quote_id).toBe('same');
+  });
+});
 
 describe('duplicate sighting status', () => {
   it('classifies only the normalized matching URL passage as exact sighting', () => {
@@ -222,6 +290,29 @@ describe('quote-status recommendation mapping', () => {
         workflow_status: 'published',
         likes_count: 0,
       }],
+    }))).toBe('InCollection');
+  });
+
+  it('ignores collection membership on cross-originator matches', () => {
+    // The vector sweep now returns same- and cross-originator matches in one
+    // list. Another originator's quote sitting in the user's collection must not
+    // report the quote being captured as already collected.
+    expect(mapRecommendationToQuoteStatus(duplicate('new_quote', {
+      matches: [crossOriginatorMatch({ in_user_collections: true })],
+    }))).not.toBe('InCollection');
+
+    expect(mapRecommendationToQuoteStatus(duplicate('new_quote', {
+      matches: [crossOriginatorMatch({
+        member_collections: [{ slug: 'favorites', name: 'Favorites' }],
+      })],
+    }))).not.toBe('InCollection');
+
+    // A same-originator match in the same mixed list still counts.
+    expect(mapRecommendationToQuoteStatus(duplicate('duplicate', {
+      matches: [
+        crossOriginatorMatch(),
+        duplicateMatch({ primary: true, in_user_collections: true }),
+      ],
     }))).toBe('InCollection');
   });
 

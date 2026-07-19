@@ -26,6 +26,7 @@ import {
   classifyDuplicateSighting,
   classifyMatchResolution,
   getMatchForDuplicateSightingState,
+  primaryMatch,
 } from '../../utils/duplicate-status';
 import {
   getSettings,
@@ -601,11 +602,9 @@ export class OverlayBar {
 
     if (
       result.in_quotewise &&
-      classifyMatchResolution(result, currentText) !== 'conflict' &&
-      Array.isArray(result.matches) &&
-      result.matches.length > 0
+      classifyMatchResolution(result, currentText) !== 'conflict'
     ) {
-      return result.matches[0];
+      return primaryMatch(result.matches) ?? null;
     }
 
     return null;

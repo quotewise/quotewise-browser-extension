@@ -6,6 +6,7 @@ import {
   getMatchForDuplicateSightingState,
   matchedSightingForText,
   passageCountForUrl,
+  primaryMatch,
 } from '../../../utils/duplicate-status';
 import { buildSimilarMatchView, renderSimilarDiff, type ResolutionDecision } from './similar-diff';
 import { safeHref, safeHttpsUrl } from './dom-utils';
@@ -87,7 +88,7 @@ export class DuplicateBadge {
     }
 
     if (resolution === 'conflict') {
-      const match = Array.isArray(result.matches) ? result.matches[0] : undefined;
+      const match = primaryMatch(result.matches);
       this.renderConflict(match, this.getSafeQuotePageUrl(match));
       this.renderPassagesPanel(result);
       return;

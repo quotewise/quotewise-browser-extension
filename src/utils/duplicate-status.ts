@@ -17,6 +17,23 @@ export interface DuplicateSightingMatch {
   sighting_status?: SightingStatus;
   existing_sighting_for_this_url?: boolean;
   match_source?: 'url' | 'similarity';
+  primary?: boolean;
+}
+
+/**
+ * The match that drives headline state.
+ *
+ * Since ADR-0009 `matches` is one distance-sorted list mixing same-originator
+ * and cross-originator hits, so `matches[0]` is no longer a safe proxy — the
+ * server flags the match it selected. The `?? [0]` fallback keeps pre-ADR-0009
+ * server responses (and the synthesized matches in the service worker) working,
+ * since those servers already sorted the intended match first.
+ *
+ * Do not reintroduce a positional or threshold-based rule on top of this.
+ */
+export function primaryMatch<T extends { primary?: boolean }>(matches?: T[]): T | undefined {
+  if (!Array.isArray(matches)) return undefined;
+  return matches.find(match => match?.primary === true) ?? matches[0];
 }
 
 export interface DuplicateSightingInput {
@@ -97,14 +114,14 @@ export function getMatchForDuplicateSightingState<T extends DuplicateSightingMat
 
   switch (state) {
     case 'exact_sighting':
-      return matches.find(match => match.sighting_status === 'exact_url') || matches[0];
+      return matches.find(match => match.sighting_status === 'exact_url') || primaryMatch(matches);
     case 'same_platform_sighting':
-      return matches.find(match => match.sighting_status === 'has_platform_sighting') || matches[0];
+      return matches.find(match => match.sighting_status === 'has_platform_sighting') || primaryMatch(matches);
     case 'other_platform_sighting':
-      return matches.find(match => match.sighting_status === 'no_platform_sighting') || matches[0];
+      return matches.find(match => match.sighting_status === 'no_platform_sighting') || primaryMatch(matches);
     case 'unknown':
     default:
-      return matches[0];
+      return primaryMatch(matches);
   }
 }
 
@@ -118,7 +135,7 @@ export function classifyMatchResolution(
     return 'couldnt_verify';
   }
 
-  const match = Array.isArray(result.matches) ? result.matches[0] : undefined;
+  const match = primaryMatch(result.matches);
 
   if (matchedSightingForText(result, currentText)) {
     return 'exact';
@@ -147,9 +164,16 @@ export function mapRecommendationToQuoteStatus(result: DuplicateCheckResult | nu
     return 'None';
   }
 
+  // Scoped to same-originator matches: the mixed ADR-0009 list can carry another
+  // originator's quote that the user happens to have collected, which says
+  // nothing about the quote being captured here.
   if ((result.matches || []).some(match => (
-    match.in_user_collections === true ||
-    (Array.isArray(match.member_collections) && match.member_collections.length > 0)
+    match.match_class !== 'conflict' &&
+    match.different_originator !== true &&
+    (
+      match.in_user_collections === true ||
+      (Array.isArray(match.member_collections) && match.member_collections.length > 0)
+    )
   ))) {
     return 'InCollection';
   }
