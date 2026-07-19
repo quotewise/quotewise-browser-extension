@@ -148,6 +148,7 @@ export class OverlayBar {
   hide(): void {
     this.hidden = true;
     this.collapseCapture();
+    this.accountMenu?.closeMenu();
     if (this.root) {
       this.root.setAttribute('aria-hidden', 'true');
     }
@@ -237,6 +238,15 @@ export class OverlayBar {
       !this.captureState.selectedText &&
       !this.requiresSelection();
     previewEl.style.display = boxShowsFullSource ? 'none' : '';
+  }
+
+  /**
+   * The originator cluster sits in the always-visible top bar but only applies to
+   * an active capture; keep its visibility tied to the capture-row expanded state.
+   */
+  private syncOriginatorCluster(): void {
+    const cluster = this.shadow?.getElementById('originator-cluster') as HTMLElement | null;
+    if (cluster) cluster.hidden = !this.captureState.expanded;
   }
 
   private wireInteractions(): void {
@@ -424,6 +434,7 @@ export class OverlayBar {
     const captureRow = this.shadow.getElementById('capture-row');
     captureRow?.classList.add('expanded');
     this.captureState.expanded = true;
+    this.syncOriginatorCluster();
     this.syncStatsRow();
 
     // Update the quote preview to show selected text if any
@@ -744,6 +755,7 @@ export class OverlayBar {
     const captureRow = this.shadow?.getElementById('capture-row');
     captureRow?.classList.add('expanded');
     this.captureState.expanded = true;
+    this.syncOriginatorCluster();
 
     // Update quote preview to show the captured text
     this.updateQuotePreview();
@@ -875,6 +887,7 @@ export class OverlayBar {
   private collapseCapture(): void {
     this.stopSelectionWatcher();
     this.duplicateCheckSequence += 1;
+    this.accountMenu?.closeMenu();
     if (!this.shadow) return;
 
     const captureRow = this.shadow.getElementById('capture-row');
@@ -895,6 +908,7 @@ export class OverlayBar {
     };
     this.stats = {};
     this.statsRow?.clear();
+    this.syncOriginatorCluster();
 
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.progressIndicator?.reset();
@@ -1412,7 +1426,7 @@ export class OverlayBar {
    */
   private ensureActionButton(): ActionButton {
     if (!this.actionButton) {
-      const rightSection = this.shadow?.querySelector('.originator-row .section.right') as HTMLElement;
+      const rightSection = this.shadow?.querySelector('.quote-preview-row .section.right') as HTMLElement;
       this.actionButton = new ActionButton(rightSection, {
         onSubmit: () => {
           if (this.existingQuoteTarget) {

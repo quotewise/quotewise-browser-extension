@@ -257,4 +257,76 @@ describe('AccountMenu', () => {
     expect(menuEl.hidden).toBe(true);
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
+
+  it('closes when the user clicks outside the menu', async () => {
+    const menu = new AccountMenu(container, sendMessage);
+    await menu.mount();
+
+    const trigger = container.querySelector('#account-menu-btn') as HTMLButtonElement;
+    trigger.click();
+    const menuEl = container.querySelector('#account-menu') as HTMLElement;
+    expect(menuEl.hidden).toBe(false);
+
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(menuEl.hidden).toBe(true);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('stays open on clicks inside the menu', async () => {
+    const menu = new AccountMenu(container, sendMessage);
+    await menu.mount();
+
+    (container.querySelector('#account-menu-btn') as HTMLButtonElement).click();
+    const menuEl = container.querySelector('#account-menu') as HTMLElement;
+
+    menuEl.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+    expect(menuEl.hidden).toBe(false);
+  });
+
+  it('does not resurrect a menu the user closed while a failing action was pending', async () => {
+    let rejectFeedback: (value: { success: boolean; error: string }) => void = () => {};
+    sendMessage = jest.fn().mockImplementation(async message => {
+      if (message.type === MessageType.AUTH_STATE_GET) {
+        return { success: true, data: { state: AuthState.AUTHENTICATED, username: 'chris' } };
+      }
+      if (message.type === MessageType.OPEN_FEEDBACK_PAGE) {
+        return new Promise(resolve => { rejectFeedback = resolve; });
+      }
+      return { success: true };
+    });
+
+    const menu = new AccountMenu(container, sendMessage);
+    await menu.mount();
+
+    const trigger = container.querySelector('#account-menu-btn') as HTMLButtonElement;
+    trigger.click();
+    const menuEl = container.querySelector('#account-menu') as HTMLElement;
+    (container.querySelector('#account-send-feedback') as HTMLButtonElement).click();
+
+    // User dismisses the menu while the action is still in flight
+    menuEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(menuEl.hidden).toBe(true);
+
+    rejectFeedback({ success: false, error: 'Tabs unavailable' });
+    await flushPromises();
+
+    // The failed action must not force the dismissed menu back open
+    expect(menuEl.hidden).toBe(true);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('exposes closeMenu() so the host tray can dismiss it on interface mutations', async () => {
+    const menu = new AccountMenu(container, sendMessage);
+    await menu.mount();
+
+    (container.querySelector('#account-menu-btn') as HTMLButtonElement).click();
+    const menuEl = container.querySelector('#account-menu') as HTMLElement;
+    expect(menuEl.hidden).toBe(false);
+
+    menu.closeMenu();
+
+    expect(menuEl.hidden).toBe(true);
+  });
 });
