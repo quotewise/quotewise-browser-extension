@@ -407,6 +407,61 @@ describe('DuplicateBadge', () => {
     ]);
   });
 
+  it('reports the match instead of offering a sighting when no originator is resolved', () => {
+    // Live case: @Napoleonquot posts a quote already in Quotewise under
+    // Napoleon. The account is not an originator, so a sighting cannot be
+    // attached — but the badge still read "Add sighting" and linked to the
+    // existing quote, advertising an action the Submit gate refuses.
+    const result = duplicateResult({
+      recommendation: 'duplicate',
+      in_quotewise: true,
+      matches: [duplicateMatch({
+        quote_id: 'napoleon',
+        match_class: 'exact',
+        sighting_status: 'no_platform_sighting',
+        url: 'https://quotewise.io/quotes/napoleon',
+        originator: {
+          id: 'napoleon',
+          full_name: 'Napoleon Bonaparte',
+          sort_name: null,
+          birth_year: null,
+          death_year: null,
+        },
+      })],
+    });
+
+    badge.update({ result }, 'The surest way to remain poor is to be honest.', null, {
+      hasOriginator: false,
+    });
+
+    expect(container.textContent).not.toContain('Add sighting');
+    expect(container.textContent).toContain('Already in Quotewise — Napoleon Bonaparte');
+    // Still a link to the existing quote — reading it is the useful action.
+    expect(container.querySelector('a')?.getAttribute('href'))
+      .toBe('https://quotewise.io/quotes/napoleon');
+    expect(directives).toEqual([
+      { type: 'submit', enabled: false, text: 'Add originator first' },
+    ]);
+  });
+
+  it('still offers the sighting when an originator is resolved', () => {
+    const result = duplicateResult({
+      recommendation: 'duplicate',
+      in_quotewise: true,
+      matches: [duplicateMatch({
+        sighting_status: 'no_platform_sighting',
+        url: 'https://quotewise.io/quotes/known',
+      })],
+    });
+
+    badge.update({ result }, 'captured words', null, { hasOriginator: true });
+
+    expect(container.textContent).toContain('Add sighting');
+    expect(directives).toEqual([
+      { type: 'submit', enabled: true, text: 'Add Sighting' },
+    ]);
+  });
+
   it('keeps exact URL matches on the single already-captured action', () => {
     badge.update({
       result: exactDuplicateResult({

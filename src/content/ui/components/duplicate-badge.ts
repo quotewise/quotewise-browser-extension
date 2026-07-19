@@ -110,7 +110,7 @@ export class DuplicateBadge {
         : null;
 
       if (!similarView) {
-        this.renderLegacyStatus(result);
+        this.renderLegacyStatus(result, capturedText, hasOriginator);
         this.renderPassagesPanel(result);
         return;
       }
@@ -163,7 +163,7 @@ export class DuplicateBadge {
       return;
     }
 
-    this.renderLegacyStatus(result, capturedText);
+    this.renderLegacyStatus(result, capturedText, hasOriginator);
     this.renderPassagesPanel(result);
   }
 
@@ -238,7 +238,11 @@ export class DuplicateBadge {
     this.container.appendChild(panel);
   }
 
-  private renderLegacyStatus(result: DuplicateCheckResult, capturedText?: string): void {
+  private renderLegacyStatus(
+    result: DuplicateCheckResult,
+    capturedText?: string,
+    hasOriginator = true,
+  ): void {
     const sightingState = classifyDuplicateSighting(result, capturedText);
     const match = getMatchForDuplicateSightingState(result, sightingState);
     const quotePageUrl = this.getQuotePageUrl(match);
@@ -248,9 +252,32 @@ export class DuplicateBadge {
     } else if (sightingState === 'same_platform_sighting') {
       this.renderEarlierSighting(quotePageUrl, match);
     } else if (sightingState === 'other_platform_sighting') {
-      this.renderBadge('info', '🔵', 'Add sighting', quotePageUrl);
-      this.container.title = 'Quote exists in Quotewise, but this sighting has not been captured';
-      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: true, text: 'Add Sighting' });
+      // The only branch here that advertises an action rather than describing a
+      // state. A sighting attaches this post to an existing quote, which cannot
+      // be done without knowing who to attribute it to — so with no originator
+      // the label has to report what we found instead of promising something
+      // the Submit gate will refuse.
+      if (hasOriginator) {
+        this.renderBadge('info', '🔵', 'Add sighting', quotePageUrl);
+        this.container.title = 'Quote exists in Quotewise, but this sighting has not been captured';
+        this.callbacks.onSubmitStateChange({ type: 'submit', enabled: true, text: 'Add Sighting' });
+      } else {
+        const attribution = match?.originator?.full_name?.trim();
+        this.renderBadge(
+          'info',
+          'ℹ️',
+          attribution ? `Already in Quotewise — ${attribution}` : 'Already in Quotewise',
+          quotePageUrl,
+        );
+        this.container.title = attribution
+          ? `This quote is already in Quotewise, attributed to ${attribution}. Add an originator for this account before capturing it here.`
+          : 'This quote is already in Quotewise. Add an originator for this account before capturing it here.';
+        this.callbacks.onSubmitStateChange({
+          type: 'submit',
+          enabled: false,
+          text: 'Add originator first',
+        });
+      }
     } else if (result.recommendation === 'duplicate') {
       this.renderBadge('warning', '⚠️', 'Duplicate', quotePageUrl);
       this.container.title = result.reasoning || 'This quote may already exist';
