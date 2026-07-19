@@ -1502,6 +1502,8 @@ export class OverlayBar {
     this.captureState.isCheckingDuplicate = true;
     if (!hasCurrentResult) {
       this.updateDuplicateInfo({ checking: true });
+    } else {
+      this.duplicateBadge?.setRefining(true);
     }
 
     const quoteText = this.captureState.selectedText || this.currentData.text;
@@ -1541,6 +1543,7 @@ export class OverlayBar {
     } finally {
       if (checkSequence === this.duplicateCheckSequence) {
         this.captureState.isCheckingDuplicate = false;
+        this.duplicateBadge?.setRefining(false);
       }
     }
   }
