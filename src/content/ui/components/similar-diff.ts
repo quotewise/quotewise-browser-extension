@@ -1,8 +1,7 @@
 import type { DuplicateCheckResult } from '../../../types/api';
-import { getWebBaseUrl } from '../../../config/environment';
 import { classifyMatchResolution, primaryMatch } from '../../../utils/duplicate-status';
 import { diffWords, type WordDiffToken } from '../../../utils/word-diff';
-import { safeHttpsUrl } from './dom-utils';
+import { quotePageUrl } from './dom-utils';
 
 export interface SimilarMatchView {
   quoteId: number | null;
@@ -156,14 +155,6 @@ function markerFor(type: WordDiffToken['type']): string {
   if (type === 'added') return '+';
   if (type === 'removed') return '-';
   return '';
-}
-
-function quotePageUrl(match: DuplicateCheckResult['matches'][number]): string | null {
-  if (match.url) return safeHttpsUrl(match.url);
-  if (!match.short_code) return null;
-
-  const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
-  return safeHttpsUrl(`${baseUrl}/quotes/${encodeURIComponent(match.short_code)}`);
 }
 
 function addSightingState(

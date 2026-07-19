@@ -1,6 +1,8 @@
 import {
+  blockingExactConflict,
   classifyMatchResolution,
   classifyDuplicateSighting,
+  secondaryConflicts,
   getMatchForDuplicateSightingState,
   mapRecommendationToQuoteStatus,
   matchedSightingForText,
@@ -97,6 +99,55 @@ describe('primary match selection', () => {
     }, 'same_platform_sighting');
 
     expect(match?.quote_id).toBe('same');
+  });
+});
+
+describe('cross-originator selectors', () => {
+  it('blocks on an exact cross-originator match wherever it sits in the list', () => {
+    const exact = crossOriginatorMatch({ match_type: 'exact_different_originator' });
+
+    expect(blockingExactConflict(duplicateResult({ matches: [exact] }))?.quote_id).toBe('cross');
+    // Behind a same-originator primary — the case classifyMatchResolution misses.
+    expect(blockingExactConflict(duplicateResult({
+      matches: [duplicateMatch({ quote_id: 'same', primary: true }), exact],
+    }))?.quote_id).toBe('cross');
+  });
+
+  it('does not block on merely-similar cross-originator matches', () => {
+    expect(blockingExactConflict(duplicateResult({
+      matches: [crossOriginatorMatch()],
+    }))).toBeUndefined();
+  });
+
+  it('never blocks on an errored or absent check', () => {
+    expect(blockingExactConflict(null)).toBeUndefined();
+    expect(blockingExactConflict(undefined)).toBeUndefined();
+    expect(blockingExactConflict(couldntVerifyDuplicateResult({
+      matches: [crossOriginatorMatch({ match_type: 'exact_different_originator' })],
+    }))).toBeUndefined();
+    expect(() => blockingExactConflict({ matches: 'nope' } as never)).not.toThrow();
+  });
+
+  it('excludes the primary and same-originator matches from the secondary list', () => {
+    const result = duplicateResult({
+      matches: [
+        duplicateMatch({ quote_id: 'same', primary: true }),
+        duplicateMatch({ quote_id: 'same-2' }),
+        crossOriginatorMatch({ quote_id: 'cross-1' }),
+        crossOriginatorMatch({ quote_id: 'cross-2', match_class: undefined }),
+      ],
+    });
+
+    expect(secondaryConflicts(result).map(match => match.quote_id))
+      .toEqual(['cross-1', 'cross-2']);
+  });
+
+  it('drops a lone cross-originator match, since it is the primary', () => {
+    expect(secondaryConflicts(duplicateResult({
+      matches: [crossOriginatorMatch()],
+    }))).toEqual([]);
+    expect(secondaryConflicts(couldntVerifyDuplicateResult())).toEqual([]);
+    expect(secondaryConflicts(null)).toEqual([]);
   });
 });
 

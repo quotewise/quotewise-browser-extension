@@ -23,11 +23,13 @@ import { AccountMenu } from './components/account-menu';
 import { StatsRow, type CaptureStats } from './components/stats-row';
 import { buildOverlayMarkup } from './overlay-template';
 import {
+  blockingExactConflict,
   classifyDuplicateSighting,
   classifyMatchResolution,
   getMatchForDuplicateSightingState,
   primaryMatch,
 } from '../../utils/duplicate-status';
+import { SimilarPanel } from './components/similar-panel';
 import {
   getSettings,
   onSettingsChanged,
@@ -85,6 +87,7 @@ export class OverlayBar {
   private currentData: CapturedPostData | null = null;
   private duplicateBadge: DuplicateBadge | null = null;
   private duplicateBadgeContainer: HTMLElement | null = null;
+  private similarPanel: SimilarPanel | null = null;
   private collectionPicker: CollectionPicker | null = null;
   private collectionPickerContainer: HTMLElement | null = null;
   private existingQuoteTarget: { quoteId: string } | null = null;
@@ -1006,6 +1009,13 @@ export class OverlayBar {
       this.updateSubmitButton(false, 'Resolve Attribution');
       return;
     }
+    // This exact text is on record under a different originator (ADR-0009).
+    // Reachable when the primary match is a benign same-originator hit, so
+    // `matchResolution` above never sees it.
+    if (blockingExactConflict(duplicateResult)) {
+      this.updateSubmitButtonWarning(false, 'Resolve Attribution');
+      return;
+    }
 
     const sightingState = classifyDuplicateSighting(duplicateResult, quoteText);
     if (sightingState === 'exact_sighting') {
@@ -1601,7 +1611,27 @@ export class OverlayBar {
       this.captureState.selectedText || this.currentData?.text,
       this.currentData ? capturePostedAt(this.currentData) : null,
     );
+
+    const result = state && 'result' in state ? state.result : null;
+    this.ensureSimilarPanel()?.update(result);
+
+    // Applied after the badge so it wins: the badge only sees the primary match
+    // and will happily enable Submit when the primary is a benign same-originator
+    // hit, even though an exact cross-originator match sits behind it.
+    if (blockingExactConflict(result)) {
+      this.updateSubmitButtonWarning(false, 'Resolve Attribution');
+    }
+
     this.syncCollectionPickerWithDuplicateState(state);
+  }
+
+  private ensureSimilarPanel(): SimilarPanel | null {
+    if (!this.similarPanel) {
+      const container = this.shadow?.getElementById('similar-panel');
+      if (!container) return null;
+      this.similarPanel = new SimilarPanel(container);
+    }
+    return this.similarPanel;
   }
 
   private async clearPreloadedDuplicateCheckForCurrentUrl(): Promise<void> {

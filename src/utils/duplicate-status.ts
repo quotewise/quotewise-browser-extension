@@ -1,4 +1,4 @@
-import type { DuplicateCheckResult } from '../types/api';
+import type { DuplicateCheckResult, QuoteMatch } from '../types/api';
 import { normalizeQuoteText } from './quote-text';
 
 type SightingStatus = 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
@@ -123,6 +123,51 @@ export function getMatchForDuplicateSightingState<T extends DuplicateSightingMat
     default:
       return primaryMatch(matches);
   }
+}
+
+/**
+ * The one `match_type` the client keys on. Per ADR-0009 the backend claims it
+ * only on proven byte equality with the candidate text — never inferred from
+ * vector distance, not even distance 0.0 — so treating it as grounds to block
+ * submission keeps the client free of similarity math.
+ */
+export const EXACT_CONFLICT_MATCH_TYPE = 'exact_different_originator';
+
+function isCrossOriginator(match: QuoteMatch): boolean {
+  return match.different_originator === true || match.match_class === 'conflict';
+}
+
+/**
+ * A match asserting this exact text is already on record under a *different*
+ * originator. Submitting over it would fork an attribution, so the capture is
+ * blocked until a human resolves it in Quotewise.
+ *
+ * Scans every match, not just the primary: the server ranks same-originator
+ * matches first, so an exact cross-originator hit can sit behind a weaker
+ * same-originator one.
+ */
+export function blockingExactConflict(
+  result?: DuplicateCheckResult | null,
+): QuoteMatch | undefined {
+  if (!result || result.search_metadata?.error === true) return undefined;
+  if (!Array.isArray(result.matches)) return undefined;
+
+  return result.matches.find(match => match?.match_type === EXACT_CONFLICT_MATCH_TYPE);
+}
+
+/**
+ * Cross-originator matches other than the primary — what the similar-quotes
+ * panel lists. The primary is excluded because the duplicate badge already
+ * renders it as the headline state; including it would say the same thing twice.
+ */
+export function secondaryConflicts(result?: DuplicateCheckResult | null): QuoteMatch[] {
+  if (!result || result.search_metadata?.error === true) return [];
+  if (!Array.isArray(result.matches)) return [];
+
+  const primary = primaryMatch(result.matches);
+  return result.matches.filter(match => (
+    !!match && match !== primary && isCrossOriginator(match)
+  ));
 }
 
 export function classifyMatchResolution(
