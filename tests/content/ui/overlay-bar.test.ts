@@ -529,7 +529,7 @@ describe('OverlayBar', () => {
     await flushPromises();
 
     const shadow = (overlay as any).shadow as ShadowRoot;
-    const actionColumn = shadow.querySelector('.originator-row .section.right');
+    const actionColumn = shadow.querySelector('.quote-preview-row .section.right');
     expect(shadow.getElementById('progress-indicator')?.textContent).toContain('Checking quote');
     expect(actionColumn?.firstElementChild?.id).toBe('progress-indicator');
     expect(shadow.querySelector('.progress-track')).toBeTruthy();
@@ -1024,5 +1024,126 @@ describe('OverlayBar', () => {
     expect(shadow.querySelector('textarea')).toBeNull();
     expect(shadow.querySelector('input[type="text"]')).toBeNull();
     expect(shadow.querySelector('[contenteditable="true"]')).toBeNull();
+  });
+});
+
+describe('OverlayBar tray layout (originator in top bar, actions on quote row)', () => {
+  const data = {
+    text: 'A quote',
+    author: { username: 'author', displayName: 'Author' },
+    url: 'https://twitter.com/author/status/123',
+    date: '2026-05-07T12:00:00Z',
+    likes: 0, retweets: 0, replies: 0, views: 0, bookmarks: 0,
+    tweetType: 'original',
+    platform_data: { tweet_id: '123' },
+  } as unknown as import('../../../src/types').TwitterData;
+
+  afterEach(() => {
+    document.getElementById('qw-overlay-bar-root')?.remove();
+  });
+
+  function mounted(): { overlay: OverlayBar; shadow: ShadowRoot } {
+    const overlay = new OverlayBar(async () => data);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test access to private mount
+    (overlay as any).mount();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (overlay as any).currentData = data;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    return { overlay, shadow };
+  }
+
+  it('places the originator cluster in the top bar, right of the source preview', () => {
+    const { shadow } = mounted();
+    const cluster = shadow.getElementById('originator-cluster');
+    expect(cluster).toBeTruthy();
+    expect(cluster?.closest('.bar .section.center')).toBeTruthy();
+    // Right of source: the source preview precedes the cluster in the same section
+    const center = shadow.querySelector('.bar .section.center') as HTMLElement;
+    const ids = Array.from(center.children).map(el => el.id);
+    expect(ids.indexOf('tweet-preview')).toBeLessThan(ids.indexOf('originator-cluster'));
+    // The originator info (which hosts the add-originator link states) lives inside it
+    expect(cluster?.querySelector('#originator-info')).toBeTruthy();
+    // The old dedicated originator row is gone
+    expect(shadow.querySelector('.originator-row')).toBeNull();
+  });
+
+  it('hides the originator cluster until capture expands, and re-hides on collapse', () => {
+    const { overlay, shadow } = mounted();
+    const cluster = shadow.getElementById('originator-cluster') as HTMLElement;
+    expect(cluster.hidden).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drive the expanded path without auth mocks
+    (overlay as any).showLoginRequired('Login required');
+    expect(cluster.hidden).toBe(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (overlay as any).collapseCapture();
+    expect(cluster.hidden).toBe(true);
+  });
+
+  it('mounts the action button and progress indicator in the quote row action column', () => {
+    const { overlay, shadow } = mounted();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- updateActionButton creates the submit button
+    (overlay as any).updateActionButton(true);
+    const submitBtn = shadow.getElementById('submit-btn');
+    expect(submitBtn?.closest('.quote-preview-row .section.right')).toBeTruthy();
+    const right = shadow.querySelector('.quote-preview-row .section.right') as HTMLElement;
+    expect(right.querySelector('#progress-indicator')).toBeTruthy();
+    expect(right.querySelector('#collection-summary')).toBeTruthy();
+  });
+});
+
+describe('OverlayBar gear menu dismissal on interface mutations', () => {
+  const data = {
+    text: 'A quote',
+    author: { username: 'author', displayName: 'Author' },
+    url: 'https://twitter.com/author/status/123',
+    date: '2026-05-07T12:00:00Z',
+    likes: 0, retweets: 0, replies: 0, views: 0, bookmarks: 0,
+    tweetType: 'original',
+    platform_data: { tweet_id: '123' },
+  } as unknown as import('../../../src/types').TwitterData;
+
+  beforeEach(() => {
+    (chrome.runtime.sendMessage as jest.Mock).mockReset();
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      callback({ success: true });
+    });
+  });
+
+  afterEach(() => {
+    document.getElementById('qw-overlay-bar-root')?.remove();
+  });
+
+  async function mountedWithOpenMenu(): Promise<{ overlay: OverlayBar; shadow: ShadowRoot; menuEl: HTMLElement }> {
+    const overlay = new OverlayBar(async () => data);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test access to private mount
+    (overlay as any).mount();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (overlay as any).currentData = data;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    // Let the async AccountMenu.mount() settle
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    const gearBtn = shadow.getElementById('account-menu-btn') as HTMLButtonElement;
+    expect(gearBtn).toBeTruthy();
+    gearBtn.click();
+    const menuEl = shadow.getElementById('account-menu') as HTMLElement;
+    expect(menuEl.hidden).toBe(false);
+    return { overlay, shadow, menuEl };
+  }
+
+  it('closes the gear menu when the tray hides', async () => {
+    const { overlay, menuEl } = await mountedWithOpenMenu();
+    overlay.hide();
+    expect(menuEl.hidden).toBe(true);
+  });
+
+  it('closes the gear menu when the capture flow collapses/re-expands the tray', async () => {
+    const { overlay, menuEl } = await mountedWithOpenMenu();
+    // The reattempt-after-auth and login flows collapse + re-expand the capture UI
+    // while the menu can be open; that mutation must dismiss the menu.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (overlay as any).collapseCapture();
+    expect(menuEl.hidden).toBe(true);
   });
 });

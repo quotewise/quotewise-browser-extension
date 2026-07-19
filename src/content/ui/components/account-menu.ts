@@ -29,6 +29,7 @@ export class AccountMenu {
   private collectionsLoading = false;
   private collectionsError: string | null = null;
   private unsubscribe: (() => void) | null = null;
+  private outsideClickHandler: ((event: Event) => void) | null = null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -36,9 +37,12 @@ export class AccountMenu {
   ) {}
 
   async mount(): Promise<void> {
+    // Render the button/menu shell synchronously (renderMenu() no-ops until settings load)
+    // so the gear button exists in the DOM immediately, not after the settings/auth round-trip.
+    this.render();
     this.settings = await getSettings();
     await this.refreshAuthState();
-    this.render();
+    this.renderMenu();
     if (!this.unsubscribe) {
       this.unsubscribe = onSettingsChanged(next => {
         this.settings = next;
@@ -50,6 +54,10 @@ export class AccountMenu {
   destroy(): void {
     this.unsubscribe?.();
     this.unsubscribe = null;
+    if (this.outsideClickHandler) {
+      document.removeEventListener('pointerdown', this.outsideClickHandler);
+      this.outsideClickHandler = null;
+    }
     this.container.innerHTML = '';
     this.button = null;
     this.menu = null;
@@ -60,6 +68,10 @@ export class AccountMenu {
     this.username = stateData.username || null;
     this.statusMessage = null;
     this.renderMenu();
+  }
+
+  closeMenu(): void {
+    this.close();
   }
 
   private render(): void {
@@ -76,6 +88,21 @@ export class AccountMenu {
         this.open();
       }
     });
+    this.menu.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        this.close();
+        this.button?.focus();
+      }
+    });
+    // Menu lives in a shadow root, so composedPath (not event.target) is what reveals
+    // whether the click landed on the gear button or inside the menu.
+    this.outsideClickHandler = event => {
+      if (!this.menu || this.menu.hidden) return;
+      if (event.composedPath().includes(this.container)) return;
+      this.close();
+    };
+    document.addEventListener('pointerdown', this.outsideClickHandler);
     this.renderMenu();
   }
 
@@ -119,13 +146,6 @@ export class AccountMenu {
     });
     this.menu.querySelector('#account-auth-action')?.addEventListener('click', () => {
       void this.runAuthAction();
-    });
-    this.menu.addEventListener('keydown', event => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        this.close();
-        this.button?.focus();
-      }
     });
   }
 
@@ -251,7 +271,10 @@ export class AccountMenu {
     }
 
     this.renderMenu();
-    this.open();
+    // Only re-show the failure status if the user hasn't already dismissed the menu.
+    if (this.menu && !this.menu.hidden) {
+      this.open();
+    }
   }
 
   private async runAuthAction(): Promise<void> {
@@ -285,11 +308,11 @@ export class AccountMenu {
 
     await this.waitForMinimumBusyTime(startedAt);
     this.renderMenu();
-    // Dismiss the menu once the action completes (it was orphaning open after logout); keep it open
-    // only to surface a failure message.
+    // Dismiss the menu once the action completes (it was orphaning open after logout); on
+    // failure, only re-show the status if the user hasn't already dismissed the menu.
     if (succeeded) {
       this.close();
-    } else {
+    } else if (this.menu && !this.menu.hidden) {
       this.open();
     }
   }

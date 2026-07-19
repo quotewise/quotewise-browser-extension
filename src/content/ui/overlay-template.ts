@@ -57,7 +57,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
         .stats-row[hidden] {
           display: none;
         }
-        .quote-preview-row, .originator-row {
+        .quote-preview-row {
           display: flex;
           align-items: flex-start;
           gap: 12px;
@@ -138,14 +138,14 @@ export function buildOverlayMarkup(platformLabel: string): string {
           align-self: flex-start;
           margin-left: auto;
         }
-        .originator-row .section.right {
+        .quote-preview-row .section.right {
           flex-direction: column;
           align-items: stretch;
           gap: 6px;
           width: min(240px, 34vw);
           min-width: 190px;
         }
-        .originator-row .section.right button {
+        .quote-preview-row .section.right button {
           width: 100%;
         }
         .badge {
@@ -346,11 +346,22 @@ export function buildOverlayMarkup(platformLabel: string): string {
           from { transform: translateX(-120%); }
           to { transform: translateX(260%); }
         }
+        .originator-cluster {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 0 1 auto;
+          min-width: 0;
+        }
+        .originator-cluster[hidden] {
+          display: none;
+        }
         .originator-info {
           display: flex;
           align-items: center;
           gap: 8px;
           flex: 1;
+          min-width: 0;
         }
         .originator-name {
           font-weight: 500;
@@ -556,6 +567,12 @@ export function buildOverlayMarkup(platformLabel: string): string {
           </div>
           <div class="section center">
             <div class="text source-text" id="tweet-preview">Collecting source data…</div>
+            <div class="originator-cluster" id="originator-cluster" hidden>
+              <div class="badge label">Originator</div>
+              <div class="originator-info" id="originator-info" aria-live="polite">
+                <span class="status-text">Looking up originator...</span>
+              </div>
+            </div>
           </div>
           <div class="section right">
             <div class="account-menu-wrap" id="account-menu-wrap"></div>
@@ -572,16 +589,6 @@ export function buildOverlayMarkup(platformLabel: string): string {
               </div>
               <div class="section center">
                 <div class="quote-preview" id="quote-preview"></div>
-              </div>
-            </div>
-            <div class="originator-row">
-              <div class="section left">
-                <div class="badge label">Originator</div>
-              </div>
-              <div class="section center">
-                <div class="originator-info" id="originator-info" aria-live="polite">
-                  <span class="status-text">Looking up originator...</span>
-                </div>
               </div>
               <div class="section right">
                 <div class="progress-indicator" id="progress-indicator"></div>

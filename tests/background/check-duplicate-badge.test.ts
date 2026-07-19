@@ -273,22 +273,72 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
-    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '✓' });
+    // Submitting a quote puts it in Quotewise, NOT in a user collection — the badge
+    // must show the exists state (=), not the in-collection checkmark (✓).
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '=' });
     expect(chrome.action.setTitle).toHaveBeenLastCalledWith({
       tabId: 22,
-      title: 'Already in your collection',
+      title: 'Exact match already in Quotewise',
     });
+    expect(chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 22, text: '✓' });
     expect(chrome.storage.local.set).toHaveBeenCalledWith({
       preloadedDuplicateCheck: {
         url: tweetData.url,
         result: expect.objectContaining({
           recommendation: 'duplicate',
           in_quotewise: true,
-          matches: [expect.objectContaining({ in_user_collections: true })],
+          matches: [expect.objectContaining({ in_user_collections: false })],
         }),
         timestamp: expect.any(Number),
       },
     });
+  });
+
+  it('keeps the submitted state when a stale pre-submit duplicate check resolves late', async () => {
+    const { MessageType } = await import('../../src/types/chrome');
+    mockServiceWorkerDependencies({
+      handleMessage: jest.fn(async (message, _sender, sendResponse) => {
+        if (message.type === MessageType.SUBMIT_QUOTE) {
+          sendResponse({ success: true, message: 'Quote submitted successfully', quoteId: '456' });
+          return;
+        }
+        // A duplicate check that started before the submit resolves late with the
+        // pre-submit answer: the quote did not exist yet.
+        sendResponse({ success: true, result: newQuoteResult, ...newQuoteResult });
+      }),
+    });
+    chrome.tabs.get = jest.fn().mockResolvedValue({ id: 22, url: tweetData.url });
+
+    await import('../../src/background/service-worker');
+    const listener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+
+    listener(
+      {
+        type: MessageType.SUBMIT_QUOTE,
+        data: { text: tweetData.text, originator_slug: 'test-user', source_url: tweetData.url },
+      },
+      { tab: { id: 22, url: tweetData.url } },
+      jest.fn(),
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '=' });
+
+    listener(
+      {
+        type: MessageType.CHECK_DUPLICATE,
+        data: { text: tweetData.text, source_url: tweetData.url },
+      },
+      { tab: { id: 22, url: tweetData.url } },
+      jest.fn(),
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // The just-submitted quote definitionally exists: a late "new_quote" answer for the
+    // same post must not downgrade the badge back to ★.
+    expect(chrome.action.setBadgeText).not.toHaveBeenCalledWith({ tabId: 22, text: '★' });
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '=' });
   });
 
   it('requests tweet extraction on tab load and applies the preflight badge without clicking the toolbar', async () => {

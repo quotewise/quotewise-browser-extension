@@ -28,6 +28,7 @@ import { applyIconPresentation } from './icon-applicator';
 import { resolveIconPresentation, type IconPresentation } from './icon-state-resolver';
 import type { DuplicateCheckResult, PreflightOriginatorResult } from '../types/api';
 import type { CollectionBadgeInfo } from '../types/chrome';
+import { mapRecommendationToQuoteStatus } from '../utils/duplicate-status';
 import { clearUserDataCaches, logoutAndClearUserData } from './privacy-cleanup';
 import { getSettings, onSettingsChanged } from '../settings/settings-store';
 import { buildFeedbackUrl } from '../utils/feedback-url';
@@ -91,6 +92,13 @@ const pendingDuplicateChecks = new Map<string, Promise<void>>();
 const tabDuplicateResults = new Map<number, DuplicateCheckResult | null>();
 const tabDuplicateResultUrls = new Map<number, string>();
 const tabMissingOriginators = new Map<number, MissingOriginatorInfo>();
+// Records the source URL a tab just successfully submitted a quote for. A duplicate
+// check started BEFORE that submit can resolve AFTER it with a stale "the quote
+// doesn't exist yet" answer; setTabDuplicateResult consults this map to keep the
+// just-submitted collected result instead of storing that downgrade. Cleared
+// alongside tabDuplicateResults wherever per-tab state is cleared (see
+// clearTabDuplicateResult).
+const tabPostSubmitUrls = new Map<number, string>();
 const tabScopedPresentationTabIds = new Set<number>();
 let lastActiveTabId: number | null = null;
 let userDataWriteEpoch = 0;
@@ -398,18 +406,45 @@ function getMissingOriginatorForTab(tabId: number, url?: string): MissingOrigina
   return { ...info };
 }
 
-function setTabDuplicateResult(tabId: number, result: DuplicateCheckResult | null, url?: string): void {
+// A pre-submit duplicate answer is definitionally stale once we know the extension
+// just created the quote: "not found yet" can't be true anymore.
+function isStalePreSubmitDuplicateResult(result: DuplicateCheckResult | null): result is DuplicateCheckResult {
+  return result !== null && mapRecommendationToQuoteStatus(result) === 'New';
+}
+
+// Single choke point for every duplicate-result write: every caller flows through
+// here, so the post-submit staleness guard only needs to live in one place. Returns
+// the *effective* result actually stored — callers that go on to apply/persist the
+// result (icon, preloadedDuplicateCheck) must use the return value, not the `result`
+// they passed in, or a stale downgrade can still slip through their own local variable.
+function setTabDuplicateResult(
+  tabId: number,
+  result: DuplicateCheckResult | null,
+  url?: string,
+): DuplicateCheckResult | null {
+  const postSubmitUrl = tabPostSubmitUrls.get(tabId);
+  if (
+    postSubmitUrl &&
+    url &&
+    isSamePostPageUrl(postSubmitUrl, url) &&
+    isStalePreSubmitDuplicateResult(result)
+  ) {
+    return tabDuplicateResults.get(tabId) ?? null;
+  }
+
   tabDuplicateResults.set(tabId, result);
   if (url) {
     tabDuplicateResultUrls.set(tabId, url);
   } else {
     tabDuplicateResultUrls.delete(tabId);
   }
+  return result;
 }
 
 function clearTabDuplicateResult(tabId: number): void {
   tabDuplicateResults.delete(tabId);
   tabDuplicateResultUrls.delete(tabId);
+  tabPostSubmitUrls.delete(tabId);
 }
 
 function getCachedDuplicateResultForTab(
@@ -828,7 +863,11 @@ function collectedDuplicateResultFromSubmission(
       text,
       similarity: 1,
       match_type: 'exact',
-      in_user_collections: true,
+      // Submitting a quote puts it in Quotewise, NOT in a user collection — that only
+      // happens via the separate ADD_QUOTE_TO_COLLECTION path. Claiming otherwise here
+      // maps to 'InCollection' (✓) via mapRecommendationToQuoteStatus, when the correct
+      // post-submit badge is Exact (=).
+      in_user_collections: false,
       member_collections: [],
       originator: {
         id: originatorSlug,
@@ -878,6 +917,10 @@ async function applySuccessfulSubmitCollectedState(
     return;
   }
 
+  // Mark this tab+url as just-submitted BEFORE storing the collected result: any
+  // duplicate check that started before the submit and resolves after it with a
+  // stale "new_quote" answer must not downgrade the badge (see setTabDuplicateResult).
+  tabPostSubmitUrls.set(tabId, sourceUrl);
   const duplicateResult = collectedDuplicateResultFromSubmission(message, response, sourceUrl);
   setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
   tabScopedPresentationTabIds.add(tabId);
@@ -2051,7 +2094,10 @@ async function updateIconAfterDuplicateCheckResponse(
   }
 
   const duplicateResult = duplicateResultFromResponse(response);
-  setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
+  // setTabDuplicateResult may keep a just-submitted collected result in place of this
+  // (possibly stale, pre-submit) response — use its return value below, not
+  // `duplicateResult` directly, so the kept result actually reaches the icon/cache.
+  const effectiveDuplicateResult = setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
   clearPostDataExtractionRetry(tabId);
   tabMissingOriginators.delete(tabId);
   await clearInFlightOperation(tabId, {
@@ -2067,20 +2113,20 @@ async function updateIconAfterDuplicateCheckResponse(
     duplicate: summarizeDuplicateResult(duplicateResult),
   });
 
-  if (duplicateResult) {
+  if (effectiveDuplicateResult) {
     tabScopedPresentationTabIds.add(tabId);
     if (sourceUrl) {
       await chrome.storage.local.set({
         preloadedDuplicateCheck: {
           url: sourceUrl,
-          result: duplicateResult,
+          result: effectiveDuplicateResult,
           timestamp: Date.now(),
         },
       });
     }
   }
 
-  await applyResolvedIconForTab(tabId, sourceUrl, duplicateResult);
+  await applyResolvedIconForTab(tabId, sourceUrl, effectiveDuplicateResult);
 }
 
 async function applyOriginatorLookupLoading(
@@ -2498,9 +2544,9 @@ async function handleCheckNow(
         });
 
         if (tabId && duplicateResult) {
-          setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
+          const effectiveDuplicateResult = setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
           tabScopedPresentationTabIds.add(tabId);
-          await applyResolvedIconForTab(tabId, sourceUrl, duplicateResult);
+          await applyResolvedIconForTab(tabId, sourceUrl, effectiveDuplicateResult);
         }
 
         recordPreflightDiagnostic({
@@ -2849,17 +2895,21 @@ async function checkQuoteCollectionStatus(
       tabMissingOriginators.delete(targetTabId);
     }
 
-    // Cache duplicate check result for overlay to use
+    // Cache duplicate check result for overlay to use. setTabDuplicateResult may keep a
+    // just-submitted collected result in place of this (possibly stale, pre-submit)
+    // response — persist its return value below, not `duplicateResult` directly, so
+    // preloadedDuplicateCheck doesn't disagree with what's actually cached/applied.
+    let effectiveDuplicateResult: DuplicateCheckResult | null = duplicateResult ?? null;
     if (targetTabId) {
-      setTabDuplicateResult(targetTabId, duplicateResult ?? null, sourceUrl);
+      effectiveDuplicateResult = setTabDuplicateResult(targetTabId, duplicateResult ?? null, sourceUrl);
     }
 
     const preflightMs = durationSince(preflightOperation?.startedAt);
-    if (duplicateResult) {
+    if (effectiveDuplicateResult) {
       await chrome.storage.local.set({
         preloadedDuplicateCheck: {
           url: sourceUrl,
-          result: duplicateResult,
+          result: effectiveDuplicateResult,
           timestamp: Date.now(),
           ...(preflightMs !== undefined ? { preflightMs } : {})
         }
