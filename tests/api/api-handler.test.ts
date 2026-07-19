@@ -441,8 +441,7 @@ describe('ApiHandler', () => {
         success: false,
         error: 'Server error',
         hasDuplicates: false,
-        duplicates: [],
-        similarityThreshold: 0.8
+        duplicates: []
       });
     });
   });

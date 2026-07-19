@@ -489,6 +489,67 @@ export function buildOverlayMarkup(platformLabel: string): string {
           font-size: 11px;
           padding: 3px 7px;
         }
+        .similar-panel {
+          margin: 0 12px 8px 12px;
+          padding: 6px 10px;
+          border-radius: 8px;
+          border-left: 3px solid transparent;
+          color: #dbeafe;
+          font-size: 12px;
+          line-height: 16px;
+        }
+        .similar-panel.warning {
+          background: rgba(251,146,60,0.12);
+          border-left-color: #fb923c;
+        }
+        .similar-panel.info {
+          background: rgba(59,130,246,0.1);
+          border-left-color: #60a5fa;
+        }
+        .similar-panel-summary {
+          cursor: pointer;
+          font-weight: 600;
+          list-style: none;
+        }
+        .similar-panel-summary::-webkit-details-marker { display: none; }
+        .similar-panel-summary::after {
+          content: ' ▾';
+          color: #94a3b8;
+        }
+        .similar-panel-details[open] > .similar-panel-summary::after {
+          content: ' ▴';
+        }
+        .similar-panel-summary:focus-visible {
+          outline: 2px solid #60a5fa;
+          outline-offset: 2px;
+          border-radius: 4px;
+        }
+        .similar-panel-list {
+          display: grid;
+          gap: 3px;
+          margin: 5px 0 0;
+          padding-left: 18px;
+          font-size: 11px;
+          line-height: 15px;
+          font-weight: 400;
+        }
+        .similar-panel-list li,
+        .similar-panel-list a {
+          overflow-wrap: anywhere;
+        }
+        .similar-panel-list a {
+          color: #bfdbfe;
+        }
+        .similar-panel-attribution {
+          color: #94a3b8;
+        }
+        .similar-panel-more {
+          margin-top: 4px;
+          padding-left: 18px;
+          color: #bfdbfe;
+          font-size: 11px;
+          font-weight: 600;
+        }
         .collection-picker-slot {
           padding: 0 12px 8px 12px;
         }
@@ -596,6 +657,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
                 <div id="collection-summary" class="collection-summary" aria-live="polite" hidden></div>
               </div>
             </div>
+            <div class="similar-panel" id="similar-panel" hidden></div>
             <div class="collection-picker-slot" id="collection-picker-slot" hidden></div>
             <div class="stats-row" id="stats-row" hidden></div>
           </div>

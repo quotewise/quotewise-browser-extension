@@ -39,6 +39,65 @@ export interface HandleLookupResult {
   client_rtt_ms?: number;
 }
 
+/**
+ * One entry of the duplicate-check `matches` list. Since ADR-0009 the backend
+ * runs a pgvector sweep, so this list is a single distance-sorted mix of
+ * same-originator and cross-originator hits — never assume it is homogeneous,
+ * and never select from it by position (see `primaryMatch`).
+ */
+export interface QuoteMatch {
+  quote_id: string;
+  version_id?: number;   // Declared required historically; the server has never emitted it.
+  text: string;
+  similarity: number;    // 0-100, higher is better — including for semantic matches.
+  /**
+   * Free-form provenance label. `exact_different_originator` is the one value
+   * the client keys on: it is claimed only on proven byte equality, so it can
+   * hard-block submission without the client doing any similarity math.
+   * Deliberately not a union — legacy values (`exact`, `near`, `fuzzy`,
+   * `similar`, `exact_same_originator`) are still in circulation.
+   */
+  match_type: string;
+  in_user_collections: boolean;
+  member_collections: MemberCollection[];
+  originator: Originator;
+  workflow_status: string;
+  likes_count: number;
+  // Sighting status for platform awareness
+  short_code?: string;
+  url?: string;
+  quote_date?: string;
+  match_source?: 'url' | 'similarity';
+  match_class?: 'exact' | 'conflict' | 'similar';
+  existing_sighting_for_this_url?: boolean;
+  sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
+  platform_sighting_url?: string | null;
+  // ADR-0009 additions — optional so older server responses still typecheck.
+  primary?: boolean;
+  different_originator?: boolean;
+  match_engine?: 'lexical' | 'semantic' | 'url';
+  /**
+   * Relation labels (ADR-0009). **Display hints only — never proof.**
+   *
+   * The unfiltered vector sweep routinely returns several members of one variant
+   * group at once, and without these they read as independent duplicates. Group
+   * by `canonical_quote_id || quote_id` and show one row per group.
+   *
+   * What each is worth, measured against production 2026-07-19:
+   * - `canonical_quote_id` present — reliable (a real FK). Absence proves nothing.
+   * - `has_relations: true` — reliable. `false` is NOT proof of "no relations";
+   *   948 quotes have edges while reporting false.
+   * - `quote_role` — a curator-set label that drifts from the relation graph;
+   *   1,780 rows say "variant" with no backing edge.
+   *
+   * Never gate a write on these. Authoritative pairwise edges land in `qw-gqae3`;
+   * until then, gate link decisions on the server's response to the link itself.
+   */
+  quote_role?: string;
+  has_relations?: boolean;
+  canonical_quote_id?: string | null;
+}
+
 export interface DuplicateCheckResult {
   recommendation: 'duplicate' | 'new_version' | 'new_quote' | 'attribution_conflict' |
                   'new_quote_known_author' | 'duplicate_known_author' | 'new_version_known_author' | 'attribution_conflict_resolved';
@@ -53,27 +112,7 @@ export interface DuplicateCheckResult {
     match_confidence: number;
   };
   suggested_originator_id?: number;
-  matches: Array<{
-    quote_id: string;
-    version_id: number;
-    text: string;
-    similarity: number;
-    match_type: string;
-    in_user_collections: boolean;
-    member_collections: MemberCollection[];
-    originator: Originator;
-    workflow_status: string;
-    likes_count: number;
-    // Sighting status for platform awareness
-    short_code?: string;
-    url?: string;
-    quote_date?: string;
-    match_source?: 'url' | 'similarity';
-    match_class?: 'exact' | 'conflict' | 'similar';
-    existing_sighting_for_this_url?: boolean;
-    sighting_status?: 'exact_url' | 'has_platform_sighting' | 'no_platform_sighting' | 'unknown';
-    platform_sighting_url?: string | null;
-  }>;
+  matches: QuoteMatch[];
   existing_sightings_for_url?: Array<{
     id: number;
     quote_id: string;
@@ -93,6 +132,12 @@ export interface DuplicateCheckResult {
     query_time_ms?: number;
     client_rtt_ms?: number;
     error?: boolean;
+    // ADR-0009 — informational. `vector_search_skipped_uncached` marks a
+    // preflight that ran without an embedding, so its absence of matches is not
+    // authoritative; the live check refines it.
+    vector_search_used?: boolean;
+    vector_search_skipped_uncached?: boolean;
+    cross_originator_match_found?: boolean;
   };
 }
 
@@ -103,6 +148,13 @@ export interface QuoteSubmissionResult {
   error?: string;
   collectionWarning?: string;
   action?: 'created' | 'sighting_added';
+  /**
+   * Other originators already on record with this text (ADR-0009 §5).
+   * Strictly advisory — the quote was created regardless, and this never
+   * indicates failure. Empty when the text had no cached embedding, since
+   * surfacing it must not add a Bedrock call to a write.
+   */
+  attributionConflicts?: QuoteMatch[];
 }
 
 export interface MemberCollection {

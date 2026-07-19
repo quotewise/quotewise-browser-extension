@@ -223,8 +223,7 @@ export class ApiHandler {
                 ...this.authFailureFields(error),
                 error: error instanceof Error ? error.message : 'Duplicate check failed',
                 hasDuplicates: false,
-                duplicates: [],
-                similarityThreshold: 0.8
+                duplicates: []
             });
         }
     }
