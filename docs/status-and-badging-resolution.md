@@ -100,7 +100,11 @@ flowchart TD
     PP -->|no| SI["SupportedIdle<br/>colour, no badge"]
 
     PP -->|yes| HASDUP{"dup result present?"}
-    HASDUP -->|yes| PC["passageCountForUrl(dup)"]
+    HASDUP -->|yes| CF{"quoteStatus === 'Conflict'?"}
+    CF -->|yes| CFR["Conflict<br/>⚠ orange"]
+    CF -->|no| BEC{"blockingExactConflict?"}
+    BEC -->|yes| BECR["ExactAlsoElsewhere<br/>= amber"]
+    BEC -->|no| PC["passageCountForUrl(dup)"]
     PC --> PCU{"=== 'unknown'?"}
     PCU -->|yes| HC["HasCaptures<br/>= green"]
     PCU -->|no| PC2{">= 2?"}
@@ -108,8 +112,10 @@ flowchart TD
 
     PC2 -->|no| QS2{"quoteStatus not None/New?"}
     HASDUP -->|no| QS2
-    QS2 -->|yes| MAP["InCollection ✓ · Conflict ⚠<br/>Exact = · Similar ~"]
-    QS2 -->|no| MO{originator missing?}
+    QS2 -->|yes| MAP["InCollection ✓<br/>Exact = · Similar ~"]
+    QS2 -->|no| SEC{"secondaryConflicts non-empty<br/>OR classifyMatchResolution<br/>=== 'similar'?"}
+    SEC -->|yes| SECR["SimilarElsewhere ~ amber<br/>(Similar ~ if the originator<br/>is known)"]
+    SEC -->|no| MO{"originator missing?"}
     MO -->|yes| MISS["MissingOriginator<br/>@ amber"]
     MO -->|no| ISNEW{"quoteStatus === 'New'?"}
     ISNEW -->|yes| NEW["New<br/>★ blue"]
@@ -117,12 +123,60 @@ flowchart TD
 
     classDef auth fill:#fdebd0,stroke:#b9770e,color:#7e5109
     classDef good fill:#d5f5e3,stroke:#1e8449,color:#145a32
+    classDef danger fill:#fde2e2,stroke:#c0392b,color:#7b241c
     class ESE,EIP,LO,PAUSED,AP auth
     class HC,COUNT,MAP,NEW good
+    class CFR,BECR danger
 ```
 
-**Passage count outranks quote status.** A post with 2+ captured passages shows
-the count, not `★`/`~`/`=` — "what's on this post" beats "what is this quote".
+**Attribution outranks everything on the page**, passage counts and collection
+membership included. Whether the capture can proceed at all beats context about
+what else lives on this post.
+
+Glyph says what kind of match; colour says whose it is:
+
+| | same originator | cross-originator |
+|---|---|---|
+| exact text | `=` **green** — `Exact` | `=` **amber** — `ExactAlsoElsewhere`, blocks Submit |
+| similar text | `~` amber — `Similar` | `~` amber — `SimilarElsewhere`, advisory |
+
+Two deliberate choices there:
+
+- **`Conflict` (⚠) is kept for the case where the other originator's quote *is*
+  the match.** `ExactAlsoElsewhere` is the narrower situation — you legitimately
+  have the quote *and* so does someone else — so it keeps the same-text glyph and
+  changes only the colour. Splitting them means the strongest signal is not
+  weakened and each glyph keeps one meaning.
+- **`Similar` and `SimilarElsewhere` are visually identical** (`~` amber) and
+  differ only in title. Neither blocks anything and both mean "open the tray"; a
+  fifth colour would encode a distinction nobody acts on.
+
+**Passage count outranks the remaining quote statuses.** A post with 2+ captured
+passages shows the count, not `★`/`~`/`=` — once attribution is settled, "what's
+on this post" beats "what is this quote".
+
+> **The badge is URL-scoped until the tray opens — by design, do not "fix" it.**
+> The automatic preflight sends `{ handle, platform, source_url }` and deliberately
+> **no post text** (`service-worker.ts:2705`; `api-handler.ts:403` falls back to
+> probing with the URL). Text travels only once the user opens the tray, which is
+> the first sign of intent to interact with Quotewise — sending it on view would
+> collect data from people who never asked for anything, and would not survive
+> capture expanding beyond post pages.
+>
+> Consequence: at rest the badge can say "this post already has captures" and
+> "this handle is not an originator", but never "this text is already in
+> Quotewise". A badge that changes when the tray opens is expected here, not a
+> bug. See ADR-0009's 2026-07-19 amendment.
+
+> **`recommendation` and `match_class` can disagree — trust the matches.**
+> With no originator the server cannot recommend a *version* (there is nobody to
+> version it under), so it answers `new_quote` while the matches still carry
+> `match_class: 'similar'`. `mapRecommendationToQuoteStatus` reads only
+> `recommendation`; `classifyMatchResolution` reads `match_class`. An icon that
+> consults just the first contradicts the tray on the very same response — an
+> Asimov quote posted by an unknown handle badged `@` while the tray offered
+> "Add as variant". The resolver falls back to `classifyMatchResolution` before
+> `MissingOriginator` for exactly this reason.
 
 **`passageCountForUrl()` is three-valued, and the distinction is load-bearing:**
 
@@ -272,6 +326,10 @@ Two things this path must respect:
   in silence at its `!originator` guard, so the directive is vetoed in
   `onSubmitStateChange` and the button reads "Add originator first".
   `view_quote` directives pass through — the quote exists, reading it is useful.
+- **No link decisions either.** "Add another sighting" / "Add as variant" route
+  straight to `submitQuote` and hit the same silent guard, so the badge is told
+  via `update(..., { hasOriginator })` to withhold them. The word diff still
+  renders — comparing the two texts is the useful part regardless.
 - **Collections still work.** Adding an *existing* quote to a collection routes
   through `addExistingQuoteToSelectedCollections()`, which needs no originator.
   That path is deliberately not vetoed.
@@ -335,8 +393,9 @@ flowchart TD
 | *(none)* | Ready / SupportedIdle / AuthPending | — |
 | `●` | Loading (check in flight) | `#56B4E9` |
 | `★` | New | `#0072B2` |
-| `~` | Similar | `#E69F00` |
+| `~` | Similar / SimilarElsewhere | `#E69F00` |
 | `=` | Exact / HasCaptures | `#009E73` |
+| `=` | ExactAlsoElsewhere | `#E69F00` |
 | `2`…`9+` | Count (passages on this post) | `#009E73` |
 | `✓` | InCollection | `#009E73` |
 | `⚠` | Conflict | `#D55E00` |

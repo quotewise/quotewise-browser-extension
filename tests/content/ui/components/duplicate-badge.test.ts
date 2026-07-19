@@ -384,6 +384,29 @@ describe('DuplicateBadge', () => {
     expect(container.textContent).toContain('Add as variant');
   });
 
+  it('withholds the link decisions when no originator is resolved', () => {
+    // A capture cannot be submitted at all without an originator, so offering
+    // "Add as variant" produces a button whose handler returns in silence at
+    // submitQuote's !originator guard.
+    badge.update({
+      result: legacyNearMatchDuplicateResult({
+        matches: [duplicateMatch({
+          quote_id: '101',
+          text: 'there always has been',
+          match_class: 'similar',
+        })],
+      }),
+    }, 'there has always been', null, { hasOriginator: false });
+
+    // The comparison itself is still the useful part — keep it.
+    expect(container.querySelector('.similar-diff, .diff-token')).toBeTruthy();
+    expect(container.textContent).not.toContain('Add as variant');
+    expect(container.textContent).not.toContain('Add another sighting');
+    expect(directives).toEqual([
+      { type: 'submit', enabled: false, text: 'Add originator first' },
+    ]);
+  });
+
   it('keeps exact URL matches on the single already-captured action', () => {
     badge.update({
       result: exactDuplicateResult({

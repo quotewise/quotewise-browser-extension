@@ -143,7 +143,7 @@ describe('applyIconPresentation', () => {
       presentation({
         badgeText: '★',
         badgeColor: '#0072B2',
-        title: 'New quote — not in Quotewise yet',
+        title: 'Quotewise — nothing captured from this post yet',
         scope: 'tab',
       }),
       5,

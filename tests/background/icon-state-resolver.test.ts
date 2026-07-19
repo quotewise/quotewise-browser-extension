@@ -1,6 +1,7 @@
 import { AuthState } from '../../src/auth/auth-state-machine';
 import { resolveIconPresentation, type IconPresentation, type TabContext } from '../../src/background/icon-state-resolver';
 import type { DuplicateCheckResult } from '../../src/types/api';
+import { duplicateMatch } from '../helpers/duplicate-fixtures';
 
 const tweetTab: TabContext = {
   tabId: 1,
@@ -83,7 +84,157 @@ describe('resolveIconPresentation', () => {
       badgeText: '★',
       badgeColor: '#0072B2',
       scope: 'tab',
-      title: 'New quote — not in Quotewise yet',
+      title: 'Quotewise — nothing captured from this post yet',
+    });
+  });
+
+  describe('attribution outranks everything else on the page', () => {
+    const otherOriginator = {
+      id: 'o2',
+      full_name: 'Different Author',
+      sort_name: null,
+      birth_year: null,
+      death_year: null,
+    };
+
+    const exactCrossMatch = () => duplicateMatch({
+      quote_id: 'cross',
+      match_class: 'conflict' as const,
+      match_type: 'exact_different_originator',
+      different_originator: true,
+      originator: otherOriginator,
+    });
+
+    const sameOriginatorPrimary = () => duplicateMatch({
+      quote_id: 'mine',
+      primary: true,
+      match_class: 'exact' as const,
+      match_type: 'exact_same_originator',
+    });
+
+    it('flags an exact match that is also on record under someone else', () => {
+      // The server ranks the same-originator match primary, so `recommendation`
+      // says "duplicate" and never mentions the conflict behind it. Badging a
+      // contented green "=" while the tray hard-blocks Submit is the bug.
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('duplicate', {
+        matches: [sameOriginatorPrimary(), exactCrossMatch()],
+      }), tweetTab)).toMatchObject({
+        badgeText: '=',
+        badgeColor: '#E69F00',
+        title: 'Already yours — but this exact text is also attributed to someone else',
+      });
+    });
+
+    it('keeps the plain warning when the conflict IS the match', () => {
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('attribution_conflict', {
+        matches: [exactCrossMatch()],
+      }), tweetTab)).toMatchObject({ badgeText: '⚠', badgeColor: '#D55E00' });
+    });
+
+    it('outranks passage counts', () => {
+      // "Can this capture proceed" beats "what else lives on this post".
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('duplicate', {
+        existing_sightings_total: 4,
+        matches: [sameOriginatorPrimary(), exactCrossMatch()],
+      }), tweetTab)).toMatchObject({ badgeText: '=', badgeColor: '#E69F00' });
+
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('attribution_conflict', {
+        existing_sightings_total: 4,
+        matches: [exactCrossMatch()],
+      }), tweetTab)).toMatchObject({ badgeText: '⚠' });
+    });
+
+    it('outranks collection membership', () => {
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('duplicate', {
+        matches: [
+          duplicateMatch({ quote_id: 'mine', primary: true, in_user_collections: true }),
+          exactCrossMatch(),
+        ],
+      }), tweetTab)).toMatchObject({ badgeText: '=', badgeColor: '#E69F00' });
+    });
+
+    it('stops calling a quote new when something close is on record elsewhere', () => {
+      // Previously badged ★, i.e. "go ahead, nothing here" — for a quote that is
+      // very nearly on record under someone else's name.
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote', {
+        matches: [
+          duplicateMatch({ quote_id: 'mine', primary: true, match_class: 'similar' }),
+          duplicateMatch({
+            quote_id: 'near',
+            match_class: 'conflict',
+            match_type: 'near_different_originator',
+            different_originator: true,
+            originator: otherOriginator,
+          }),
+        ],
+      }), tweetTab)).toMatchObject({
+        badgeText: '~',
+        badgeColor: '#E69F00',
+        title: 'Similar to a quote attributed to someone else',
+      });
+    });
+
+    it('leaves a genuinely new quote alone', () => {
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote', {
+        matches: [duplicateMatch({ primary: true })],
+      }), tweetTab)).toMatchObject({ badgeText: '★' });
+    });
+
+    it('trusts the matches over the recommendation when they disagree', () => {
+      // Live case: an Asimov quote posted by a handle that is not an originator.
+      // With no originator the server cannot recommend a *version* — nobody to
+      // version it under — so `recommendation` is new_quote while the match
+      // still carries match_class 'similar'. The tray keys on match_class and
+      // offered "Add as variant"; the icon keyed on recommendation and badged
+      // "@ originator missing". Same response, two answers.
+      const asimovNearMatch = duplicate('new_quote', {
+        matches: [duplicateMatch({
+          quote_id: 'asimov',
+          primary: true,
+          match_class: 'similar',
+          different_originator: false,
+          originator: {
+            id: 'asimov',
+            full_name: 'Isaac Asimov',
+            sort_name: null,
+            birth_year: null,
+            death_year: null,
+          },
+        })],
+        search_metadata: { lexical_search_skipped_unscoped: true },
+      });
+
+      expect(resolveIconPresentation(
+        AuthState.AUTHENTICATED,
+        asimovNearMatch,
+        { ...tweetTab, isOriginatorMissing: true },
+      )).toMatchObject({
+        badgeText: '~',
+        badgeColor: '#E69F00',
+        title: 'Similar to a quote attributed to someone else',
+      });
+    });
+
+    it('still reports a missing originator when nothing matched', () => {
+      expect(resolveIconPresentation(
+        AuthState.AUTHENTICATED,
+        duplicate('new_quote', { matches: [] }),
+        { ...tweetTab, isOriginatorMissing: true },
+      )).toMatchObject({ badgeText: '@' });
+    });
+
+    it('does not fire on the no-originator path, where nothing is a conflict', () => {
+      // With no originator claimed the server reports different_originator:false
+      // and never `conflict`, so neither new state may trigger.
+      expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('duplicate', {
+        matches: [duplicateMatch({
+          primary: true,
+          match_class: 'exact',
+          match_type: 'exact_same_originator',
+          different_originator: false,
+        })],
+        search_metadata: { lexical_search_skipped_unscoped: true },
+      }), tweetTab)).toMatchObject({ badgeText: '=', badgeColor: '#009E73' });
     });
   });
 
@@ -257,7 +408,7 @@ describe('resolveIconPresentation', () => {
       badgeText: '★',
       badgeColor: '#0072B2',
       scope: 'tab',
-      title: 'New quote — not in Quotewise yet',
+      title: 'Quotewise — nothing captured from this post yet',
     });
 
     expect(resolveIconPresentation(

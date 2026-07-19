@@ -47,11 +47,20 @@ export class DuplicateBadge {
     private callbacks: DuplicateBadgeCallbacks
   ) {}
 
+  /**
+   * `options.hasOriginator` reports whether the capture has a resolved
+   * originator. The badge reasons about the quote; only the caller knows
+   * whether there is anyone to attribute it to, and without one no link
+   * decision can be carried out. Defaults to true — the sole production caller
+   * always supplies it, and the default keeps focused unit tests terse.
+   */
   update(
     state: { checking: true } | { result: DuplicateCheckResult } | null,
     capturedText?: string,
     postDate?: string | null,
+    options: { hasOriginator?: boolean } = {},
   ): void {
+    const hasOriginator = options.hasOriginator !== false;
     this.container.innerHTML = '';
     this.container.className = 'duplicate-badge';
     this.container.style.marginLeft = '';
@@ -106,20 +115,38 @@ export class DuplicateBadge {
         return;
       }
 
-      // Submission is vetoed further down when this exact text is on record
-      // under another originator. Offering Sighting/Variant anyway would put a
-      // button on screen that silently does nothing when clicked — the panel
-      // below already explains why the capture can't proceed.
-      const blocked = !!blockingExactConflict(result);
+      // Two reasons a link decision cannot be carried out. Offering the buttons
+      // anyway puts something on screen whose handler returns in silence:
+      // `blockingExactConflict` is refused by the submit gate, and with no
+      // originator `submitQuote` bails at its `!originator` guard. The diff
+      // itself stays — comparing the two texts is the useful part either way.
+      const conflicted = !!blockingExactConflict(result);
+      const decisionable = hasOriginator && !conflicted;
 
       renderSimilarDiff(
         this.container,
-        blocked ? { ...similarView, sightingAvailable: false, variantAvailable: false } : similarView,
+        decisionable
+          ? similarView
+          : { ...similarView, sightingAvailable: false, variantAvailable: false },
         { onResolve: (decision) => this.callbacks.onResolveDecision?.(decision) },
       );
-      this.callbacks.onSubmitStateChange(blocked
-        ? { type: 'submit', enabled: false, text: 'Resolve Attribution', style: 'warning' }
-        : { type: 'submit', enabled: false, text: 'Choose Action' });
+
+      if (!hasOriginator) {
+        this.callbacks.onSubmitStateChange({
+          type: 'submit',
+          enabled: false,
+          text: 'Add originator first',
+        });
+      } else if (conflicted) {
+        this.callbacks.onSubmitStateChange({
+          type: 'submit',
+          enabled: false,
+          text: 'Resolve Attribution',
+          style: 'warning',
+        });
+      } else {
+        this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Choose Action' });
+      }
       this.renderPassagesPanel(result);
       return;
     }

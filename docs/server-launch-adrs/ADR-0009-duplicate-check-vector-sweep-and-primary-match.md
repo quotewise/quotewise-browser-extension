@@ -278,6 +278,74 @@ signalled by `search_metadata.vector_search_skipped_uncached`. So preflight may 
 fewer matches than a subsequent `check_duplicate/` for the same text. Treat preflight as a warm
 preload, never as authoritative absence-of-duplicates.
 
+## Amendment — 2026-07-19: the badge path checks URLs, not text — and stays that way
+
+Reported case: a tweet by `@J_D_Landis` (not an originator) carrying a near-verbatim Asimov
+quote that *is* in Quotewise. With the tray shut the toolbar badged `@` "originator not in
+Quotewise"; opening the tray flipped it to `~`.
+
+The cause is not an embedding cache miss, as first assumed. The badge path never sends the text at
+all. Having found that, the question became whether to change it — and the answer is no.
+
+### 1. The automatic preflight omits the post text
+
+`checkQuoteCollectionStatus` sends `{ handle, platform, source_url }` and **no `text`**
+(`service-worker.ts:2705`). `api-handler.ts:403` then falls back:
+
+```ts
+const duplicateProbe = typeof text === 'string' ? text : source_url;
+```
+
+So the duplicate check that drives the toolbar badge asks whether
+`https://x.com/J_D_Landis/status/…` is a duplicate of any quote. URL-based sighting lookup still
+works — that is the separate `source_url` parameter — but **text similarity is structurally
+impossible on the badge path**, with or without an embedding.
+
+This is almost certainly a leftover from the 8.2s era: the automatic path could not afford a text
+check, so it degraded to URL-only. This ADR removed the performance reason — but see below, where
+the behaviour is kept on different grounds.
+
+### 2. Decision: keep it that way — text travels only on explicit engagement
+
+What began as a performance workaround is hereby **ratified as a privacy boundary**. The automatic
+preflight stays URL-scoped. Post text is sent only when the user opens the tray, which is the first
+moment they have expressed any intent to interact with Quotewise.
+
+The alternative was tested against and rejected: send the text on the automatic preflight, and have
+preflight warm the embedding so the badge could report text similarity at a glance. It was
+attractive on accuracy grounds — the §6 objection ("a path that runs on hover/selection") does not
+even describe this path, since `runAutomaticPreflightForExtractedPost` fires once per post page and
+selection-driven checks already go through `CHECK_DUPLICATE`, and the embedding cost is per unique
+text, once, cached and shared.
+
+**It was rejected anyway**, on two grounds that outrank badge accuracy:
+
+1. **It collects data without intent.** Merely viewing a post would POST its full text to
+   Quotewise and retain an embedding of it. The user has not asked for anything at that point.
+   "We run a duplicate check on the text of every post you view" is not a description this product
+   wants to have to make.
+2. **It does not scale to where capture is going.** The boundary that is defensible for post pages
+   collapses the moment capture extends toward general browsing. Better to hold the line while it
+   is cheap to hold than to retreat from it later.
+
+Private mode, which skips preflight entirely, remains a separate and stronger opt-out.
+
+### Accepted consequence
+
+The toolbar badge is **URL-scoped until the tray is opened**. It can say "this post already has
+captures" and "this handle is not an originator"; it cannot say "this text is already in
+Quotewise". So the reported case badges `@` at rest and becomes `~` when the tray opens and the
+first text-bearing check runs.
+
+This is a known, accepted side-effect, not a defect: the badge reports everything it is entitled to
+know, and improves the moment the user shows intent. Do not "fix" it by moving text earlier.
+
+Consequently `New` was retitled. It read *"New quote — not in Quotewise yet"*, which claims
+something about the *text* — precisely what a URL-only probe cannot establish. It now reads
+*"Quotewise — nothing captured from this post yet"*: true whether the check examined the text or
+only the URL, and consistent with its siblings `HasCaptures` and `Count`, which already describe
+the post rather than the quote.
+
 ## Latency budget (production, us-west-2)
 
 **With an originator** (the normal capture flow):

@@ -95,6 +95,21 @@ export const ICON_STATES = {
     title: 'Exact match already in Quotewise',
     scope: 'tab',
   },
+  /**
+   * Your originator has this quote — and so does someone else, verbatim. Same
+   * glyph as `Exact` because it is still the same text; amber rather than green
+   * because the capture is blocked until the attribution is resolved.
+   *
+   * Distinct from `Conflict`: there the other originator's quote IS the match,
+   * so a warning is the whole story. Here you legitimately have it too.
+   */
+  ExactAlsoElsewhere: {
+    iconVariant: 'color',
+    badgeText: '=',
+    badgeColor: '#E69F00',
+    title: 'Already yours — but this exact text is also attributed to someone else',
+    scope: 'tab',
+  },
   Count: {
     iconVariant: 'color',
     badgeText: '2',
@@ -117,6 +132,22 @@ export const ICON_STATES = {
     title: 'Similar version already in Quotewise',
     scope: 'tab',
   },
+  /**
+   * Nothing under your originator, but something close is on record under
+   * someone else's name — previously badged `New`, which was affirmatively
+   * wrong.
+   *
+   * Deliberately identical in glyph and colour to `Similar`. Neither blocks
+   * anything and both mean "open the tray"; the title carries the difference.
+   * A fifth colour would encode a distinction nobody acts on.
+   */
+  SimilarElsewhere: {
+    iconVariant: 'color',
+    badgeText: '~',
+    badgeColor: '#E69F00',
+    title: 'Similar to a quote attributed to someone else',
+    scope: 'tab',
+  },
   MissingOriginator: {
     iconVariant: 'color',
     badgeText: '@',
@@ -128,7 +159,12 @@ export const ICON_STATES = {
     iconVariant: 'color',
     badgeText: '★',
     badgeColor: '#0072B2',
-    title: 'New quote — not in Quotewise yet',
+    // Describes the *post*, not the text. This state is reached from two very
+    // different checks: the URL-only automatic probe, which cannot speak to the
+    // text at all, and a full text check that came back empty. Only the weaker
+    // claim is true in both, and it is the one that matches its siblings —
+    // HasCaptures and Count also describe the post.
+    title: 'Quotewise — nothing captured from this post yet',
     scope: 'tab',
   },
 } as const satisfies Record<string, IconStateConfig>;
