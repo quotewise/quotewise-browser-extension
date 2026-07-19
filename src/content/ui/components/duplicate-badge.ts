@@ -59,8 +59,8 @@ export class DuplicateBadge {
     if (!state) return;
 
     if ('checking' in state) {
-      this.container.innerHTML = '<div class="spinner" style="width:12px;height:12px;"></div>';
-      this.container.title = 'Checking for duplicates...';
+      this.container.innerHTML = '<div class="spinner" style="width:12px;height:12px;" role="status" aria-label="Checking Quotewise for duplicates" title="Checking Quotewise for duplicates…"></div>';
+      this.container.title = 'Checking Quotewise for duplicates…';
       return;
     }
 
@@ -232,6 +232,30 @@ export class DuplicateBadge {
       this.callbacks.onSubmitStateChange({ type: 'submit', enabled: true });
     }
     // No badge for new_quote — that's the expected case
+  }
+
+  /**
+   * Small spinner appended NEXT TO the currently displayed badge while the live
+   * duplicate check refines a preloaded result. Tooltip-only explanation — the
+   * action is trainable, so it earns no permanent text. Any subsequent update()
+   * re-render clears it implicitly.
+   */
+  setRefining(refining: boolean): void {
+    const existing = this.container.querySelector('.refine-spinner');
+    if (!refining) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner refine-spinner';
+    spinner.style.width = '12px';
+    spinner.style.height = '12px';
+    spinner.style.flexShrink = '0';
+    spinner.setAttribute('role', 'status');
+    spinner.setAttribute('aria-label', 'Verifying against the full Quotewise library');
+    spinner.title = 'Verifying against the full Quotewise library…';
+    this.container.appendChild(spinner);
   }
 
   private renderCouldntVerify(): void {
