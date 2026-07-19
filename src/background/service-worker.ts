@@ -2854,12 +2854,14 @@ async function checkQuoteCollectionStatus(
       setTabDuplicateResult(targetTabId, duplicateResult ?? null, sourceUrl);
     }
 
+    const preflightMs = durationSince(preflightOperation?.startedAt);
     if (duplicateResult) {
       await chrome.storage.local.set({
         preloadedDuplicateCheck: {
           url: sourceUrl,
           result: duplicateResult,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          ...(preflightMs !== undefined ? { preflightMs } : {})
         }
       });
     }
@@ -2871,7 +2873,7 @@ async function checkQuoteCollectionStatus(
       url: sourceUrl,
       handle,
       operationId: preflightOperation?.operationId,
-      durationMs: durationSince(preflightOperation?.startedAt),
+      durationMs: preflightMs,
       duplicate: summarizeDuplicateResult(duplicateResult ?? null),
       originator: summarizeOriginatorResult(originatorResult),
     });

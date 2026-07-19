@@ -1,4 +1,32 @@
-import { parseNumber } from '../../src/content/common';
+import { parseNumber, cleanUrl } from '../../src/content/common';
+
+describe('cleanUrl — strips tracking junk a user may arrive with', () => {
+  it('removes X/Twitter share tracking params (s, t)', () => {
+    expect(cleanUrl('https://x.com/user/status/123?s=20&t=abcdef'))
+      .toBe('https://x.com/user/status/123');
+  });
+
+  it('removes utm_* and ad-click tracking params', () => {
+    expect(cleanUrl(
+      'https://x.com/u/status/1?utm_source=news&utm_medium=email&utm_campaign=x' +
+      '&utm_term=t&utm_content=c&fbclid=fb&gclid=gc&ref_src=twsrc&ref_url=r'
+    )).toBe('https://x.com/u/status/1');
+  });
+
+  it('preserves non-tracking query params', () => {
+    expect(cleanUrl('https://x.com/u/status/1?lang=en&s=20'))
+      .toBe('https://x.com/u/status/1?lang=en');
+  });
+
+  it('leaves an already-clean URL untouched', () => {
+    expect(cleanUrl('https://x.com/u/status/1')).toBe('https://x.com/u/status/1');
+  });
+
+  it('returns the input unchanged when the URL is malformed (never throws)', () => {
+    expect(cleanUrl('not a url')).toBe('not a url');
+    expect(cleanUrl('')).toBe('');
+  });
+});
 
 describe('parseNumber', () => {
   it('parses plain integers', () => {

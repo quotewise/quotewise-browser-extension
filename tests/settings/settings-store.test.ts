@@ -17,7 +17,18 @@ describe('settings-store', () => {
 
   it('returns defaults when settings are unset', async () => {
     await expect(getSettings()).resolves.toEqual(DEFAULT_SETTINGS);
+    expect(DEFAULT_SETTINGS.statsForNerds).toBe(false);
     expect(chrome.storage.sync.get).toHaveBeenCalledWith(['settings']);
+  });
+
+  it('round-trips statistics-for-nerds changes', async () => {
+    (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+      settings: { ...DEFAULT_SETTINGS, statsForNerds: true },
+    });
+
+    await expect(getSettings()).resolves.toEqual({ ...DEFAULT_SETTINGS, statsForNerds: true });
+    await expect(updateSettings({ statsForNerds: false })).resolves.toEqual(DEFAULT_SETTINGS);
+    expect(chrome.storage.sync.set).toHaveBeenCalledWith({ settings: DEFAULT_SETTINGS });
   });
 
   it('merges stored settings over defaults', async () => {

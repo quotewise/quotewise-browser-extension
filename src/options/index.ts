@@ -134,6 +134,13 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
           </span>
           <input type="checkbox" id="private-mode-toggle" aria-label="Private mode">
         </label>
+        <label class="row">
+          <span class="label">
+            <span>Statistics for nerds</span>
+            <span class="hint">Show timing/performance stats on the capture tray</span>
+          </span>
+          <input type="checkbox" id="stats-for-nerds-toggle" aria-label="Statistics for nerds">
+        </label>
         <div class="row">
           <span class="label">
             <span>Clear my data</span>
@@ -166,6 +173,7 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
   const status = root.querySelector('#status') as HTMLElement;
   const identity = root.querySelector('#account-identity') as HTMLElement;
   const privateToggle = root.querySelector('#private-mode-toggle') as HTMLInputElement;
+  const statsForNerdsToggle = root.querySelector('#stats-for-nerds-toggle') as HTMLInputElement;
   const autoAddToggle = root.querySelector('#auto-add-toggle') as HTMLInputElement;
   const collectionSelect = root.querySelector('#default-collection-select') as HTMLSelectElement;
   const collectionsHint = root.querySelector('#collections-hint') as HTMLElement;
@@ -176,6 +184,7 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
 
   function applySettings(settings: Settings): void {
     privateToggle.checked = settings.privateMode;
+    statsForNerdsToggle.checked = settings.statsForNerds;
     autoAddToggle.checked = settings.autoAddToCollection;
     collectionSelect.value = settings.defaultCollectionSlug || '';
   }
@@ -234,6 +243,13 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
     void updateSettings({ privateMode: privateToggle.checked }).then(settings => {
       applySettings(settings);
       setStatus(settings.privateMode ? 'Private mode on.' : 'Private mode off.');
+    });
+  });
+
+  statsForNerdsToggle.addEventListener('change', () => {
+    void updateSettings({ statsForNerds: statsForNerdsToggle.checked }).then(settings => {
+      applySettings(settings);
+      setStatus(settings.statsForNerds ? 'Statistics for nerds on.' : 'Statistics for nerds off.');
     });
   });
 

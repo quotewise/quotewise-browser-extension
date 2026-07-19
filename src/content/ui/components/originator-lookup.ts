@@ -12,7 +12,8 @@ export interface LookupOutcome {
   createUrl?: string;
   errorMessage?: string;
   /** Preloaded duplicate check data passthrough for the caller */
-  preloadedDuplicateCheck?: { url: string; result: DuplicateCheckResult; timestamp: number };
+  preloadedDuplicateCheck?: { url: string; result: DuplicateCheckResult; timestamp: number; preflightMs?: number };
+  originatorRttMs?: number;
 }
 
 /**
@@ -116,13 +117,21 @@ export class OriginatorLookup {
 
         this.cache.set(cacheKey, originator);
         this.renderFound(originator, handle, false);
-        return { status: 'found', originator };
+        return {
+          status: 'found',
+          originator,
+          originatorRttMs: typeof response.client_rtt_ms === 'number' ? response.client_rtt_ms : undefined,
+        };
       }
 
       if (response.success && !response.found) {
         const createUrl = this.resolveCreateUrl(handle, platform, response.create_url);
         this.renderNotFound(handle, createUrl);
-        return { status: 'not_found', createUrl };
+        return {
+          status: 'not_found',
+          createUrl,
+          originatorRttMs: typeof response.client_rtt_ms === 'number' ? response.client_rtt_ms : undefined,
+        };
       }
 
       throw new Error((response.error as string) || 'Lookup failed');

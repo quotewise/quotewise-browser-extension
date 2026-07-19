@@ -36,6 +36,7 @@ export interface HandleLookupResult {
   platform: string;
   match_platform?: string;              // Platform where handle was matched
   confidence?: number;                   // Match confidence (1.0 for exact)
+  client_rtt_ms?: number;
 }
 
 export interface DuplicateCheckResult {
@@ -90,6 +91,7 @@ export interface DuplicateCheckResult {
     source_url_checked?: boolean;
     total_matches?: number;
     query_time_ms?: number;
+    client_rtt_ms?: number;
     error?: boolean;
   };
 }

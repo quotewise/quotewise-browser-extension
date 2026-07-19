@@ -73,6 +73,8 @@ describe('options page', () => {
 
     expect(root.textContent).toContain('Signed in as chris');
     expect(root.querySelector('#private-mode-toggle')?.getAttribute('aria-label')).toBe('Private mode');
+    expect(root.querySelector('#stats-for-nerds-toggle')?.getAttribute('aria-label')).toBe('Statistics for nerds');
+    expect(root.textContent).toContain('Show timing/performance stats on the capture tray');
     expect((root.querySelector('#logout-btn') as HTMLButtonElement).textContent).toBe('Log out');
 
     (root.querySelector('#logout-btn') as HTMLButtonElement).click();
@@ -203,6 +205,28 @@ describe('options page', () => {
     expect(chrome.storage.sync.set).toHaveBeenCalledWith({
       settings: {
         privateMode: true,
+        statsForNerds: false,
+        autoAddToCollection: false,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
+        firstRunNoticeShown: false,
+      },
+    });
+  });
+
+  it('persists statistics-for-nerds changes through the settings store', async () => {
+    const root = document.createElement('main');
+    await initializeOptionsPage(root);
+
+    const toggle = root.querySelector('#stats-for-nerds-toggle') as HTMLInputElement;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(chrome.storage.sync.set).toHaveBeenCalledWith({
+      settings: {
+        privateMode: false,
+        statsForNerds: true,
         autoAddToCollection: false,
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],

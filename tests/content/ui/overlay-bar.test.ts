@@ -1,6 +1,6 @@
 import { OverlayBar } from '../../../src/content/ui/overlay-bar';
 import { AuthState } from '../../../src/auth/auth-state-machine';
-import { MessageType } from '../../../src/types';
+import { DEFAULT_SETTINGS, MessageType } from '../../../src/types';
 import type { TwitterData } from '../../../src/types';
 import type { DuplicateCheckResult } from '../../../src/types/api';
 import {
@@ -178,6 +178,25 @@ describe('OverlayBar', () => {
     overlay.show('Twitter');
     expect(container.hasAttribute('inert')).toBe(false);
     expect(shadow.activeElement).toBe(refreshButton);
+  });
+
+  it('gates the statistics row behind the opt-in setting', () => {
+    const overlay = setupReadyOverlay();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const row = shadow.getElementById('stats-row') as HTMLElement;
+
+    (overlay as any).settings = { ...DEFAULT_SETTINGS, statsForNerds: false };
+    (overlay as any).syncStatsRow();
+    expect(row.hidden).toBe(true);
+
+    (overlay as any).settings = { ...DEFAULT_SETTINGS, statsForNerds: true };
+    (overlay as any).syncStatsRow();
+    expect(row.hidden).toBe(false);
+    expect(row.textContent).toBe('⚡ dup — · srv — · — · orig — · pre —');
+
+    overlay.hide();
+    expect(row.hidden).toBe(true);
+    expect(row.textContent).toBe('');
   });
 
   it('clears stale duplicate preload and auto-hides after 1000ms after successful submit', async () => {

@@ -29,35 +29,10 @@ describe('Twitter Content Script', () => {
     document.body.appendChild(mockArticle);
   });
 
-  describe('Page Detection', () => {
-    test('should detect Twitter domain correctly', () => {
-      const isTwitterDomain = (hostname: string) => hostname === 'twitter.com' || hostname === 'x.com';
-      expect(isTwitterDomain('twitter.com')).toBe(true);
-      expect(isTwitterDomain('x.com')).toBe(true);
-      expect(isTwitterDomain('facebook.com')).toBe(false);
-    });
-
-    test('should detect tweet page URL pattern', () => {
-      const isTweetUrl = (pathname: string) => /\/[^\/]+\/status\/\d+/.test(pathname);
-      expect(isTweetUrl('/testuser/status/1234567890')).toBe(true);
-      expect(isTweetUrl('/testuser/status/123')).toBe(true);
-      expect(isTweetUrl('/testuser/media')).toBe(false);
-      expect(isTweetUrl('/home')).toBe(false);
-    });
-
-    test('should combine domain and URL detection', () => {
-      const isTweetPage = (hostname: string, pathname: string) => {
-        const isTwitterDomain = hostname === 'twitter.com' || hostname === 'x.com';
-        const isTweetUrl = /\/[^\/]+\/status\/\d+/.test(pathname);
-        return isTwitterDomain && isTweetUrl;
-      };
-
-      expect(isTweetPage('twitter.com', '/user/status/123')).toBe(true);
-      expect(isTweetPage('x.com', '/user/status/123')).toBe(true);
-      expect(isTweetPage('facebook.com', '/user/status/123')).toBe(false);
-      expect(isTweetPage('twitter.com', '/user/media')).toBe(false);
-    });
-  });
+  // Page-detection and URL/id-extraction behavior is covered for real against
+  // platformFromUrl / sourceIdFromUrl / isSameCaptureUrl in tests/platforms/capture.test.ts,
+  // and cleanUrl in tests/content/common.test.ts. (Local re-implementations that
+  // tested nothing about the shipped code were removed.)
 
   describe('Metric Parsing', () => {
     test('should parse abbreviated numbers correctly', () => {
@@ -115,38 +90,6 @@ describe('Twitter Content Script', () => {
       expect(parseMetricValue('')).toBe(0);
       expect(parseMetricValue('N/A')).toBe(0);
       expect(parseMetricValue('—')).toBe(0);
-    });
-  });
-
-  describe('URL and ID Extraction', () => {
-    test('should extract tweet ID from URL', () => {
-      const extractTweetId = (pathname: string): string | null => {
-        const match = pathname.match(/\/status\/(\d+)/);
-        return match ? match[1] : null;
-      };
-
-      expect(extractTweetId('/user/status/1234567890')).toBe('1234567890');
-      expect(extractTweetId('/testuser/status/123456')).toBe('123456');
-      expect(extractTweetId('/user/media')).toBeNull();
-    });
-
-    test('should clean URLs properly', () => {
-      const cleanUrl = (url: string): string => {
-        try {
-          const urlObj = new URL(url);
-          const trackingParams = ['s', 't', 'ref_src', 'ref_url'];
-          trackingParams.forEach(param => {
-            urlObj.searchParams.delete(param);
-          });
-          return urlObj.toString();
-        } catch {
-          return url;
-        }
-      };
-
-      const dirtyUrl = 'https://twitter.com/user/status/123?s=20&t=abc';
-      const cleanedUrl = cleanUrl(dirtyUrl);
-      expect(cleanedUrl).toBe('https://twitter.com/user/status/123');
     });
   });
 

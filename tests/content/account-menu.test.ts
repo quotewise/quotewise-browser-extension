@@ -60,6 +60,7 @@ describe('AccountMenu', () => {
     expect(chrome.storage.sync.set).toHaveBeenCalledWith({
       settings: {
         privateMode: true,
+        statsForNerds: false,
         autoAddToCollection: false,
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
@@ -159,6 +160,7 @@ describe('AccountMenu', () => {
     expect(chrome.storage.sync.set).toHaveBeenCalledWith({
       settings: {
         privateMode: true,
+        statsForNerds: false,
         autoAddToCollection: false,
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],

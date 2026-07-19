@@ -51,6 +51,7 @@ describe('collection auto-add submit wiring', () => {
     (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
       settings: {
         privateMode: false,
+        statsForNerds: false,
         autoAddToCollection: true,
         defaultCollectionSlug: 'favorites',
         lastUsedCollectionSlugs: [],
@@ -91,6 +92,7 @@ describe('collection auto-add submit wiring', () => {
     (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
       settings: {
         privateMode: false,
+        statsForNerds: false,
         autoAddToCollection: true,
         defaultCollectionSlug: 'my-collected-quotes',
         lastUsedCollectionSlugs: [],
@@ -124,6 +126,7 @@ describe('collection auto-add submit wiring', () => {
     expect(chrome.storage.sync.set).toHaveBeenCalledWith({
       settings: {
         privateMode: false,
+        statsForNerds: false,
         autoAddToCollection: true,
         defaultCollectionSlug: 'my-collected-quotes',
         lastUsedCollectionSlugs: ['favorites', 'research'],
@@ -182,6 +185,7 @@ describe('collection auto-add submit wiring', () => {
     expect(chrome.storage.sync.set).toHaveBeenCalledWith({
       settings: {
         privateMode: false,
+        statsForNerds: false,
         autoAddToCollection: true,
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: ['emojislug'],
