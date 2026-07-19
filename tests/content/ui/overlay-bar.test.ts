@@ -977,6 +977,70 @@ describe('OverlayBar', () => {
     expect((overlay as any).captureState.originator?.unique_id).toBe('author');
   });
 
+  it('checks duplicates without an originator and never enables Submit off the result', async () => {
+    // ADR-0009 made the originator_slug-omitted check coherent and ~10ms warm, so
+    // a post whose author is not a known originator still gets an answer to "is
+    // this already in Quotewise".
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue({});
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.LOOKUP_ORIGINATOR_BY_HANDLE) {
+        callback({ success: true, found: false, create_url: 'https://quotewise.io/create' });
+        return;
+      }
+      if (message.type === MessageType.CHECK_DUPLICATE) {
+        callback({
+          success: true,
+          result: duplicateResult({
+            // No originator claimed, so nothing is a conflict — strength only.
+            recommendation: 'duplicate',
+            in_quotewise: true,
+            matches: [duplicateMatch({
+              quote_id: 'existing',
+              match_class: 'exact',
+              match_type: 'exact_same_originator',
+              different_originator: false,
+              primary: true,
+            })],
+            search_metadata: { lexical_search_skipped_unscoped: true },
+          }),
+        });
+        return;
+      }
+      callback({ success: true });
+    });
+
+    const overlay = setupReadyOverlay();
+    (overlay as any).captureState.originator = null;
+    await (overlay as any).lookupOriginator('author');
+    await flushPromises();
+
+    const checks = (chrome.runtime.sendMessage as jest.Mock).mock.calls
+      .filter(call => call[0]?.type === MessageType.CHECK_DUPLICATE);
+    expect(checks).toHaveLength(1);
+    expect(checks[0][0].data.originator_slug).toBeUndefined();
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement | null;
+    // A View Quote button is legitimate here; an enabled Submit is not.
+    if (submitButton) {
+      expect(submitButton.disabled).toBe(true);
+    }
+    expect((overlay as any).captureState.duplicateResult).not.toBeNull();
+  });
+
+  it('refuses to enable Submit from a badge directive while the originator is unknown', () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).captureState.originator = null;
+    (overlay as any).updateDuplicateInfo({
+      result: duplicateResult({ recommendation: 'new_quote' }),
+    });
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const submitButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.textContent).toBe('Add originator first');
+  });
+
   it('live-updates the selection when the user highlights after opening (article)', () => {
     const overlay = new OverlayBar(async () => tweetData);
     (overlay as any).currentData = { ...tweetData, isArticle: true };

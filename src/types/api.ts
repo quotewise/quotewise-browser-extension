@@ -96,6 +96,24 @@ export interface QuoteMatch {
   quote_role?: string;
   has_relations?: boolean;
   canonical_quote_id?: string | null;
+  /**
+   * Authoritative edges, read from the relation graph rather than denormalized,
+   * so unlike the hints above they do not drift. Always present (`[]` when none).
+   *
+   * Scope is edges **between the matches in this response** — enough to answer
+   * "are these two results already linked?", which is what grouping needs. Edges
+   * to quotes outside the result set are not reported, so an empty array means
+   * "not linked to anything else here", never "unlinked".
+   *
+   * This is the only relation signal allowed to gate a link action.
+   */
+  relations?: QuoteRelation[];
+}
+
+export interface QuoteRelation {
+  other_quote_id: string;
+  relation_type: string;   // variant | translation | disputed | nested | …
+  direction: 'outgoing' | 'incoming';
 }
 
 export interface DuplicateCheckResult {
@@ -138,6 +156,13 @@ export interface DuplicateCheckResult {
     vector_search_used?: boolean;
     vector_search_skipped_uncached?: boolean;
     cross_originator_match_found?: boolean;
+    /**
+     * Set when the check ran without an `originator_slug`. That path skips the
+     * lexical trigram pass, the only engine that catches punctuation-only
+     * variants, so an empty result here is advisory — never proof the quote is
+     * new. Re-check once an originator is chosen.
+     */
+    lexical_search_skipped_unscoped?: boolean;
   };
 }
 

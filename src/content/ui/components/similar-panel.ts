@@ -47,7 +47,7 @@ export class SimilarPanel {
     if (conflicts.length === 0) return;
 
     this.renderPanel(
-      groupByCanonical(conflicts),
+      groupRelatedMatches(conflicts),
       'Similar quotes are also on record:',
       true,
       'info',
@@ -61,7 +61,7 @@ export class SimilarPanel {
   }
 
   private render(conflicts: QuoteMatch[], blocking?: QuoteMatch): void {
-    const groups = groupByCanonical(conflicts, blocking);
+    const groups = groupRelatedMatches(conflicts, blocking);
 
     if (blocking) {
       this.renderPanel(
@@ -123,31 +123,70 @@ export interface MatchGroup {
 }
 
 /**
- * Collapse a variant group into one entry.
+ * Collapse a related group into one entry.
  *
  * The vector sweep is unfiltered and returns up to 20 neighbours, so several
  * members of one variant group routinely arrive together (ADR-0009). Listed flat
  * they read as several independent duplicates of the same passage.
  *
- * Grouping only — this never decides anything. `canonical_quote_id` is a real FK
- * and reliable when present; its absence proves nothing, and `has_relations` /
- * `quote_role` are unreliable enough that they are not consulted at all.
+ * Two grouping signals, in order of authority:
+ * - `relations` — real edges read from the relation graph, so no drift. These
+ *   catch pairs that are linked while both carry a null `canonical_quote_id`.
+ * - `canonical_quote_id` — a real FK, reliable when present. Absence proves
+ *   nothing, so it can only ever add members to a group, never rule them out.
+ *
+ * `has_relations` and `quote_role` are never consulted: both drift from the
+ * graph badly enough (948 and 1,780 production rows respectively) that using
+ * them would reintroduce the bug the fields were meant to prevent.
+ *
+ * Groups are connected components, since an edge is an arbitrary pair — A-B and
+ * B-C must land in one group even with no direct A-C edge.
  */
-export function groupByCanonical(matches: QuoteMatch[], lead?: QuoteMatch): MatchGroup[] {
-  const buckets = new Map<string, QuoteMatch[]>();
+export function groupRelatedMatches(matches: QuoteMatch[], lead?: QuoteMatch): MatchGroup[] {
+  const parent = new Map<string, string>();
 
+  const find = (id: string): string => {
+    if (!parent.has(id)) parent.set(id, id);
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    // Path compression keeps repeated lookups flat on large sweeps.
+    let cursor = id;
+    while (parent.get(cursor) !== root) {
+      const next = parent.get(cursor)!;
+      parent.set(cursor, root);
+      cursor = next;
+    }
+    return root;
+  };
+  const union = (a: string, b: string): void => {
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootB, rootA);
+  };
+
+  for (const match of matches) find(match.quote_id);
   for (const match of matches) {
-    const key = match.canonical_quote_id || match.quote_id;
+    // The canonical id may name a quote outside the result set — harmless, it
+    // just acts as a shared key for the members that point at it.
+    if (match.canonical_quote_id) union(match.quote_id, match.canonical_quote_id);
+    for (const relation of match.relations ?? []) {
+      if (relation?.other_quote_id) union(match.quote_id, relation.other_quote_id);
+    }
+  }
+
+  const buckets = new Map<string, QuoteMatch[]>();
+  for (const match of matches) {
+    const key = find(match.quote_id);
     const bucket = buckets.get(key);
     if (bucket) bucket.push(match);
     else buckets.set(key, [match]);
   }
 
-  const groups = Array.from(buckets, ([key, members]) => ({
-    // The canonical fronts its group when the sweep returned it; otherwise the
-    // closest member does, since the list arrives distance-sorted.
+  const groups = Array.from(buckets.values(), members => ({
+    // A member with no canonical_quote_id IS the canonical, so it fronts the
+    // group; otherwise the closest member does, the list being distance-sorted.
     leader: (lead && members.includes(lead) ? lead : undefined)
-      ?? members.find(member => member.quote_id === key)
+      ?? members.find(member => !member.canonical_quote_id)
       ?? members[0],
     members,
   }));
@@ -189,15 +228,32 @@ function row(group: MatchGroup): HTMLLIElement {
 }
 
 /**
- * Says "these already belong together", never "these are unlinked" — the fields
+ * Says "these already belong together", never "these are unlinked" — the signals
  * behind it can only be trusted in the positive direction.
  */
 function relationNote(group: MatchGroup): string {
   const others = group.members.length - 1;
   if (others > 0) {
-    return ` · +${others} known ${others === 1 ? 'variant' : 'variants'}`;
+    const kind = relationKindWithin(group);
+    return ` · +${others} known ${others === 1 ? kind : `${kind}s`}`;
   }
   return group.leader.canonical_quote_id ? ' · known variant' : '';
+}
+
+/**
+ * Name the edge that actually links the group when one is reported; fall back to
+ * "variant" when the members were only grouped by a shared canonical.
+ */
+function relationKindWithin(group: MatchGroup): string {
+  const ids = new Set(group.members.map(member => member.quote_id));
+  for (const member of group.members) {
+    for (const relation of member.relations ?? []) {
+      if (relation?.relation_type && ids.has(relation.other_quote_id)) {
+        return relation.relation_type;
+      }
+    }
+  }
+  return 'variant';
 }
 
 function quoteSnippet(text: string | undefined): string {

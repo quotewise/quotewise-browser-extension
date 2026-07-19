@@ -127,9 +127,63 @@ Use these fields to *decorate* what you show. Do **not** use `has_relations: fal
 pair is unlinked and therefore safe to link — that is wrong on ~948 quotes today, and it produces
 exactly the duplicate-edge bug the fields were added to prevent.
 
-**Authoritative pairwise edges are coming in a follow-up** — bead `qw-gqae3`, measured at 0.16ms
-server-side, so cost is not the constraint. Until they land, gate any *write* decision on the
-server's response to the link action itself, not on these flags.
+#### ✅ Use `relations` for anything that gates a write
+
+Each match now also carries authoritative edges read from the relation graph itself — no
+denormalization, so no drift:
+
+```jsonc
+"relations": [
+  { "other_quote_id": "…", "relation_type": "variant", "direction": "outgoing" }
+]
+```
+
+Always present (`[]` when there are none). Scope is edges **between the returned matches**, which
+answers the question that matters in the tray: *are these two results already linked, so should I
+not offer the link decision again?* Both endpoints of an edge are recorded, so either match answers
+it without reconstructing direction from the other row.
+
+Edges to quotes *outside* the result set are not reported — they would enlarge the payload without
+being actionable; `canonical_quote_id` already hints at group membership.
+
+**Decision rule:** use `relations` to decide whether to offer a link action. Use `quote_role` /
+`has_relations` only to decorate what you render. One indexed query, measured 0.162ms server-side,
+and skipped entirely when fewer than two matches come back.
+
+### When `originator_slug` is omitted — badge status without a known originator
+
+Previously this path was both **incoherent and slow**, so it was not usable for badge status. Both
+are fixed; it is now a supported flow.
+
+**What you get.** With no originator claimed there is nothing to conflict *with*, so matches are
+classified on strength alone:
+
+| field | value when no originator is supplied |
+|---|---|
+| `different_originator` | always `false` |
+| `match_class` | `exact` or `similar` — **never `conflict`** |
+| `match_type` | `exact_same_originator` / `near_same_originator` / `similar` |
+| `originator` | the matched quote's *actual* originator — read the attribution from here |
+
+So the badge can say *"already in Quotewise — attributed to X"* by reading `match.originator`.
+Conflict only becomes meaningful once the user names an originator; re-run the check then.
+
+> Until this change the two engines disagreed with each other on this path: the lexical pass
+> reported `different_originator: false` / `match_class: similar` while the vector pass reported
+> `true` / `conflict` for the *same request*, because both short-circuited on "is an originator
+> set?" in opposite directions. The label tracked which engine happened to find the match. If you
+> wrote any client logic against the old behaviour, discard it.
+
+**Latency.** This path used to run an unscoped trigram scan (8.2s) preceded by a 474ms sequential
+exact-text scan. It is now **~10ms** (plus ~105ms if the query embedding is uncached) — an indexed
+exact-text lookup plus the vector sweep, which is originator-agnostic by construction.
+
+**One recall caveat.** The no-originator path no longer runs the lexical trigram pass, which is the
+only engine that catches punctuation-only variants (a trailing period, curly vs straight
+apostrophes) — 7 of 764 labeled pairs in the calibration set. Exact text and semantic neighbours
+are still caught. This was accepted deliberately because a capture cannot be submitted without an
+originator, so the no-originator check is advisory. Do **not** treat an empty result here as proof
+the quote is new; re-check once the originator is chosen.
 
 ### Server owns thresholds and precedence
 
@@ -226,12 +280,27 @@ preload, never as authoritative absence-of-duplicates.
 
 ## Latency budget (production, us-west-2)
 
+**With an originator** (the normal capture flow):
+
 | step | cost |
 |---|---|
 | Bedrock titan-embed (skipped on cache hit) | ~105ms |
 | HNSW top-k | ~10ms |
 | scoped trigram | 18–76ms |
+| pairwise relation edges | 0.16ms |
 | **total** | **~200ms** (was ~8,200ms) |
+
+**Without an originator** (badge status before attribution is known):
+
+| step | cost |
+|---|---|
+| Bedrock titan-embed (skipped on cache hit) | ~105ms |
+| indexed exact-text lookup (`text_hash`) | 0.03ms |
+| HNSW top-k | ~10ms |
+| **total** | **~10ms warm / ~115ms cold** (was ~8,700ms) |
+
+The old no-originator figure includes a 474ms sequential exact-text scan that ran *before* the 8.2s
+trigram; the indexed lookup replaced it.
 
 The check is now fast enough that gating Submit on it is unnecessary — that decision (`qw-h16j6`)
 stands. What remains is showing non-blocking "verifying…" feedback while it runs.
@@ -247,6 +316,11 @@ stands. What remains is showing non-blocking "verifying…" feedback while it ru
    in `matches`, with the same-originator one carrying `primary: true` at index 0.
 3. Confirm an un-updated extension build behaves identically to today (primary-first ordering).
 4. Preflight a never-before-seen text → `vector_search_skipped_uncached: true`, no Bedrock call.
+5. Check a quote **omitting `originator_slug`** → every match must have `different_originator: false`
+   and `match_class` of `exact` or `similar`, never `conflict`. `search_metadata` carries
+   `lexical_search_skipped_unscoped: true`. Should return in ~10ms warm, not seconds.
+6. Return two matches that are already linked as variants → both carry each other in `relations`,
+   with opposite `direction` values. Return two unlinked matches → both carry `relations: []`.
 
 ## Notes
 

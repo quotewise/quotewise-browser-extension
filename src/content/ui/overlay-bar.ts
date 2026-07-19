@@ -970,6 +970,13 @@ export class OverlayBar {
       } else if (outcome.status === 'not_found') {
         this.captureState.createUrl = outcome.createUrl || null;
         this.updateSubmitButton(false);
+        // The originator is unknown, but the quote may still be on record under
+        // someone else. Since ADR-0009 this check is coherent and ~10ms warm, so
+        // the tray no longer has to stay silent here — and if the quote already
+        // exists, adding it to a collection needs no originator at all.
+        if (!this.requiresSelection()) {
+          void this.checkDuplicate();
+        }
       } else {
         // error
         this.captureState.errorMessage = outcome.errorMessage || null;
@@ -1513,7 +1520,18 @@ export class OverlayBar {
   /**
    * Check for duplicate quotes in background (non-blocking, informational only)
    */
-  private async checkDuplicate(originatorSlug: string): Promise<void> {
+  /**
+   * `originatorSlug` is optional. Omitting it is a supported ADR-0009 path
+   * (~10ms warm): with no originator claimed there is nothing to conflict with,
+   * so the server classifies on strength alone — `different_originator` is
+   * always false and `match_class` is never `conflict`. It answers "is this
+   * already in Quotewise, and under whom", which is worth showing on a post
+   * whose author we cannot resolve.
+   *
+   * That path skips the lexical trigram pass, so an empty result is advisory
+   * only — never proof the quote is new.
+   */
+  private async checkDuplicate(originatorSlug?: string): Promise<void> {
     if (!this.currentData?.text) return;
 
     const checkSequence = ++this.duplicateCheckSequence;
@@ -1586,7 +1604,17 @@ export class OverlayBar {
       this.duplicateBadge = new DuplicateBadge(this.duplicateBadgeContainer, {
         onSubmitStateChange: (directive: SubmitStateDirective) => {
           if (directive.type === 'view_quote') {
+            // Still useful without an originator — the quote exists, go read it.
             this.updateViewQuoteButton(directive.url, directive.text);
+            return;
+          }
+
+          // The badge reasons about the quote, not the attribution, so on the
+          // no-originator path it will happily ask for an enabled Submit. Acting
+          // on that hits submitQuote's `!originator` guard, which returns in
+          // silence. Say why instead.
+          if (directive.enabled && !this.captureState.originator) {
+            this.updateSubmitButton(false, 'Add originator first');
             return;
           }
 
