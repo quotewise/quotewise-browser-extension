@@ -340,9 +340,11 @@ first text-bearing check runs.
 This is a known, accepted side-effect, not a defect: the badge reports everything it is entitled to
 know, and improves the moment the user shows intent. Do not "fix" it by moving text earlier.
 
-Left open deliberately: `New` still reads *"New quote — not in Quotewise yet"* on a check that
-never examined the text. That claim is now knowingly stronger than its evidence. Retitling it is a
-candidate if it ever misleads in practice.
+Consequently `New` was retitled. It read *"New quote — not in Quotewise yet"*, which claims
+something about the *text* — precisely what a URL-only probe cannot establish. It now reads
+*"Quotewise — nothing captured from this post yet"*: true whether the check examined the text or
+only the URL, and consistent with its siblings `HasCaptures` and `Count`, which already describe
+the post rather than the quote.
 
 ## Latency budget (production, us-west-2)
 

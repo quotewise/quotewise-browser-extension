@@ -159,7 +159,12 @@ export const ICON_STATES = {
     iconVariant: 'color',
     badgeText: '★',
     badgeColor: '#0072B2',
-    title: 'New quote — not in Quotewise yet',
+    // Describes the *post*, not the text. This state is reached from two very
+    // different checks: the URL-only automatic probe, which cannot speak to the
+    // text at all, and a full text check that came back empty. Only the weaker
+    // claim is true in both, and it is the one that matches its siblings —
+    // HasCaptures and Count also describe the post.
+    title: 'Quotewise — nothing captured from this post yet',
     scope: 'tab',
   },
 } as const satisfies Record<string, IconStateConfig>;

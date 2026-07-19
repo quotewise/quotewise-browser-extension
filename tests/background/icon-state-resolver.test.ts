@@ -84,7 +84,7 @@ describe('resolveIconPresentation', () => {
       badgeText: '★',
       badgeColor: '#0072B2',
       scope: 'tab',
-      title: 'New quote — not in Quotewise yet',
+      title: 'Quotewise — nothing captured from this post yet',
     });
   });
 
@@ -154,8 +154,8 @@ describe('resolveIconPresentation', () => {
     });
 
     it('stops calling a quote new when something close is on record elsewhere', () => {
-      // Previously badged "★ New quote — not in Quotewise yet", which is not
-      // vague but false.
+      // Previously badged ★, i.e. "go ahead, nothing here" — for a quote that is
+      // very nearly on record under someone else's name.
       expect(resolveIconPresentation(AuthState.AUTHENTICATED, duplicate('new_quote', {
         matches: [
           duplicateMatch({ quote_id: 'mine', primary: true, match_class: 'similar' }),
@@ -408,7 +408,7 @@ describe('resolveIconPresentation', () => {
       badgeText: '★',
       badgeColor: '#0072B2',
       scope: 'tab',
-      title: 'New quote — not in Quotewise yet',
+      title: 'Quotewise — nothing captured from this post yet',
     });
 
     expect(resolveIconPresentation(
