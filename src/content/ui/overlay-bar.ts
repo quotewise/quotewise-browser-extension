@@ -1,7 +1,7 @@
 import type { CapturedPostData } from '../../types';
 import type { CaptureEmptyReason, CaptureResult } from '../../platforms/types';
 import { DEFAULT_SETTINGS, MessageType, type Settings } from '../../types';
-import type { Collection, DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult } from '../../types/api';
+import type { Collection, DuplicateCheckResult, OriginatorSearchResult, PreflightOriginatorResult, QuoteMatch } from '../../types/api';
 import {
   AuthState,
   getStateMessage,
@@ -1102,6 +1102,14 @@ export class OverlayBar {
 
         // Clear duplicate badge and show success in originator row
         this.updateDuplicateInfo(null);
+
+        // Advisory only (ADR-0009 §5) — the capture succeeded either way. It
+        // reports what else is on record so a curator can follow up.
+        const attributionConflicts = Array.isArray(response.attributionConflicts)
+          ? response.attributionConflicts
+          : [];
+        this.ensureSimilarPanel()?.showPostSubmit(attributionConflicts);
+
         const successMessage = this.successMessageForSubmit(response, opts.userIntent);
         const collectionMessage = this.collectionMessage(successMessage, addSummary);
         this.setOriginatorHtml(
@@ -1136,8 +1144,10 @@ export class OverlayBar {
 
         const clearDuplicateCache = this.clearPreloadedDuplicateCheckForCurrentUrl();
 
-        // Auto-hide after full success; partial failures stay open for retry.
-        if (addSummary.failed.length === 0) {
+        // Auto-hide after full success; partial failures stay open for retry, as
+        // does an attribution advisory — a heads-up that flashes for a second and
+        // then vanishes is worse than none, since it can't be recalled.
+        if (addSummary.failed.length === 0 && attributionConflicts.length === 0) {
           setTimeout(() => this.hide(), 1000);
         }
         await clearDuplicateCache;
@@ -1658,6 +1668,7 @@ export class OverlayBar {
     message?: string;
     collectionWarning?: string;
     action?: 'created' | 'sighting_added';
+    attributionConflicts?: QuoteMatch[];
     id?: string;
     quoteId?: string;
     alreadyMember?: boolean;

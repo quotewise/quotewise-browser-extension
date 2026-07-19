@@ -218,6 +218,73 @@ describe('OverlayBar', () => {
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
   });
 
+  it('keeps the tray open and surfaces the advisory when the create response reports attribution conflicts', async () => {
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.SUBMIT_QUOTE) {
+        callback({
+          success: true,
+          message: 'Quote submitted successfully',
+          quoteId: 'q1',
+          attributionConflicts: [duplicateMatch({
+            quote_id: 'cross',
+            text: 'The verbatim quote',
+            match_type: 'exact_different_originator',
+            different_originator: true,
+            originator: {
+              id: 'originator-2',
+              full_name: 'Different Author',
+              sort_name: null,
+              birth_year: null,
+              death_year: null,
+            },
+          })],
+        });
+        return;
+      }
+      callback({ success: true });
+    });
+
+    const overlay = setupReadyOverlay();
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+
+    const submitted = (overlay as any).submitQuote();
+    await flushSubmitTimers();
+    await submitted;
+
+    // A heads-up that vanishes after a second can't be recalled, so the
+    // auto-hide has to yield to it.
+    expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), 1000);
+
+    const panel = ((overlay as any).shadow as ShadowRoot).getElementById('similar-panel') as HTMLElement;
+    expect(panel.hidden).toBe(false);
+    expect(panel.textContent).toContain('The verbatim quote');
+    expect(panel.textContent).toContain('Different Author');
+  });
+
+  it('blocks submission when an exact match under another originator hides behind the primary', async () => {
+    const overlay = setupReadyOverlay();
+    (overlay as any).captureState.duplicateResult = duplicateResult({
+      recommendation: 'new_version',
+      in_quotewise: true,
+      matches: [
+        duplicateMatch({ quote_id: 'same', primary: true, match_class: 'similar' }),
+        duplicateMatch({
+          quote_id: 'cross',
+          match_class: 'conflict',
+          match_type: 'exact_different_originator',
+          different_originator: true,
+        }),
+      ],
+    });
+
+    await (overlay as any).submitQuote();
+
+    expect(chrome.runtime.sendMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: MessageType.SUBMIT_QUOTE }),
+      expect.any(Function),
+    );
+  });
+
   it('hides the duplicate top-bar source text only when the quote box shows the full source', () => {
     const overlay = setupReadyOverlay();
     const shadow = (overlay as any).shadow as ShadowRoot;

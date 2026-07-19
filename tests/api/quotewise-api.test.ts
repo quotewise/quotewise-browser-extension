@@ -623,6 +623,60 @@ describe('QuotewiseApiClient', () => {
       expect(result.quoteId).toBeUndefined();
     });
 
+    test('surfaces attribution conflicts from the create response without failing the submit', async () => {
+      const conflict = {
+        quote_id: '901',
+        text: 'The verbatim quote',
+        similarity: 96.4,
+        match_type: 'exact_different_originator',
+        match_class: 'conflict',
+        different_originator: true,
+        match_engine: 'semantic',
+        in_user_collections: false,
+        member_collections: [],
+        originator: { id: 'o2', full_name: 'Different Author', sort_name: null, birth_year: null, death_year: null },
+        workflow_status: 'published',
+        likes_count: 0,
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({
+          quote: { short_code: 'abc123' },
+          version_id: 482932,
+          action: 'created',
+          attribution_conflicts: [conflict],
+        }),
+        headers: new Headers({ 'content-type': 'application/json' })
+      } as Response);
+
+      const result = await client.submitQuote(validQuoteData);
+
+      // Advisory: the quote was still created.
+      expect(result.success).toBe(true);
+      expect(result.quoteId).toBe('482932');
+      expect(result.attributionConflicts).toEqual([conflict]);
+    });
+
+    test('omits attributionConflicts when the server reports none', async () => {
+      for (const attribution_conflicts of [undefined, [], 'malformed']) {
+        mockFetch.mockResolvedValue({
+          ok: true,
+          json: () => Promise.resolve({
+            quote: { short_code: 'abc123' },
+            version_id: 482932,
+            ...(attribution_conflicts === undefined ? {} : { attribution_conflicts }),
+          }),
+          headers: new Headers({ 'content-type': 'application/json' })
+        } as Response);
+
+        const result = await client.submitQuote(validQuoteData);
+
+        expect(result.success).toBe(true);
+        expect(result).not.toHaveProperty('attributionConflicts');
+      }
+    });
+
     test('threads sighting/variant decision fields and surfaces response action', async () => {
       const mockResponse = {
         quote: { short_code: 'abc123' },

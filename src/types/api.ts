@@ -128,6 +128,13 @@ export interface QuoteSubmissionResult {
   error?: string;
   collectionWarning?: string;
   action?: 'created' | 'sighting_added';
+  /**
+   * Other originators already on record with this text (ADR-0009 §5).
+   * Strictly advisory — the quote was created regardless, and this never
+   * indicates failure. Empty when the text had no cached embedding, since
+   * surfacing it must not add a Bedrock call to a write.
+   */
+  attributionConflicts?: QuoteMatch[];
 }
 
 export interface MemberCollection {

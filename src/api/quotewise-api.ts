@@ -14,6 +14,7 @@ import type {
   CollectionsListResponse,
   HandleLookupResult,
   PreflightResult,
+  QuoteMatch,
   AuthenticationError,
   ApiError
 } from '../types/api';
@@ -418,6 +419,7 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         message?: string;
         collection_warning?: string;
         action?: QuoteSubmissionResult['action'];
+        attribution_conflicts?: QuoteMatch[];
       }>(
         '/v1/quotes/',
         {
@@ -431,7 +433,12 @@ export class QuotewiseApiClientImpl implements QuotewiseApiClient {
         message: result.message || 'Quote submitted successfully',
         quoteId: extractSubmittedQuoteId(result),
         collectionWarning: result.collection_warning,
-        action: result.action
+        action: result.action,
+        // Present only when non-empty; omitted entirely rather than sent as []
+        // so the overlay's "did anything come back" check stays a length check.
+        ...(Array.isArray(result.attribution_conflicts) && result.attribution_conflicts.length > 0
+          ? { attributionConflicts: result.attribution_conflicts }
+          : {})
       };
     } catch (error) {
       console.error('Error submitting quote:', error);
