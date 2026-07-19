@@ -155,6 +155,19 @@ Two deliberate choices there:
 passages shows the count, not `★`/`~`/`=` — once attribution is settled, "what's
 on this post" beats "what is this quote".
 
+> **The badge is URL-scoped until the tray opens — by design, do not "fix" it.**
+> The automatic preflight sends `{ handle, platform, source_url }` and deliberately
+> **no post text** (`service-worker.ts:2705`; `api-handler.ts:403` falls back to
+> probing with the URL). Text travels only once the user opens the tray, which is
+> the first sign of intent to interact with Quotewise — sending it on view would
+> collect data from people who never asked for anything, and would not survive
+> capture expanding beyond post pages.
+>
+> Consequence: at rest the badge can say "this post already has captures" and
+> "this handle is not an originator", but never "this text is already in
+> Quotewise". A badge that changes when the tray opens is expected here, not a
+> bug. See ADR-0009's 2026-07-19 amendment.
+
 > **`recommendation` and `match_class` can disagree — trust the matches.**
 > With no originator the server cannot recommend a *version* (there is nobody to
 > version it under), so it answers `new_quote` while the matches still carry
