@@ -3,6 +3,7 @@ import { ICON_STATES, type IconScope, type IconVariant } from '../config/icon-st
 import type { DuplicateCheckResult } from '../types/api';
 import {
   blockingExactConflict,
+  classifyMatchResolution,
   mapRecommendationToQuoteStatus,
   passageCountForUrl,
   secondaryConflicts,
@@ -120,12 +121,27 @@ export function resolveIconPresentation(
       return QUOTE_STATUS_TO_STATE[quoteStatus];
     }
 
-    // Nothing under this originator, but the sweep found something close under
-    // another name. Ahead of MissingOriginator on purpose: knowing the quote is
-    // effectively already on record is worth more than being told to go create
-    // an originator for it.
-    if (dup && secondaryConflicts(dup).length > 0) {
-      return ICON_STATES.SimilarElsewhere;
+    // Something close is on record even though the recommendation tiers above
+    // said otherwise.
+    //
+    // `recommendation` and `match_class` can disagree: with no originator the
+    // server cannot recommend a *version* — there is nobody to version it under
+    // — so it answers new_quote while the matches still carry `similar`. The
+    // tray classifies on match_class, so an icon that trusts only the
+    // recommendation ends up contradicting it on the same response.
+    //
+    // Ahead of MissingOriginator on purpose: knowing the quote is effectively
+    // already on record beats being told to go create an originator for it.
+    if (dup) {
+      const crossOriginator = secondaryConflicts(dup).length > 0;
+      // With the post's author absent from Quotewise, any match is by
+      // definition somebody else's — so the stronger wording is earned.
+      if (crossOriginator || (tab.isOriginatorMissing && classifyMatchResolution(dup) === 'similar')) {
+        return ICON_STATES.SimilarElsewhere;
+      }
+      if (classifyMatchResolution(dup) === 'similar') {
+        return ICON_STATES.Similar;
+      }
     }
 
     if (tab.isOriginatorMissing) {

@@ -180,6 +180,49 @@ describe('resolveIconPresentation', () => {
       }), tweetTab)).toMatchObject({ badgeText: '★' });
     });
 
+    it('trusts the matches over the recommendation when they disagree', () => {
+      // Live case: an Asimov quote posted by a handle that is not an originator.
+      // With no originator the server cannot recommend a *version* — nobody to
+      // version it under — so `recommendation` is new_quote while the match
+      // still carries match_class 'similar'. The tray keys on match_class and
+      // offered "Add as variant"; the icon keyed on recommendation and badged
+      // "@ originator missing". Same response, two answers.
+      const asimovNearMatch = duplicate('new_quote', {
+        matches: [duplicateMatch({
+          quote_id: 'asimov',
+          primary: true,
+          match_class: 'similar',
+          different_originator: false,
+          originator: {
+            id: 'asimov',
+            full_name: 'Isaac Asimov',
+            sort_name: null,
+            birth_year: null,
+            death_year: null,
+          },
+        })],
+        search_metadata: { lexical_search_skipped_unscoped: true },
+      });
+
+      expect(resolveIconPresentation(
+        AuthState.AUTHENTICATED,
+        asimovNearMatch,
+        { ...tweetTab, isOriginatorMissing: true },
+      )).toMatchObject({
+        badgeText: '~',
+        badgeColor: '#E69F00',
+        title: 'Similar to a quote attributed to someone else',
+      });
+    });
+
+    it('still reports a missing originator when nothing matched', () => {
+      expect(resolveIconPresentation(
+        AuthState.AUTHENTICATED,
+        duplicate('new_quote', { matches: [] }),
+        { ...tweetTab, isOriginatorMissing: true },
+      )).toMatchObject({ badgeText: '@' });
+    });
+
     it('does not fire on the no-originator path, where nothing is a conflict', () => {
       // With no originator claimed the server reports different_originator:false
       // and never `conflict`, so neither new state may trigger.

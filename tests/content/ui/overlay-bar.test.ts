@@ -1028,6 +1028,57 @@ describe('OverlayBar', () => {
     expect((overlay as any).captureState.duplicateResult).not.toBeNull();
   });
 
+  it('offers no link decision on a known quote posted by an unknown originator', async () => {
+    // Reported case: an Asimov quote posted by a handle that is not an
+    // originator. The tray showed the diff and an "Add as variant" button whose
+    // handler returned in silence at submitQuote's !originator guard.
+    (chrome.storage.local.get as jest.Mock).mockResolvedValue({});
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.LOOKUP_ORIGINATOR_BY_HANDLE) {
+        callback({ success: true, found: false, create_url: 'https://quotewise.io/create' });
+        return;
+      }
+      if (message.type === MessageType.CHECK_DUPLICATE) {
+        callback({
+          success: true,
+          result: duplicateResult({
+            // No originator to version it under, so the server says new_quote
+            // while the match itself is classified similar.
+            recommendation: 'new_quote',
+            in_quotewise: true,
+            matches: [duplicateMatch({
+              quote_id: '901',
+              text: 'There is a cult of ignorance, and there always has been.',
+              match_class: 'similar',
+              primary: true,
+              originator: {
+                id: 'asimov',
+                full_name: 'Isaac Asimov',
+                sort_name: null,
+                birth_year: null,
+                death_year: null,
+              },
+            })],
+          }),
+        });
+        return;
+      }
+      callback({ success: true });
+    });
+
+    const overlay = setupReadyOverlay();
+    (overlay as any).captureState.originator = null;
+    (overlay as any).captureState.selectedText =
+      'There is a cult of ignorance, and there has always been.';
+    await (overlay as any).lookupOriginator('J_D_Landis');
+    await flushPromises();
+
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const labels = Array.from(shadow.querySelectorAll('button')).map(button => button.textContent);
+    expect(labels).not.toContain('Add as variant');
+    expect(labels).not.toContain('Add another sighting');
+  });
+
   it('refuses to enable Submit from a badge directive while the originator is unknown', () => {
     const overlay = setupReadyOverlay();
     (overlay as any).captureState.originator = null;

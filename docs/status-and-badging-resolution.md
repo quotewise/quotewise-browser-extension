@@ -113,8 +113,8 @@ flowchart TD
     PC2 -->|no| QS2{"quoteStatus not None/New?"}
     HASDUP -->|no| QS2
     QS2 -->|yes| MAP["InCollection ✓<br/>Exact = · Similar ~"]
-    QS2 -->|no| SEC{"secondaryConflicts<br/>non-empty?"}
-    SEC -->|yes| SECR["SimilarElsewhere<br/>~ amber"]
+    QS2 -->|no| SEC{"secondaryConflicts non-empty<br/>OR classifyMatchResolution<br/>=== 'similar'?"}
+    SEC -->|yes| SECR["SimilarElsewhere ~ amber<br/>(Similar ~ if the originator<br/>is known)"]
     SEC -->|no| MO{"originator missing?"}
     MO -->|yes| MISS["MissingOriginator<br/>@ amber"]
     MO -->|no| ISNEW{"quoteStatus === 'New'?"}
@@ -154,6 +154,16 @@ Two deliberate choices there:
 **Passage count outranks the remaining quote statuses.** A post with 2+ captured
 passages shows the count, not `★`/`~`/`=` — once attribution is settled, "what's
 on this post" beats "what is this quote".
+
+> **`recommendation` and `match_class` can disagree — trust the matches.**
+> With no originator the server cannot recommend a *version* (there is nobody to
+> version it under), so it answers `new_quote` while the matches still carry
+> `match_class: 'similar'`. `mapRecommendationToQuoteStatus` reads only
+> `recommendation`; `classifyMatchResolution` reads `match_class`. An icon that
+> consults just the first contradicts the tray on the very same response — an
+> Asimov quote posted by an unknown handle badged `@` while the tray offered
+> "Add as variant". The resolver falls back to `classifyMatchResolution` before
+> `MissingOriginator` for exactly this reason.
 
 **`passageCountForUrl()` is three-valued, and the distinction is load-bearing:**
 
@@ -303,6 +313,10 @@ Two things this path must respect:
   in silence at its `!originator` guard, so the directive is vetoed in
   `onSubmitStateChange` and the button reads "Add originator first".
   `view_quote` directives pass through — the quote exists, reading it is useful.
+- **No link decisions either.** "Add another sighting" / "Add as variant" route
+  straight to `submitQuote` and hit the same silent guard, so the badge is told
+  via `update(..., { hasOriginator })` to withhold them. The word diff still
+  renders — comparing the two texts is the useful part regardless.
 - **Collections still work.** Adding an *existing* quote to a collection routes
   through `addExistingQuoteToSelectedCollections()`, which needs no originator.
   That path is deliberately not vetoed.
