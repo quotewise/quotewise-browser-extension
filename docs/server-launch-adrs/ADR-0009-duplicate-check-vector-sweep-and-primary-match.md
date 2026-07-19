@@ -91,6 +91,46 @@ breaks.
 `exact_different_originator` also drives the `attribution_conflict` / `attribution_conflict_resolved`
 values of the top-level `recommendation` field.
 
+### Relation labels: don't render a variant group as independent candidates
+
+Every match now carries three relation fields, free of extra queries (they are plain columns
+already loaded by the dedup queryset):
+
+```jsonc
+"quote_role": "canonical",      // canonical | translation | variant | disputed | nested | …
+"has_relations": true,
+"canonical_quote_id": "…"       // null when this match IS the canonical
+```
+
+**Why they exist.** The vector sweep is unfiltered and returns up to 20 neighbours, so it routinely
+returns *several members of one variant group at once*. Before these fields, they arrived as
+independent, unlabelled candidates — so the tray would offer a "link as variant" decision for a
+group that already exists, and the curator could create a second edge over the same pair.
+
+**Suggested use:** group matches by `canonical_quote_id` (falling back to `quote_id` for the
+canonical itself) and render one row per group with the members collapsed under it. Label a
+non-canonical member as a known variant rather than offering it as a fresh link decision.
+
+#### ⚠️ Treat these as display hints, not as proof
+
+Measured against production 2026-07-19:
+
+| claim | reality |
+|---|---|
+| `has_relations: true` | reliable — 0 rows claim it without an edge |
+| `has_relations: false` | **NOT proof of "no relations"** — 948 quotes have edges but the flag is false |
+| `quote_role: "variant"` | **NOT proof of a variant edge** — 1,780 rows carry the role with no backing edge |
+| `canonical_quote_id: "…"` | reliable when present (a real FK); absence proves nothing |
+
+`quote_role` is a curator-set label, not a value derived from the relation graph, so the two drift.
+Use these fields to *decorate* what you show. Do **not** use `has_relations: false` to conclude a
+pair is unlinked and therefore safe to link — that is wrong on ~948 quotes today, and it produces
+exactly the duplicate-edge bug the fields were added to prevent.
+
+**Authoritative pairwise edges are coming in a follow-up** — bead `qw-gqae3`, measured at 0.16ms
+server-side, so cost is not the constraint. Until they land, gate any *write* decision on the
+server's response to the link action itself, not on these flags.
+
 ### Server owns thresholds and precedence
 
 The client performs **no** similarity math and **no** precedence inference. Bands are calibrated

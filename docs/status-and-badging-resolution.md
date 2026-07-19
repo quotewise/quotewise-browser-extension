@@ -57,6 +57,20 @@ flowchart TD
   equality — a fact, not a threshold.
 - `match_class: 'conflict'` means *matched a different originator*, per ADR-0001.
   It is not a strength signal, and it is deliberately **not** orthogonalized.
+- **Relation fields decorate, they never decide.** `quote_role`, `has_relations`
+  and `canonical_quote_id` exist so a variant group isn't rendered as several
+  independent duplicates. Only the positive direction is trustworthy:
+
+  | field | trust |
+  |---|---|
+  | `canonical_quote_id` present | reliable (real FK) — absence proves nothing |
+  | `has_relations: true` | reliable |
+  | `has_relations: false` | **not** proof of "no relations" (948 rows lie) |
+  | `quote_role: 'variant'` | **not** proof of an edge (1,780 rows lie) |
+
+  Never conclude "unlinked, therefore safe to link" from these. Gate any write on
+  the server's response to the link action itself. Authoritative pairwise edges
+  are tracked in `qw-gqae3`.
 
 ---
 
@@ -213,16 +227,20 @@ disclosure state, not by hedged wording.
 ```mermaid
 flowchart TD
     A([update result]) --> B["conflicts = secondaryConflicts(result)"]
-    B --> C{empty?}
+    B --> C{"empty?"}
     C -->|yes| H([hidden])
-    C -->|no| D{"any match_type ===<br/>'exact_different_originator'?"}
-    D -->|yes| E["⛔ expanded, warning tone<br/>'This exact quote is already<br/>attributed to X'<br/>exact match listed first"]
-    D -->|no| F["ℹ️ collapsed &lt;details&gt;, info tone<br/>'Might be a duplicate of N quotes<br/>by other originators'"]
-    E & F --> G["max 5 rows + '+N more'<br/>row = snippet link — originator<br/>NO similarity percentages"]
+    C -->|no| GR["groupByCanonical()<br/>key = canonical_quote_id || quote_id<br/>leader = canonical, else closest"]
+    GR --> D{"any match_type ===<br/>'exact_different_originator'?"}
+    D -->|yes| E["⛔ expanded, warning tone<br/>'This exact quote is already<br/>attributed to X'<br/>blocking match's group leads"]
+    D -->|no| F["ℹ️ collapsed &lt;details&gt;, info tone<br/>'Might be a duplicate of N quotes<br/>by other originators'<br/>N counts GROUPS, not matches"]
+    E & F --> G["max 5 rows + '+N more'<br/>row = snippet link — originator<br/>· +N known variants<br/>NO similarity percentages"]
 
     classDef danger fill:#fde2e2,stroke:#c0392b,color:#7b241c
     class E danger
 ```
+
+Grouping is display-only. `has_relations` and `quote_role` are never consulted —
+only `canonical_quote_id`, and only in the positive direction.
 
 Post-submit (`showPostSubmit`, ADR-0009 §5) reuses the panel in advisory tone —
 the quote was created regardless — and **suppresses the 1000ms auto-hide** so the

@@ -76,6 +76,26 @@ export interface QuoteMatch {
   primary?: boolean;
   different_originator?: boolean;
   match_engine?: 'lexical' | 'semantic' | 'url';
+  /**
+   * Relation labels (ADR-0009). **Display hints only — never proof.**
+   *
+   * The unfiltered vector sweep routinely returns several members of one variant
+   * group at once, and without these they read as independent duplicates. Group
+   * by `canonical_quote_id || quote_id` and show one row per group.
+   *
+   * What each is worth, measured against production 2026-07-19:
+   * - `canonical_quote_id` present — reliable (a real FK). Absence proves nothing.
+   * - `has_relations: true` — reliable. `false` is NOT proof of "no relations";
+   *   948 quotes have edges while reporting false.
+   * - `quote_role` — a curator-set label that drifts from the relation graph;
+   *   1,780 rows say "variant" with no backing edge.
+   *
+   * Never gate a write on these. Authoritative pairwise edges land in `qw-gqae3`;
+   * until then, gate link decisions on the server's response to the link itself.
+   */
+  quote_role?: string;
+  has_relations?: boolean;
+  canonical_quote_id?: string | null;
 }
 
 export interface DuplicateCheckResult {

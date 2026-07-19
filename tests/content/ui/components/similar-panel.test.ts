@@ -105,6 +105,87 @@ describe('SimilarPanel', () => {
     expect(rows[0].textContent).toContain('The verbatim quote');
   });
 
+  it('collapses one variant group into a single row', () => {
+    // The unfiltered sweep returns up to 20 neighbours, so several members of one
+    // variant group arrive together. Flat, they read as separate duplicates.
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({ quote_id: 'canon', text: 'The canonical wording' }),
+        crossOriginator({ quote_id: 'v1', text: 'A variant wording', canonical_quote_id: 'canon' }),
+        crossOriginator({ quote_id: 'v2', text: 'Another variant', canonical_quote_id: 'canon' }),
+      ],
+    }));
+
+    const rows = container.querySelectorAll('li');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('The canonical wording');
+    expect(rows[0].textContent).toContain('+2 known variants');
+    expect(container.textContent).toContain('Might be a duplicate of a quote by another originator');
+  });
+
+  it('fronts the group with the canonical, not merely the closest member', () => {
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({ quote_id: 'v1', text: 'A variant wording', canonical_quote_id: 'canon' }),
+        crossOriginator({ quote_id: 'canon', text: 'The canonical wording' }),
+      ],
+    }));
+
+    expect(container.querySelector('li')?.textContent).toContain('The canonical wording');
+  });
+
+  it('marks a lone non-canonical member as a known variant', () => {
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({ quote_id: 'v1', canonical_quote_id: 'canon-not-returned' }),
+      ],
+    }));
+
+    expect(container.querySelector('li')?.textContent).toContain('known variant');
+  });
+
+  it('never treats has_relations or quote_role as evidence', () => {
+    // Both drift from the relation graph in production, so they must not group,
+    // label, or suppress anything. Two unrelated quotes stay two rows.
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({ quote_id: 'a', has_relations: true, quote_role: 'variant' }),
+        crossOriginator({ quote_id: 'b', has_relations: false, quote_role: 'canonical' }),
+      ],
+    }));
+
+    const rows = container.querySelectorAll('li');
+    expect(rows).toHaveLength(2);
+    expect(container.textContent).not.toContain('known variant');
+  });
+
+  it('keeps the blocking exact match leading its own group', () => {
+    panel.update(duplicateResult({
+      matches: [
+        primarySameOriginator,
+        crossOriginator({ quote_id: 'other', text: 'An unrelated near match' }),
+        crossOriginator({
+          quote_id: 'exact',
+          text: 'The verbatim quote',
+          match_type: 'exact_different_originator',
+          canonical_quote_id: 'canon',
+        }),
+        crossOriginator({ quote_id: 'canon', text: 'Its canonical sibling' }),
+      ],
+    }));
+
+    const rows = container.querySelectorAll('li');
+    expect(rows).toHaveLength(2);
+    // The exact match is why the panel is expanded — it must not be demoted
+    // behind its own canonical.
+    expect(rows[0].textContent).toContain('The verbatim quote');
+    expect(rows[0].textContent).toContain('+1 known variant');
+  });
+
   it('caps the list and reports the remainder', () => {
     panel.update(duplicateResult({
       matches: [

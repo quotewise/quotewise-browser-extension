@@ -46,7 +46,12 @@ export class SimilarPanel {
     this.clear();
     if (conflicts.length === 0) return;
 
-    this.renderPanel(conflicts, 'Similar quotes are also on record:', true, 'info');
+    this.renderPanel(
+      groupByCanonical(conflicts),
+      'Similar quotes are also on record:',
+      true,
+      'info',
+    );
   }
 
   clear(): void {
@@ -56,11 +61,12 @@ export class SimilarPanel {
   }
 
   private render(conflicts: QuoteMatch[], blocking?: QuoteMatch): void {
+    const groups = groupByCanonical(conflicts, blocking);
+
     if (blocking) {
-      const name = originatorName(blocking);
       this.renderPanel(
-        [blocking, ...conflicts.filter(match => match !== blocking)],
-        `This exact quote is already attributed to ${name}`,
+        groups,
+        `This exact quote is already attributed to ${originatorName(blocking)}`,
         true,
         'warning',
       );
@@ -68,17 +74,17 @@ export class SimilarPanel {
     }
 
     this.renderPanel(
-      conflicts,
-      conflicts.length === 1
+      groups,
+      groups.length === 1
         ? 'Might be a duplicate of a quote by another originator'
-        : `Might be a duplicate of ${conflicts.length} quotes by other originators`,
+        : `Might be a duplicate of ${groups.length} quotes by other originators`,
       false,
       'info',
     );
   }
 
   private renderPanel(
-    conflicts: QuoteMatch[],
+    groups: MatchGroup[],
     summaryText: string,
     open: boolean,
     tone: 'warning' | 'info',
@@ -97,13 +103,13 @@ export class SimilarPanel {
 
     const list = document.createElement('ul');
     list.className = 'similar-panel-list';
-    conflicts.slice(0, MAX_ROWS).forEach(match => list.appendChild(row(match)));
+    groups.slice(0, MAX_ROWS).forEach(group => list.appendChild(row(group)));
     details.appendChild(list);
 
-    if (conflicts.length > MAX_ROWS) {
+    if (groups.length > MAX_ROWS) {
       const more = document.createElement('div');
       more.className = 'similar-panel-more';
-      more.textContent = `+${conflicts.length - MAX_ROWS} more`;
+      more.textContent = `+${groups.length - MAX_ROWS} more`;
       details.appendChild(more);
     }
 
@@ -111,10 +117,52 @@ export class SimilarPanel {
   }
 }
 
-function row(match: QuoteMatch): HTMLLIElement {
+export interface MatchGroup {
+  leader: QuoteMatch;
+  members: QuoteMatch[];
+}
+
+/**
+ * Collapse a variant group into one entry.
+ *
+ * The vector sweep is unfiltered and returns up to 20 neighbours, so several
+ * members of one variant group routinely arrive together (ADR-0009). Listed flat
+ * they read as several independent duplicates of the same passage.
+ *
+ * Grouping only — this never decides anything. `canonical_quote_id` is a real FK
+ * and reliable when present; its absence proves nothing, and `has_relations` /
+ * `quote_role` are unreliable enough that they are not consulted at all.
+ */
+export function groupByCanonical(matches: QuoteMatch[], lead?: QuoteMatch): MatchGroup[] {
+  const buckets = new Map<string, QuoteMatch[]>();
+
+  for (const match of matches) {
+    const key = match.canonical_quote_id || match.quote_id;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(match);
+    else buckets.set(key, [match]);
+  }
+
+  const groups = Array.from(buckets, ([key, members]) => ({
+    // The canonical fronts its group when the sweep returned it; otherwise the
+    // closest member does, since the list arrives distance-sorted.
+    leader: (lead && members.includes(lead) ? lead : undefined)
+      ?? members.find(member => member.quote_id === key)
+      ?? members[0],
+    members,
+  }));
+
+  // The blocking match is the reason the panel is expanded — it leads.
+  return lead
+    ? groups.sort((a, b) => Number(b.members.includes(lead)) - Number(a.members.includes(lead)))
+    : groups;
+}
+
+function row(group: MatchGroup): HTMLLIElement {
   const item = document.createElement('li');
-  const url = quotePageUrl(match);
-  const snippet = quoteSnippet(match.text);
+  const { leader } = group;
+  const url = quotePageUrl(leader);
+  const snippet = quoteSnippet(leader.text);
 
   // The quote page is where an attribution gets resolved, so the snippet itself
   // is the affordance — a separate "Resolve" link would point at the same URL.
@@ -134,10 +182,22 @@ function row(match: QuoteMatch): HTMLLIElement {
 
   const attribution = document.createElement('span');
   attribution.className = 'similar-panel-attribution';
-  attribution.textContent = ` — ${originatorName(match)}`;
+  attribution.textContent = ` — ${originatorName(leader)}${relationNote(group)}`;
   item.appendChild(attribution);
 
   return item;
+}
+
+/**
+ * Says "these already belong together", never "these are unlinked" — the fields
+ * behind it can only be trusted in the positive direction.
+ */
+function relationNote(group: MatchGroup): string {
+  const others = group.members.length - 1;
+  if (others > 0) {
+    return ` · +${others} known ${others === 1 ? 'variant' : 'variants'}`;
+  }
+  return group.leader.canonical_quote_id ? ' · known variant' : '';
 }
 
 function quoteSnippet(text: string | undefined): string {
