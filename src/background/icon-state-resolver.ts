@@ -1,7 +1,12 @@
 import { AuthState } from '../auth/auth-state-machine';
 import { ICON_STATES, type IconScope, type IconVariant } from '../config/icon-states';
 import type { DuplicateCheckResult } from '../types/api';
-import { mapRecommendationToQuoteStatus, passageCountForUrl } from '../utils/duplicate-status';
+import {
+  blockingExactConflict,
+  mapRecommendationToQuoteStatus,
+  passageCountForUrl,
+  secondaryConflicts,
+} from '../utils/duplicate-status';
 
 export interface TabContext {
   tabId: number;
@@ -81,6 +86,20 @@ export function resolveIconPresentation(
 
   if (auth === AuthState.AUTHENTICATED && tab.isPostPage) {
     if (dup) {
+      // Attribution outranks everything else about the page, passage counts
+      // included: whether the capture can proceed at all beats context about
+      // what else lives on this post.
+      if (quoteStatus === 'Conflict') {
+        return ICON_STATES.Conflict;
+      }
+      // The same-originator match wins `primary`, so `recommendation` — and
+      // therefore quoteStatus — reports it and never mentions the cross-
+      // originator hit sitting behind it. Without this the icon badges a
+      // contented green "=" while the tray hard-blocks Submit.
+      if (blockingExactConflict(dup)) {
+        return ICON_STATES.ExactAlsoElsewhere;
+      }
+
       // null means the check told us nothing (it errored) — fall through to the
       // quote-status tiers rather than badging captures we cannot vouch for.
       const passageCount = passageCountForUrl(dup);
@@ -99,6 +118,14 @@ export function resolveIconPresentation(
 
     if (quoteStatus !== 'None' && quoteStatus !== 'New') {
       return QUOTE_STATUS_TO_STATE[quoteStatus];
+    }
+
+    // Nothing under this originator, but the sweep found something close under
+    // another name. Ahead of MissingOriginator on purpose: knowing the quote is
+    // effectively already on record is worth more than being told to go create
+    // an originator for it.
+    if (dup && secondaryConflicts(dup).length > 0) {
+      return ICON_STATES.SimilarElsewhere;
     }
 
     if (tab.isOriginatorMissing) {
