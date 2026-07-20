@@ -114,7 +114,7 @@ flowchart TD
     HASDUP -->|no| QS2
     QS2 -->|yes| MAP["InCollection ✓<br/>Exact = · Similar ~<br/>(ExactElsewhere = amber ·<br/>SimilarElsewhere ~ if<br/>originator missing)"]
     QS2 -->|no| SEC{"secondaryConflicts non-empty<br/>OR classifyMatchResolution<br/>=== 'similar'?"}
-    SEC -->|yes| SECR["SimilarElsewhere ~ amber<br/>(Similar ~ if the originator<br/>is known)"]
+    SEC -->|yes| SECR["SimilarElsewhere ~ amber<br/>(Similar ~ only with no secondary<br/>conflicts AND a known originator)"]
     SEC -->|no| MO{"originator missing?"}
     MO -->|yes| MISS["MissingOriginator<br/>@ amber"]
     MO -->|no| ISNEW{"quoteStatus === 'New'?"}
@@ -165,7 +165,7 @@ on this post" beats "what is this quote".
 
 > **The badge is URL-scoped until the tray opens — by design, do not "fix" it.**
 > The automatic preflight sends `{ handle, platform, source_url }` and deliberately
-> **no post text** (`service-worker.ts:2705`; `api-handler.ts:403` falls back to
+> **no post text** (`service-worker.ts:2803`; `api-handler.ts:403` falls back to
 > probing with the URL). Text travels only once the user opens the tray, which is
 > the first sign of intent to interact with Quotewise — sending it on view would
 > collect data from people who never asked for anything, and would not survive
@@ -226,7 +226,7 @@ flowchart TD
     U([update state]) --> N{state null?}
     N -->|yes| CLEAR([render nothing])
     N -->|no| CHK{checking?}
-    CHK -->|yes| SPIN["spinner<br/>'Checking Quotewise…'"]
+    CHK -->|yes| SPIN["badge renders nothing —<br/>the caption under Submit carries<br/>'Checking for duplicates…'"]
 
     CHK -->|no| RES["resolution =<br/>classifyMatchResolution(result, capturedText)"]
 
@@ -248,7 +248,7 @@ flowchart TD
     URL -->|yes| URLR["ℹ️ post already has a captured quote<br/>Submit: 'Capture another passage'<br/>disabled + caption hint until a fresh<br/>selection when the target is the whole post"]
     URL -->|no| LEG["renderLegacyStatus()"]
 
-    CVR & EXR & COR & BLKR & SIMR & URLR & LEG --> PANEL["+ passages panel<br/>if passageCountForUrl != 0"]
+    CVR & EXR & COR & BLKR & SIMR & URLR & LEG --> PANEL["+ passages panel — unless count<br/>is 0 or null, or the post's only<br/>captured passage is this very text"]
 
     classDef danger fill:#fde2e2,stroke:#c0392b,color:#7b241c
     class COR,BLKR danger
@@ -277,7 +277,7 @@ Reached when resolution is `none` and the URL has no recorded passages. Uses
 |---|---|---|
 | `exact_sighting` | ✓ Already captured this passage/quote | View Quote |
 | `same_platform_sighting` | 🟢 Earlier Sighting saved | View Sighting |
-| `other_platform_sighting` | 🔵 Add sighting | Add Sighting |
+| `other_platform_sighting` | 🔵 Add sighting — with an originator; without one, ℹ️ Already in Quotewise | Add Sighting — else disabled "Add originator first" |
 | `recommendation: duplicate` | ⚠ Duplicate | View Quote |
 | `recommendation: new_version` | ℹ️ New version | View Quote |
 | `in_quotewise` | ✓ In Quotewise | View Quote |
@@ -299,7 +299,7 @@ flowchart TD
     GR --> D{"any match_type ===<br/>'exact_different_originator'?"}
     D -->|yes| E["⛔ expanded, warning tone<br/>'This exact quote is already<br/>attributed to X'<br/>blocking match's group leads"]
     D -->|no| F["ℹ️ collapsed &lt;details&gt;, info tone<br/>'Might be a duplicate of N quotes<br/>by other originators'<br/>N counts GROUPS, not matches"]
-    E & F --> G["max 5 rows + '+N more'<br/>row = snippet link — originator<br/>· +N known variants<br/>NO similarity percentages"]
+    E & F --> G["max 5 rows + '+N more'<br/>row = snippet link — originator<br/>· +N known &lt;relation type&gt;s<br/>NO similarity percentages"]
 
     classDef danger fill:#fde2e2,stroke:#c0392b,color:#7b241c
     class E danger
