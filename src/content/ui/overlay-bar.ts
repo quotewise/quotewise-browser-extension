@@ -19,6 +19,7 @@ import { OriginatorLookup } from './components/originator-lookup';
 import { ActionButton } from './components/action-button';
 import { CaptureProgressIndicator } from './components/progress-indicator';
 import { FirstRunNotice } from './components/first-run-notice';
+import { getWebBaseUrl } from '../../config/environment';
 import { AccountMenu } from './components/account-menu';
 import { StatsRow, type CaptureStats } from './components/stats-row';
 import { buildOverlayMarkup } from './overlay-template';
@@ -96,6 +97,7 @@ export class OverlayBar {
   private actionButton: ActionButton | null = null;
   private progressIndicator: CaptureProgressIndicator | null = null;
   private firstRunNotice: FirstRunNotice | null = null;
+  private whatToCollectNotice: FirstRunNotice | null = null;
   private accountMenu: AccountMenu | null = null;
   private statsRow: StatsRow | null = null;
   private stats: CaptureStats = {};
@@ -475,26 +477,53 @@ export class OverlayBar {
   }
 
   private async maybeShowFirstRunNotice(): Promise<void> {
-    if (this.settings.privateMode || this.settings.firstRunNoticeShown) {
-      this.firstRunNotice?.hide();
-      return;
-    }
-
     const container = this.shadow?.getElementById('first-run-notice-container') as HTMLElement | null;
     if (!container) return;
 
-    if (!this.firstRunNotice) {
-      this.firstRunNotice = new FirstRunNotice(container, {
-        onDismiss: () => {
-          void updateSettings({ firstRunNoticeShown: true }).then(settings => {
-            this.settings = settings;
-          });
-        },
-      });
+    if (!this.settings.privateMode && !this.settings.firstRunNoticeShown) {
+      if (!this.firstRunNotice) {
+        this.firstRunNotice = new FirstRunNotice(container, {
+          onDismiss: () => {
+            void updateSettings({ firstRunNoticeShown: true }).then(settings => {
+              this.settings = settings;
+            });
+          },
+        });
+      }
+
+      this.firstRunNotice.show();
+      this.settings = await updateSettings({ firstRunNoticeShown: true });
+      return;
+    }
+    this.firstRunNotice?.hide();
+
+    if (this.settings.whatToCollectNoticeShown) {
+      this.whatToCollectNotice?.hide();
+      return;
     }
 
-    this.firstRunNotice.show();
-    this.settings = await updateSettings({ firstRunNoticeShown: true });
+    if (!this.whatToCollectNotice) {
+      const baseUrl = getWebBaseUrl().replace(/\/+$/, '');
+      this.whatToCollectNotice = new FirstRunNotice(
+        container,
+        {
+          onDismiss: () => {
+            void updateSettings({ whatToCollectNoticeShown: true }).then(settings => {
+              this.settings = settings;
+            });
+          },
+        },
+        {
+          message: 'Capture passages worth quoting a year from now — insight, wit, observations of the moment.',
+          ariaLabel: 'Quotewise capture guidance',
+          dismissAriaLabel: 'Dismiss capture guidance',
+          link: { href: `${baseUrl}/about/what-to-collect/`, text: 'What makes a good capture' },
+        },
+      );
+    }
+
+    this.whatToCollectNotice.show();
+    this.settings = await updateSettings({ whatToCollectNoticeShown: true });
   }
 
   private async mountNewCaptureCollectionPicker(): Promise<void> {
@@ -1025,6 +1054,7 @@ export class OverlayBar {
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.progressIndicator?.reset();
     this.firstRunNotice?.hide();
+    this.whatToCollectNotice?.hide();
     this.directiveHint = null;
     this.setTransientCaption(null);
     this.hideCollectionPicker();

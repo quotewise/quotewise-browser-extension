@@ -44,6 +44,9 @@ function normalizeSettings(value: unknown): Settings {
     firstRunNoticeShown: typeof partial.firstRunNoticeShown === 'boolean'
       ? partial.firstRunNoticeShown
       : DEFAULT_SETTINGS.firstRunNoticeShown,
+    whatToCollectNoticeShown: typeof partial.whatToCollectNoticeShown === 'boolean'
+      ? partial.whatToCollectNoticeShown
+      : DEFAULT_SETTINGS.whatToCollectNoticeShown,
   };
 }
 

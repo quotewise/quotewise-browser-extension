@@ -97,6 +97,7 @@ export interface Settings {
   defaultCollectionSlug: string | null;
   lastUsedCollectionSlugs: string[];
   firstRunNoticeShown: boolean;
+  whatToCollectNoticeShown: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -106,6 +107,7 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultCollectionSlug: null,
   lastUsedCollectionSlugs: [],
   firstRunNoticeShown: false,
+  whatToCollectNoticeShown: false,
 };
 
 // CapturePlatform / CapturePlatformCode are derived from PLATFORM_DEFINITIONS

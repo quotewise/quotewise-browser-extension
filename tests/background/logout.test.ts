@@ -18,6 +18,7 @@ describe('logout privacy cleanup', () => {
         defaultCollectionSlug: 'favorites',
         lastUsedCollectionSlugs: ['favorites'],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
   });
@@ -35,6 +36,7 @@ describe('logout privacy cleanup', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
     expect(console.error).not.toHaveBeenCalledWith(expect.stringContaining('secret-token'));

@@ -31,7 +31,7 @@ extension per supported platform or per language. The four supported *platforms*
 **localized listings** (translated store copy) and localize the extension UI via `_locales/`
 i18n — both optional, neither requires a separate item.
 
-**Description** ✅ (~2,450 chars; 16,000 limit). Plain text, paste as-is:
+**Description** ✅ (~3,100 chars; 16,000 limit). Plain text, paste as-is:
 
 ```
 Quotewise Quote Capture — save quotes from social media to a shared, source-attributed quote library.
@@ -48,6 +48,13 @@ HOW IT WORKS
 3. Duplicate check. Before saving, Quotewise checks whether this quote already exists in the database. If it does, you'll see it — no accidental doubles.
 
 4. Save with attribution. The quote is submitted with the author's name, the platform, the source link, and the public engagement counts visible on the post at capture time. If you use Quotewise collections, you can choose which existing collection(s) to file it into during capture.
+
+
+WHAT TO CAPTURE
+
+The test is simple: would someone quote this a year from now, without the thread? Capture passages that stand alone, are worth repeating — insight, wit, motivation, reflection, or a laugh — and observe their moment rather than fight in it. A professional's read on emerging trends belongs here; a hot take doesn't.
+
+Please don't capture dunks, pile-ons, or hot takes; commercial endorsements; commentary on embedded media that's meaningless without the media; or anything a casual observer would never repeat. Anyone can be quoted — we filter on the quotability of the words, not the notability of the speaker. Full guidelines: https://quotewise.io/about/what-to-collect/
 
 
 SUPPORTED PLATFORMS
