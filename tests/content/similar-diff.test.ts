@@ -99,6 +99,68 @@ describe('similar-diff', () => {
     expect(onResolve).toHaveBeenCalledWith({ quoteId: 42, intent: 'variant' });
   });
 
+  it('names who the existing quote is attributed to on the view link', () => {
+    // The diff shows what differs; it cannot say whose the quote is. On a post
+    // whose author is not an originator that is the whole question — the tray
+    // should read "from Isaac Asimov", not just "an existing quote".
+    const container = document.createElement('span');
+    const view = buildSimilarMatchView(similarDuplicateResult({
+      matches: [duplicateMatch({
+        quote_id: '42',
+        text: 'there always has been',
+        originator: {
+          id: 'asimov',
+          full_name: 'Isaac Asimov',
+          sort_name: null,
+          birth_year: null,
+          death_year: null,
+        },
+      })],
+    }), 'there has always been');
+
+    renderSimilarDiff(container, view!, { onResolve: jest.fn() });
+
+    const link = container.querySelector('a') as HTMLAnchorElement;
+    expect(link.textContent).toBe('View existing quote from Isaac Asimov');
+    expect(link.getAttribute('aria-label'))
+      .toBe('View existing quote from Isaac Asimov (opens in a new tab)');
+  });
+
+  it('drops the attribution rather than rendering a blank one', () => {
+    const container = document.createElement('span');
+    const view = buildSimilarMatchView(similarDuplicateResult({
+      matches: [duplicateMatch({
+        quote_id: '42',
+        text: 'there always has been',
+        originator: {
+          id: 'unknown',
+          full_name: '   ',
+          sort_name: null,
+          birth_year: null,
+          death_year: null,
+        },
+      })],
+    }), 'there has always been');
+
+    expect(view!.existingQuoteOriginator).toBeNull();
+
+    renderSimilarDiff(container, view!, { onResolve: jest.fn() });
+    expect(container.querySelector('a')?.textContent).toBe('View existing quote');
+  });
+
+  it('names the originator on the link-only fallback too', () => {
+    const container = document.createElement('span');
+    const view = buildSimilarMatchView(similarDuplicateResult({
+      matches: [duplicateMatch({ text: '' })],
+    }), 'hello new world');
+
+    renderSimilarDiff(container, view!, { onResolve: jest.fn() });
+
+    expect(container.querySelector('.diff-token')).toBeNull();
+    expect(container.querySelector('a')?.textContent)
+      .toBe('View existing quote from Existing Author');
+  });
+
   it('returns no view for exact or no-match recommendations', () => {
     expect(buildSimilarMatchView(duplicateResult({ recommendation: 'duplicate' }), 'hello')).toBeNull();
     expect(buildSimilarMatchView(duplicateResult({ recommendation: 'new_quote', matches: [] }), 'hello')).toBeNull();

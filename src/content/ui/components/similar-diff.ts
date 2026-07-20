@@ -8,6 +8,12 @@ export interface SimilarMatchView {
   existingQuoteText: string | null;
   diff: WordDiffToken[] | null;
   existingQuoteUrl: string | null;
+  /**
+   * Who the matched quote is attributed to. The diff shows *what* differs; this
+   * says *whose* it is, which is the question the diff cannot answer — most
+   * sharply when the post's author is not the originator at all.
+   */
+  existingQuoteOriginator: string | null;
   sightingAvailable: boolean;
   sightingHint: string | null;
   variantAvailable: boolean;
@@ -39,6 +45,7 @@ export function buildSimilarMatchView(
       existingQuoteText: null,
       diff: null,
       existingQuoteUrl: null,
+      existingQuoteOriginator: null,
       sightingAvailable: false,
       sightingHint: null,
       variantAvailable: false,
@@ -53,6 +60,7 @@ export function buildSimilarMatchView(
     existingQuoteText,
     diff: existingQuoteText ? diffWords(match.text, capturedText) : null,
     existingQuoteUrl: quotePageUrl(match),
+    existingQuoteOriginator: match.originator?.full_name?.trim() || null,
     sightingAvailable: quoteId !== null && sightingState.eligible,
     sightingHint: sightingState.hint,
     variantAvailable: quoteId !== null,
@@ -74,7 +82,7 @@ export function renderSimilarDiff(
     fallback.className = 'badge info';
     fallback.textContent = 'Similar quote';
     container.appendChild(fallback);
-    appendViewLink(container, view.existingQuoteUrl);
+    appendViewLink(container, view.existingQuoteUrl, view.existingQuoteOriginator);
   } else {
     const diff = document.createElement('span');
     diff.className = 'similar-diff-text';
@@ -87,7 +95,7 @@ export function renderSimilarDiff(
     }
 
     container.appendChild(diff);
-    appendViewLink(container, view.existingQuoteUrl);
+    appendViewLink(container, view.existingQuoteUrl, view.existingQuoteOriginator);
   }
 
   if (view.sightingAvailable && view.sightingHint) {
@@ -126,13 +134,24 @@ export function renderSimilarDiff(
   (actions.querySelector('button') as HTMLButtonElement | null)?.focus();
 }
 
-function appendViewLink(container: HTMLElement, url: string | null): void {
+function appendViewLink(
+  container: HTMLElement,
+  url: string | null,
+  originator: string | null,
+): void {
   if (!url) return;
   const link = document.createElement('a');
   link.href = url;
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
-  link.textContent = 'View existing quote';
+  // Named unconditionally, not only when it differs from the capture target.
+  // Confirming the existing quote is by the same person is reassurance rather
+  // than noise, and the case that matters most — the post's author is not an
+  // originator at all — has no target to differ from.
+  link.textContent = originator
+    ? `View existing quote from ${originator}`
+    : 'View existing quote';
+  link.setAttribute('aria-label', `${link.textContent} (opens in a new tab)`);
   container.appendChild(link);
 }
 
