@@ -541,13 +541,18 @@ async function applyResolvedIconForTab(
   duplicateResult?: DuplicateCheckResult | null,
   authState: AuthState = getCurrentAuthState(),
 ): Promise<void> {
-  const resolvedDuplicateResult = await resolveDuplicateResultForTab(tabId, url, duplicateResult);
+  // One combined storage round trip covers both revival fallbacks below (each is a
+  // no-op read when its in-memory cache already has an answer, so this is skipped
+  // entirely once a tab has settled).
+  const preloadedIconStorage = await readPreloadedIconStorageIfNeeded(tabId, url, duplicateResult);
+  const resolvedDuplicateResult = resolveDuplicateResultForTab(tabId, url, duplicateResult, preloadedIconStorage);
+  const isOriginatorMissing = resolveMissingOriginatorForTab(tabId, url, preloadedIconStorage);
   const presentation = resolveIconPresentation(authState, resolvedDuplicateResult, {
     tabId,
     isSupportedPlatform: isSupportedPlatformUrl(url),
     isPostPage: isPostPageUrl(url),
     isCheckInFlight: isCheckInFlightForTab(tabId, url),
-    isOriginatorMissing: getMissingOriginatorForTab(tabId, url) !== null,
+    isOriginatorMissing,
   }, isPrivateModeEnabled());
 
   if (presentation.scope === 'tab') {
@@ -1004,11 +1009,46 @@ async function applyAuthRequiredApiResponse(
   return true;
 }
 
-async function resolveDuplicateResultForTab(
+interface PreloadedIconStorage {
+  preloadedDuplicateCheck?: unknown;
+  preloadedOriginator?: unknown;
+}
+
+// Single storage round trip shared by resolveDuplicateResultForTab and
+// resolveMissingOriginatorForTab below. Both are revival fallbacks for a worker
+// restart (see the comment on resolveMissingOriginatorForTab), each backed by its
+// own storage key; fetching them separately would double the chrome.storage.local
+// latency on every cold icon paint for no benefit, so this issues one call for
+// both keys and is skipped entirely once neither resolver actually needs storage
+// (i.e. their in-memory caches already have an answer).
+async function readPreloadedIconStorageIfNeeded(
   tabId: number,
   url: string | undefined,
   duplicateResult: DuplicateCheckResult | null | undefined,
-): Promise<DuplicateCheckResult | null> {
+): Promise<PreloadedIconStorage | null> {
+  const needsDuplicateLookup = duplicateResult === undefined &&
+    !!url &&
+    !getCachedDuplicateResultForTab(tabId, url).hasResult;
+  const needsOriginatorLookup = !!url && getMissingOriginatorForTab(tabId, url) === null;
+
+  if (!needsDuplicateLookup && !needsOriginatorLookup) {
+    return null;
+  }
+
+  try {
+    return await chrome.storage.local.get(['preloadedDuplicateCheck', 'preloadedOriginator']);
+  } catch (error) {
+    debugLog('Error reading preloaded icon caches for icon state:', error);
+    return null;
+  }
+}
+
+function resolveDuplicateResultForTab(
+  tabId: number,
+  url: string | undefined,
+  duplicateResult: DuplicateCheckResult | null | undefined,
+  preloadedStorage: PreloadedIconStorage | null,
+): DuplicateCheckResult | null {
   if (duplicateResult !== undefined) {
     return duplicateResult;
   }
@@ -1018,36 +1058,78 @@ async function resolveDuplicateResultForTab(
     return cachedDuplicate.result;
   }
 
-  if (!url) {
+  if (!url || !preloadedStorage) {
     return null;
   }
 
-  try {
-    const storage = await chrome.storage.local.get(['preloadedDuplicateCheck']);
-    const preloaded = storage.preloadedDuplicateCheck as {
-      url?: unknown;
-      result?: unknown;
-      timestamp?: unknown;
-    } | undefined;
+  const preloaded = preloadedStorage.preloadedDuplicateCheck as {
+    url?: unknown;
+    result?: unknown;
+    timestamp?: unknown;
+  } | undefined;
 
-    if (
-      typeof preloaded?.url === 'string' &&
-      isSamePostPageUrl(preloaded.url, url) &&
-      typeof preloaded.timestamp === 'number' &&
-      Date.now() - preloaded.timestamp < PRELOADED_DUPLICATE_MAX_AGE_MS
-    ) {
-      const storedDuplicateResult = duplicateResultFromResponse({
-        success: true,
-        result: preloaded.result,
-      });
-      setTabDuplicateResult(tabId, storedDuplicateResult, preloaded.url);
-      return storedDuplicateResult;
-    }
-  } catch (error) {
-    debugLog('Error reading preloaded duplicate cache for icon state:', error);
+  if (
+    typeof preloaded?.url === 'string' &&
+    isSamePostPageUrl(preloaded.url, url) &&
+    typeof preloaded.timestamp === 'number' &&
+    Date.now() - preloaded.timestamp < PRELOADED_DUPLICATE_MAX_AGE_MS
+  ) {
+    const storedDuplicateResult = duplicateResultFromResponse({
+      success: true,
+      result: preloaded.result,
+    });
+    setTabDuplicateResult(tabId, storedDuplicateResult, preloaded.url);
+    return storedDuplicateResult;
   }
 
   return null;
+}
+
+// Mirrors resolveDuplicateResultForTab's storage fallback above: a worker restart
+// wipes tabMissingOriginators (in-memory only), but the not-found preloadedOriginator
+// record the probe writes to chrome.storage.local survives. Reviving the surviving
+// preloadedDuplicateCheck cache without also reviving this record repaints ★ (new_quote)
+// over a settled @ (missing-originator) badge, so this restores the same record into
+// tabMissingOriginators when it's still fresh and still for the current post.
+function resolveMissingOriginatorForTab(
+  tabId: number,
+  url: string | undefined,
+  preloadedStorage: PreloadedIconStorage | null,
+): boolean {
+  if (getMissingOriginatorForTab(tabId, url) !== null) {
+    return true;
+  }
+
+  if (!url || !preloadedStorage) {
+    return false;
+  }
+
+  const preloaded = preloadedStorage.preloadedOriginator as {
+    handle?: unknown;
+    originator?: unknown;
+    create_url?: unknown;
+    url?: unknown;
+    timestamp?: unknown;
+  } | undefined;
+
+  if (
+    !preloaded?.originator &&
+    typeof preloaded?.handle === 'string' &&
+    typeof preloaded.url === 'string' &&
+    isSamePostPageUrl(preloaded.url, url) &&
+    typeof preloaded.timestamp === 'number' &&
+    Date.now() - preloaded.timestamp < PRELOADED_DUPLICATE_MAX_AGE_MS
+  ) {
+    tabMissingOriginators.set(tabId, {
+      handle: preloaded.handle,
+      url: preloaded.url,
+      ...(typeof preloaded.create_url === 'string' ? { createUrl: preloaded.create_url } : {}),
+      timestamp: preloaded.timestamp,
+    });
+    return true;
+  }
+
+  return false;
 }
 
 async function resolveTargetTabId(tabId?: number): Promise<number | undefined> {
@@ -2290,6 +2372,9 @@ async function applyOriginatorLookupResponse(
         handle: normalizedHandle,
         originator: null,
         ...(createUrl ? { create_url: createUrl } : {}),
+        // url makes the record revivable after a worker restart (see
+        // resolveMissingOriginatorForTab) — every not-found write carries it.
+        url: sourceUrl,
         timestamp: Date.now(),
       },
     });
@@ -2876,6 +2961,7 @@ async function checkQuoteCollectionStatus(
               ...(platform !== 'twitter' ? { platform } : {}),
               originator: null,
               create_url: createUrl,
+              url: sourceUrl,
               timestamp: Date.now()
             }
           });
@@ -2887,6 +2973,7 @@ async function checkQuoteCollectionStatus(
           ...(platform !== 'twitter' ? { platform } : {}),
           originator: null,
           create_url: createUrl,
+          url: sourceUrl,
           timestamp: Date.now()
         };
         await chrome.storage.local.set({

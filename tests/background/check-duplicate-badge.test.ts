@@ -640,6 +640,49 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     expect(sendResponse).toHaveBeenCalledWith({ success: true });
   });
 
+  it('revives @ alongside the cached duplicate result after a worker restart', async () => {
+    // Both caches were written by the previous visit's preflight: the duplicate
+    // result (★-producing new_quote) AND the not-found originator record. A
+    // fresh worker that revives one without the other paints ★ over what the
+    // user last saw as @.
+    mockServiceWorkerDependencies();
+
+    chrome.storage.local.get = jest.fn().mockResolvedValue({
+      preloadedDuplicateCheck: {
+        url: 'https://x.com/test/status/123',
+        result: newQuoteResult,
+        timestamp: Date.now(),
+      },
+      preloadedOriginator: {
+        handle: 'test',
+        originator: null,
+        create_url: 'https://quotewise.io/originators/new?handle=test',
+        url: 'https://x.com/test/status/123',
+        timestamp: Date.now(),
+      },
+    });
+    chrome.tabs.get = jest.fn().mockResolvedValue({
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    await import('../../src/background/service-worker');
+
+    const onUpdatedListener = (chrome.tabs.onUpdated.addListener as jest.Mock).mock.calls[0][0];
+    await onUpdatedListener(22, { status: 'complete' }, {
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    for (let index = 0; index < 6; index++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    const paints = (chrome.action.setBadgeText as jest.Mock).mock.calls.map(call => call[0]);
+    expect(paints).not.toContainEqual({ tabId: 22, text: '★' });
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+  });
+
   it('keeps @ through a hydration re-extraction instead of flashing ★ each round', async () => {
     // Twitter fires POST_DATA_EXTRACTED repeatedly as the page hydrates. A
     // re-extraction of the SAME url contradicts nothing about the originator,
@@ -1765,6 +1808,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         handle: 'test',
         originator: null,
         create_url: 'https://quotewise.io/originators/new?handle=test',
+        url: 'https://x.com/test/status/123',
         timestamp: expect.any(Number),
       },
     });
@@ -2295,6 +2339,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         handle: 'test',
         originator: null,
         create_url: 'https://quotewise.io/originators/new?handle=test',
+        url: 'https://x.com/test/status/123',
         timestamp: expect.any(Number),
       },
     });
@@ -2348,6 +2393,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         handle: 'test',
         originator: null,
         create_url: 'http://quotewise.test:8000/originators/add/?suggested_handle=test&platform=twitter',
+        url: 'https://x.com/test/status/123',
         timestamp: expect.any(Number),
       },
     });

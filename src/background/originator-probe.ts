@@ -440,6 +440,7 @@ export function createOriginatorProbe(deps: OriginatorProbeDeps): OriginatorProb
           handle: normalizedHandle,
           originator: null,
           ...(createUrl ? { create_url: createUrl } : {}),
+          url: operation.url,
           timestamp: Date.now(),
         },
       });
