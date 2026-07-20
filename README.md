@@ -1,6 +1,13 @@
 # Quotewise Quote Capture
 
 [![CI](https://github.com/quotewise/quotewise-chrome-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/quotewise/quotewise-chrome-extension/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/quotewise/quotewise-chrome-extension)](https://github.com/quotewise/quotewise-chrome-extension/releases)
+[![Firefox Add-on](https://img.shields.io/amo/v/quotewise-quote-capture?label=firefox%20add-on)](https://addons.mozilla.org/addon/quotewise-quote-capture/)
+[![License](https://img.shields.io/github/license/quotewise/quotewise-chrome-extension)](./LICENSE)
+<!-- Enable at store launch:
+[![Chrome Web Store](https://img.shields.io/chrome-web-store/v/ITEM_ID)](https://chromewebstore.google.com/detail/ITEM_ID)
+[![App Store](https://img.shields.io/itunes/v/APP_ID?label=app%20store)](https://apps.apple.com/app/idAPP_ID)
+-->
 
 A browser extension (Chrome and Firefox, Manifest V3) for capturing quotes from
 social posts and saving them to your [Quotewise](https://quotewise.io) library —
@@ -60,10 +67,16 @@ Anyone can be quoted — we filter on the quotability of the words, not the
 notability of the speaker. See the full guidelines at
 [quotewise.io/about/what-to-collect](https://quotewise.io/about/what-to-collect/).
 
+## Install
+
+- **Firefox**: install from
+  [addons.mozilla.org](https://addons.mozilla.org/addon/quotewise-quote-capture/).
+- **Chrome / Brave / Edge**: not yet published to the Chrome Web Store — build
+  from source below in the meantime.
+
 ## Build from source
 
-The extension is not yet on the Chrome Web Store / AMO, so load it unpacked from a
-local build. This project uses **[Bun](https://bun.sh)** (≥ 1.3.4).
+This project uses **[Bun](https://bun.sh)** (≥ 1.3.4).
 
 ```bash
 bun install
