@@ -7,9 +7,9 @@ social posts and saving them to your [Quotewise](https://quotewise.io) library â
 with attribution, a link back to the source, and a duplicate check before
 anything is saved.
 
-When you come across a quotable line, click the extension icon. An overlay opens
-over the current post; you confirm the author and the text, and the quote is
-submitted with full attribution and the source URL.
+When you come across a quotable line, open the post's permalink page and click
+the extension icon. An overlay opens over the post; you confirm the author and
+the text, and the quote is submitted with full attribution and the source URL.
 
 ## Supported platforms
 
@@ -23,8 +23,10 @@ read your feed or any other page content.
 
 ## How it works
 
-1. **Browse normally.** When you see a post worth saving, click the Quotewise
-   icon. An overlay appears over the current post.
+1. **Browse normally.** When you see a post worth quoting, click into the post
+   itself (its permalink page), then click the Quotewise icon. An overlay
+   appears over the post. For a quote within a longer article, select the text
+   you want to quote before clicking the Quotewise icon.
 2. **Review and confirm.** The extension reads the quote text, the author name or
    handle, and the source URL from the page. You confirm the author before
    anything is saved.

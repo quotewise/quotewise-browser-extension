@@ -36,12 +36,12 @@ i18n — both optional, neither requires a separate item.
 ```
 Quotewise Quote Capture — save quotes from social media to a shared, source-attributed quote library.
 
-When you come across a quotable line on X, Threads, Bluesky, or Substack Notes, this extension makes it easy to capture it before you scroll past. With one click it reads the post, lets you confirm the details, and saves the quote to Quotewise with full attribution and a link back to the original source.
+When you come across a quotable line on X, Threads, Bluesky, or Substack Notes, this extension makes it easy to capture it before you scroll past. Open the post, click the Quotewise icon, and it reads the post, lets you confirm the details, and saves the quote to Quotewise with full attribution and a link back to the original source.
 
 
 HOW IT WORKS
 
-1. Browse normally. When you see a post worth saving, click the Quotewise extension icon. An overlay appears over the current post.
+1. Browse normally. When you see a post worth quoting, click into the post itself (its permalink page), then click the Quotewise extension icon. An overlay appears over the post. For a quote within a longer article, select the text you want to quote before clicking the Quotewise icon.
 
 2. Review and confirm. The extension reads the quote text, the author name or handle, and the source URL from the page. You check the details and confirm the author before anything is saved.
 
