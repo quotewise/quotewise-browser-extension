@@ -12,6 +12,7 @@ describe('clear user data privacy cleanup', () => {
         defaultCollectionSlug: 'favorites',
         lastUsedCollectionSlugs: ['favorites', 'research'],
         firstRunNoticeShown: false,
+        whatToCollectNoticeShown: false,
       },
     });
   });
@@ -32,6 +33,7 @@ describe('clear user data privacy cleanup', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
+        whatToCollectNoticeShown: false,
       },
     });
   });

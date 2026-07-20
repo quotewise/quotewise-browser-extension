@@ -40,6 +40,24 @@ author, and new contributors' submissions are reviewed by curators before
 publication. See [quotewise.io/privacy](https://quotewise.io/privacy/) for how
 data is handled.
 
+## What to capture
+
+The test is simple: **would someone quote this a year from now, without the
+thread?** A passage bears collecting when it stands alone (it carries its
+meaning without the reply chain, the embedded media, or the news cycle it was
+posted into), when it's worth repeating (you could open a talk with it, put it
+on a slide, or place it in a compendium — insight, wit, motivation, or a laugh
+all qualify), and when it observes its moment rather than fights in it (a
+professional's read on emerging trends belongs here; a hot take doesn't).
+
+Please don't capture dunks, pile-ons, or hot takes; commercial endorsements;
+commentary on embedded media that's meaningless without the media; or anything
+a casual observer would never repeat.
+
+Anyone can be quoted — we filter on the quotability of the words, not the
+notability of the speaker. See the full guidelines at
+[quotewise.io/about/what-to-collect](https://quotewise.io/about/what-to-collect/).
+
 ## Build from source
 
 The extension is not yet on the Chrome Web Store / AMO, so load it unpacked from a

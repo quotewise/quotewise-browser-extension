@@ -24,6 +24,7 @@ describe('AccountMenu', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
+        whatToCollectNoticeShown: false,
       },
     });
     sendMessage = jest.fn().mockImplementation(async message => {
@@ -65,6 +66,7 @@ describe('AccountMenu', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
+        whatToCollectNoticeShown: false,
       },
     });
 
@@ -165,6 +167,7 @@ describe('AccountMenu', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
+        whatToCollectNoticeShown: false,
       },
     });
 

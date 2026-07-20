@@ -21,6 +21,7 @@ describe('options page', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
+        whatToCollectNoticeShown: false,
       },
     });
     (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
@@ -210,6 +211,7 @@ describe('options page', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
+        whatToCollectNoticeShown: false,
       },
     });
   });
@@ -231,6 +233,7 @@ describe('options page', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: false,
+        whatToCollectNoticeShown: false,
       },
     });
   });

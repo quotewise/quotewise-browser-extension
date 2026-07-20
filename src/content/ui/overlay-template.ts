@@ -421,6 +421,10 @@ export function buildOverlayMarkup(platformLabel: string): string {
           color: #dbeafe;
           border-bottom: 1px solid rgba(255,255,255,0.08);
         }
+        .first-run-notice a {
+          color: inherit;
+          text-decoration: underline;
+        }
         .notice-dismiss {
           flex: 0 0 auto;
         }

@@ -56,6 +56,7 @@ describe('collection auto-add submit wiring', () => {
         defaultCollectionSlug: 'favorites',
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
 
@@ -78,6 +79,7 @@ describe('collection auto-add submit wiring', () => {
         defaultCollectionSlug: 'favorites',
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
 
@@ -97,6 +99,7 @@ describe('collection auto-add submit wiring', () => {
         defaultCollectionSlug: 'my-collected-quotes',
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
     const overlay = setupOverlay() as any;
@@ -131,6 +134,7 @@ describe('collection auto-add submit wiring', () => {
         defaultCollectionSlug: 'my-collected-quotes',
         lastUsedCollectionSlugs: ['favorites', 'research'],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
   });
@@ -145,6 +149,7 @@ describe('collection auto-add submit wiring', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
     (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
@@ -190,6 +195,7 @@ describe('collection auto-add submit wiring', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: ['emojislug'],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
   });
@@ -203,6 +209,7 @@ describe('collection auto-add submit wiring', () => {
         defaultCollectionSlug: null,
         lastUsedCollectionSlugs: [],
         firstRunNoticeShown: true,
+        whatToCollectNoticeShown: true,
       },
     });
     (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
