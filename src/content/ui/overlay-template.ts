@@ -634,10 +634,13 @@ export function buildOverlayMarkup(platformLabel: string): string {
         /* Always-present caption under the button. Reserves one line so the
            status text multiplexed through it (checking status, instructions,
            summary, success message) swaps without moving the button; grows only
-           for the user-initiated ≥2-collection list, one clipped line each. */
+           for the user-initiated ≥2-collection list, one clipped line each.
+           min-height mirrors the progress slot above the button — equal
+           reservations keep the button's center on the row's centerline,
+           aligned with the Quote label, badges, and quote text. */
         .action-caption {
           order: 2;
-          min-height: 15px;
+          min-height: 24px;
           color: #94a3b8;
           font-size: 11px;
           line-height: 15px;
