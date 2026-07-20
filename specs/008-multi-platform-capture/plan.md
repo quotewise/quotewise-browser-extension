@@ -2,7 +2,7 @@
 
 ## Summary
 
-Refactor extension capture from X-specific tweet data to platform-neutral post data, then add flag-gated adapters for Threads, Bluesky, and Substack Notes. Backend contracts are canonical in `../quotewise/.worktrees/api-enhancements/docs/platform-dom-verification.md` and ADRs 0001-0004.
+Refactor extension capture from X-specific tweet data to platform-neutral post data, then add flag-gated adapters for Threads, Bluesky, and Substack Notes. Backend contracts are canonical in the backend repo's platform-dom-verification doc (private) and ADRs 0001-0004.
 
 ## Implementation
 

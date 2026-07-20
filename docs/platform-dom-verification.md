@@ -1,6 +1,6 @@
 # Platform DOM Verification for Extension Capture
 
-The canonical backend contract and promotion checklist live in `../quotewise/.worktrees/api-enhancements/docs/platform-dom-verification.md`. This extension document records where audit artifacts belong and how they map to adapter promotion.
+The canonical backend contract and promotion checklist live in the backend repo's platform-dom-verification doc (private). This extension document records where audit artifacts belong and how they map to adapter promotion.
 
 ## Artifact Layout
 

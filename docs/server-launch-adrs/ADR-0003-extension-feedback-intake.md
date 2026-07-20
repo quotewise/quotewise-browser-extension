@@ -4,7 +4,7 @@
 - **Date:** 2026-06-19 (proposed) · 2026-06-21 (backend delivered)
 - **Priority:** P2 (recommended for launch)
 - **Related beads:** `qw-0psq.21` (closed; backend intake + extension "Send feedback" link delivered). Superseded stale stubs `qw-4wy`, `qw-vzq`.
-- **Delivered by:** quotewise PR #178 ("[codex] Add Turnstile feedback intake").
+- **Delivered by:** the backend's Turnstile feedback intake.
 
 ## Context
 
@@ -41,7 +41,7 @@ For a public v1 we want a low-friction channel for bug reports / feature request
 
 ## Delivered (2026-06-21)
 
-Shipped in quotewise **PR #178**, merged to `main` and deploying. Implemented as the proposed hosted, Turnstile-gated web form, with two naming deviations from this proposal:
+Shipped in the backend, merged to `main` and deploying. Implemented as the proposed hosted, Turnstile-gated web form, with two naming deviations from this proposal:
 
 - **Final URL is `/feedback/`** (Django route name `feedback`), not `/extension-feedback`. It is a general public feedback page; the extension is one entry point (distinguished by `src=chrome-ext`). **The extension should hardcode `https://quotewise.io/feedback/`** — this answers requirement 4 / `qw-0psq.21`.
 - **Model is `Feedback`** (table `quotewise_feedback`), not `ExtensionFeedback` — one intake model serving web + extension.
@@ -49,7 +49,7 @@ Shipped in quotewise **PR #178**, merged to `main` and deploying. Implemented as
 Confirmed behavior:
 - Cloudflare Turnstile verified server-side before persisting, plus a honeypot field and a 5/min per-IP rate limit (`CF-Connecting-IP`).
 - Accepts and records the whitelisted `v` / `src` / `platform` query params alongside category (bug / feature / other), free-text message, and optional follow-up email.
-- Persists the submission and fires best-effort triage email (`hello@quotewise.io`) + a PostHog event.
+- Persists the submission and fires best-effort triage email + a PostHog event.
 - `/privacy/` updated to disclose extension feedback data practices (see ADR-0005).
 
 ## Acceptance

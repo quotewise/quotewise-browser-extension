@@ -1,6 +1,6 @@
 # ADR-0006 — Collections: add an existing quote to a collection + membership in duplicate-check
 
-- **Status:** ✅ Delivered — backend resolved 2026-06-22 (bead `qw-si1t`, PR #186) and extension side shipped 2026-07-02 (spec 009, PR #21). **Supersedes the `{id}` proposal below**: reuse the existing **slug**-keyed add endpoint; `member_collections` is `{ slug, name }`. See [Backend resolution](#backend-resolution-2026-06-22).
+- **Status:** ✅ Delivered — backend resolved 2026-06-22 (bead `qw-si1t`) and extension side shipped 2026-07-02 (spec 009, PR #21). **Supersedes the `{id}` proposal below**: reuse the existing **slug**-keyed add endpoint; `member_collections` is `{ slug, name }`. See [Backend resolution](#backend-resolution-2026-06-22).
 - **Date:** 2026-06-22
 - **Priority:** P1 (fast-follow feature; **not** launch-gating)
 - **Related beads:** `qw-si1t` (Collections membership API: add existing quote to collection + member_collections in duplicate-check)

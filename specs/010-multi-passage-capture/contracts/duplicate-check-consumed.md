@@ -2,7 +2,7 @@
 
 The extension exposes no external API. The relevant contracts are (1) the backend response it
 **consumes** and (2) the **internal module interfaces** this feature changes. Per AGENTS.md, the
-consumed shape is verified against the sibling `../quotewise` backend (ADR-0007, shipped).
+consumed shape is verified against the backend (ADR-0007, shipped).
 
 ---
 

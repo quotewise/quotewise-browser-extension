@@ -9,7 +9,7 @@
 Let a user capture several **distinct passages** (verbatim selections) from one post/source URL,
 instead of the current URL-as-one-capture behavior that blocks a second selection with "Already
 Captured." The write path already supports one URL → many distinct quotes (verified against
-`../quotewise`); the blocker is entirely client-side.
+the backend); the blocker is entirely client-side.
 
 **Technical approach:** (US1, client-only) make the duplicate classification **text-scoped** — pass
 the current selection text into `src/utils/duplicate-status.ts` and compare it, normalized (NFKC +

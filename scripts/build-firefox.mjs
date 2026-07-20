@@ -3,8 +3,8 @@
  * Build the Firefox WebExtension package from the SAME source as Chrome.
  *
  * Firefox needs NO separate repo — it consumes a plain WebExtension zip like Chrome (unlike Safari,
- * which needs the Apple/Xcode wrapper in ../quotewise-apple). This mirrors that repo's
- * sync-extension-bundle.sh: build the one shared dist/, then apply target-specific manifest tweaks.
+ * which needs an Apple/Xcode wrapper app). Approach: build the one shared dist/, then apply
+ * target-specific manifest tweaks.
  *
  *   1. bun run build          → dist/ (production, from manifest.prod.json)
  *   2. copy dist/ → dist-firefox/
@@ -36,7 +36,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GECKO_ID = 'firefox@extensions.quotewise.io';
 // Firefox floor. data_collection_permissions (below) needs FF 140+ (desktop); 140 is also the current
 // ESR and comfortably clears the FF 120/121 line where MV3 background.scripts event-page behavior
-// settled. ponytail: leaves web-ext's Firefox-for-Android min-version warning (that key needs Android
+// settled. NOTE: leaves web-ext's Firefox-for-Android min-version warning (that key needs Android
 // 142) — we don't target/verify FF Android; add gecko_android.strict_min_version='142.0' if we do.
 const STRICT_MIN_VERSION = '140.0';
 // Firefox's mandatory data-consent declaration (AMO now requires it for new extensions). These are

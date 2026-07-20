@@ -111,7 +111,7 @@ Quotewise Quote Capture is a focused tool. It captures, attributes, and saves. I
 center mass sits within the 96×96 safe area, so it reads cleanly. Guideline:
 [here](https://developer.chrome.com/docs/webstore/images#icons).
 - If we later want guideline-perfect, regenerate a 96-in-128 padded version from the master
-  `../quotewise/static/logos/quotewise_2024px_square.png` (or SVG `Icon Lite.svg`).
+  logo artwork (private backend repo).
 
 **Screenshots** ⚙️ (≥1 required, up to 5) — **1280×800 or 640×400**, full-bleed (square corners,
 no padding), JPEG or 24-bit PNG, **no alpha**. Action: capture the overlay on a real post for
