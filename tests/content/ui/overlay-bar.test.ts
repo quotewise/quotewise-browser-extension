@@ -1148,6 +1148,9 @@ describe('OverlayBar', () => {
           collections: [{
             id: 'c1', slug: 'favorites', name: 'Favorites', description: '',
             is_default: false, quote_count: 0, created_at: '', updated_at: '',
+          }, {
+            id: 'c2', slug: 'research', name: 'Research', description: '',
+            is_default: false, quote_count: 0, created_at: '', updated_at: '',
           }],
         });
         return;
@@ -1172,15 +1175,22 @@ describe('OverlayBar', () => {
     expect(shadow.getElementById('action-caption')?.textContent).toBe('Choose at least one collection');
     expect(shadow.querySelector('.duplicate-badge a')).toBeTruthy();
 
-    const checkbox = shadow.querySelector('.collection-picker-option input') as HTMLInputElement;
-    expect(checkbox).toBeTruthy();
-    checkbox.click();
+    const checkboxes = shadow.querySelectorAll('.collection-picker-option input');
+    expect(checkboxes.length).toBe(2);
+    (checkboxes[0] as HTMLInputElement).click();
 
     expect(addButton.textContent).toBe('Add to Collections');
     expect(addButton.disabled).toBe(false);
     expect(shadow.getElementById('action-caption')?.textContent).toBe('Adding to: Favorites');
 
-    checkbox.click();
+    // Two or more enumerate one collection per aligned caption line.
+    (checkboxes[1] as HTMLInputElement).click();
+    const lines = [...shadow.querySelectorAll('#action-caption .caption-line')]
+      .map(line => line.textContent);
+    expect(lines).toEqual(['Adding to:', 'Favorites', 'Research']);
+
+    (checkboxes[1] as HTMLInputElement).click();
+    (checkboxes[0] as HTMLInputElement).click();
     expect(addButton.disabled).toBe(true);
     expect(shadow.getElementById('action-caption')?.textContent).toBe('Choose at least one collection');
   });

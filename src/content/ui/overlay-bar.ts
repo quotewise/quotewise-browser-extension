@@ -543,8 +543,17 @@ export class OverlayBar {
   private setCaption(text: string, title = ''): void {
     const el = this.shadow?.getElementById('action-caption');
     if (!el) return;
-    el.textContent = text;
     el.title = title;
+    el.textContent = '';
+    if (!text) return;
+    // One div per line: a multi-line caption (the ≥2 collection list) keeps
+    // every line individually ellipsis-clipped and left-aligned.
+    for (const line of text.split('\n')) {
+      const lineEl = document.createElement('div');
+      lineEl.className = 'caption-line';
+      lineEl.textContent = line;
+      el.appendChild(lineEl);
+    }
   }
 
   /**

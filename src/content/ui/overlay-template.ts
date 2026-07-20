@@ -631,19 +631,22 @@ export function buildOverlayMarkup(platformLabel: string): string {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        /* Always-present one-line caption under the button. Fixed height so the
-           text multiplexed through it (checking status, instructions, collection
-           summary, success message) swaps without moving the button. */
+        /* Always-present caption under the button. Reserves one line so the
+           status text multiplexed through it (checking status, instructions,
+           summary, success message) swaps without moving the button; grows only
+           for the user-initiated ≥2-collection list, one clipped line each. */
         .action-caption {
           order: 2;
-          height: 15px;
+          min-height: 15px;
           color: #94a3b8;
           font-size: 11px;
           line-height: 15px;
+          min-width: 0;
+        }
+        .action-caption .caption-line {
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
-          min-width: 0;
         }
         .collection-picker-empty,
         .collection-picker-status,

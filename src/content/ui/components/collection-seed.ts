@@ -71,8 +71,10 @@ export function summarizeAdds(results: CollectionAddOutcome[]): CollectionAddSum
 }
 
 /**
- * One-line summary of the collections a capture will be added to, shown under
- * the Submit button. Caps at two named collections, then "+N more".
+ * Summary of the collections a capture will be added to, shown under the
+ * Submit button. One name stays inline; two or more enumerate one per line
+ * (newline-separated) so the full list is inspectable and left-aligned instead
+ * of ellipsis-clipped off the caption's right edge.
  */
 export function describeSelection(names: string[]): string {
   if (names.length === 0) {
@@ -81,8 +83,5 @@ export function describeSelection(names: string[]): string {
   if (names.length === 1) {
     return `Adding to: ${names[0]}`;
   }
-  if (names.length === 2) {
-    return `Adding to: ${names[0]}, ${names[1]}`;
-  }
-  return `Adding to: ${names[0]}, ${names[1]} +${names.length - 2} more`;
+  return `Adding to:\n${names.join('\n')}`;
 }

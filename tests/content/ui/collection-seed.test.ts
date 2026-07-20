@@ -59,14 +59,15 @@ describe('collection-seed helpers', () => {
       expect(describeSelection([])).toBe('');
     });
 
-    it('lists one or two collections in full', () => {
+    it('keeps a single collection inline', () => {
       expect(describeSelection(['Favorites'])).toBe('Adding to: Favorites');
-      expect(describeSelection(['Favorites', 'Research'])).toBe('Adding to: Favorites, Research');
     });
 
-    it('caps at two names and counts the rest', () => {
+    it('enumerates two or more collections one per line', () => {
+      expect(describeSelection(['Favorites', 'Research']))
+        .toBe('Adding to:\nFavorites\nResearch');
       expect(describeSelection(['Favorites', 'Research', 'Archive', 'Inbox']))
-        .toBe('Adding to: Favorites, Research +2 more');
+        .toBe('Adding to:\nFavorites\nResearch\nArchive\nInbox');
     });
   });
 
