@@ -2,7 +2,7 @@
 
 ## Status
 
-In implementation. Backend contracts are implemented in `../quotewise/.worktrees/api-enhancements`; this spec covers the Chrome extension work.
+In implementation. Backend contracts are implemented in the backend (private repo); this spec covers the Chrome extension work.
 
 ## User Story
 

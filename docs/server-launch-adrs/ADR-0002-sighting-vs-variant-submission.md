@@ -70,7 +70,7 @@ Response should tell the client what happened so the overlay can confirm correct
 
 ## Backend response — actual implementation (2026-06-20)
 
-**Status:** Implemented (quotewise repo, branch `api-enhancements`; beads qw-hsly / qw-0psq.22). API stays **v1**; additive/back-compat. **The backend drives the contract.** The auto-collapse this ADR worried about was real: `create_quote()` silently turned every ≥0.8 near-match into a sighting, erasing distinct variant text. The variant path now stops that.
+**Status:** Implemented (backend; beads qw-hsly / qw-0psq.22). API stays **v1**; additive/back-compat. **The backend drives the contract.** The auto-collapse this ADR worried about was real: `create_quote()` silently turned every ≥0.8 near-match into a sighting, erasing distinct variant text. The variant path now stops that.
 
 `POST /v1/quotes/` accepts two **co-required** optional inputs (both or neither). Field-name mapping (ADR sketch → **actual**):
 

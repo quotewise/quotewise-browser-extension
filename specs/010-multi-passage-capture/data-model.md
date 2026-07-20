@@ -20,7 +20,7 @@ Sourced from `existing_sightings_for_url[]` on the duplicate-check response (ADR
 per distinct quote (backend dedupes by the `(quote, sighting_url)` uniqueness). Basis for the
 "already captured this passage" decision, the passages panel, and the badge count.
 
-### Consumed duplicate-check response (delta from ADR-0007 — verified against `../quotewise`)
+### Consumed duplicate-check response (delta from ADR-0007 — verified against the backend)
 `src/types/api.ts` — `DuplicateCheckResult`:
 - `existing_sightings_for_url?: Array<{`
   - `sighting_id: number` *(existing)*

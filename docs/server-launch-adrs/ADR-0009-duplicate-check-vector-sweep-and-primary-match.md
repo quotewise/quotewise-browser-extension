@@ -1,6 +1,6 @@
 # ADR-0009 — Duplicate-check: vector sweep, mixed match list, server-selected primary
 
-- **Status:** ✅ Backend implemented 2026-07-19 (branch `feat/vector-dupe-check` in `quotewise`) · Chrome client changes NOT started
+- **Status:** ✅ Backend implemented 2026-07-19 · Chrome client changes NOT started
 - **Date:** 2026-07-19
 - **Priority:** P1 (fixes an ~8s invisible check and a cross-originator detection gap)
 - **Related beads:** `qw-5bbs8` (vector path — owns this), `qw-ym2km` (backend cleanup), `qw-h16j6` (verifying feedback), `qw-z5684` (epic)
@@ -10,7 +10,7 @@
 ## Context
 
 The duplicate check took ~8s and ran invisibly. The cause was not the trigram index, as
-originally assumed — measured against production (621,891 rows):
+originally assumed — measured against production data:
 
 | approach | time |
 |---|---|

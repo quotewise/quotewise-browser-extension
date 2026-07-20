@@ -72,7 +72,7 @@ Semantics the extension will rely on:
 
 ## Backend response — actual implementation (2026-06-20)
 
-**Status:** Implemented (quotewise repo, branch `api-enhancements`; beads qw-hsly / qw-0psq.22). API stays **v1**; all changes additive/back-compat. **The backend drives the contract** — most of what this ADR sketched already shipped under our existing names; the real delta is three derived fields + an explicit error flag.
+**Status:** Implemented (backend; beads qw-hsly / qw-0psq.22). API stays **v1**; all changes additive/back-compat. **The backend drives the contract** — most of what this ADR sketched already shipped under our existing names; the real delta is three derived fields + an explicit error flag.
 
 Each `matches[]` entry now carries `match_source`, `match_class`, and `existing_sighting_for_this_url`, alongside the fields it always had. Field-name mapping (ADR sketch → **actual** response):
 

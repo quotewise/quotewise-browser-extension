@@ -35,6 +35,7 @@ web-ext-artifacts/
 # AI-agent tooling trees — kept on disk for local agent workflows, not published
 .agents/
 .claude/
+.codex/
 .specify/
 .mcp.json
 .playwright-mcp/
@@ -48,8 +49,10 @@ specs/*/audits/
 # Historical MVP-phase delivery/PBI docs — internal planning, superseded architecture
 docs/delivery/
 
-# Beads redirect to the canonical Dolt store in ../quotewise/.beads
-# (machine-specific absolute path; see CLAUDE.md "Beads issue tracker")
+# Maintainer's private working notes — never published
+docs/untracked/
+
+# Internal issue-tracker store (local tooling; machine-specific, not published)
 .beads/
 
 # OS files

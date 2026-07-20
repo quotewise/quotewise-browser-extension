@@ -1,6 +1,6 @@
 # ADR-0005 — Privacy policy + data-handling disclosure update
 
-- **Status:** ✅ Implemented & deployed 2026-06-20 (PR #177) · Remaining: CWS dashboard Privacy-practices tab (`qw-0psq.16`) + permission justifications (`qw-0psq.17`) — dashboard tasks, not code. "Quotosaurus LLC" confirmed as the intended legal entity.
+- **Status:** ✅ Implemented & deployed 2026-06-20 · Remaining: CWS dashboard Privacy-practices tab (`qw-0psq.16`) + permission justifications (`qw-0psq.17`) — dashboard tasks, not code. "Quotosaurus LLC" confirmed as the intended legal entity.
 - **Date:** 2026-06-19 (proposed) · 2026-06-20 (deployed & verified)
 - **Priority:** P1 — **LAUNCH-GATING** (Chrome Web Store requirement)
 - **Related beads:** `qw-0psq.15` (update hosted privacy policy), `qw-0psq.16` (CWS Privacy practices tab)
@@ -9,7 +9,7 @@
 
 The Chrome Web Store **requires** an accurate, hosted privacy policy for any extension that collects or transmits user data — which this one does. Good news: the backend **already hosts** the pages:
 
-- `quotewise/urls.py:673-674` → `path("terms/", …)`, `path("privacy/", …)`
+- `quotewise/urls.py` → `path("terms/", …)`, `path("privacy/", …)`
 - `templates/quotewise/privacy.html`
 
 The problem is **content accuracy**. Per the 2026-04-21 pre-ship review, the existing publishing/privacy language still references the old `quotosaurus.com` domain and **session-cookie** auth. The extension has since moved to `quotewise.io` and **OAuth 2.0 Bearer tokens** (no cookies/CSRF). A privacy policy that does not match actual behavior is itself a rejection/enforcement risk.

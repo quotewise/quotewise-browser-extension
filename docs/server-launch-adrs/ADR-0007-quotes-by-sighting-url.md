@@ -15,15 +15,15 @@ Spec 010 lets a user capture **multiple distinct passages** (verbatim selections
 
 **The read path is the only gap.** The extension calls `check_duplicate` on every overlay open, but it cannot see more than one quote per URL:
 
-1. `check_quote_duplicate()` populates `existing_sightings_for_url` from a single `.first()` then `existing_sightings.clear()`/`append` (`quotewise/services/quotes/service.py:269`, `:274-275`). For authoritative platforms (X/Twitter) it then **returns early** with `recommendation="duplicate"` (`service.py:314`) — **without comparing the submitted text**. The Step 3 loop that would append *all* sightings (`service.py:371-375`) is dead code once Step 0 has populated one entry. Net: **at most one** entry is ever returned.
-2. `_format_sighting_info()` (`service.py:1052-1065`) returns `sighting_id, quote_id, sighting_url, platform_code, likes_count, originator, created_at` — **no quote text and no link** (`short_code`/`web_url`).
+1. `check_quote_duplicate()` populates `existing_sightings_for_url` from a single `.first()` then `existing_sightings.clear()`/`append` (`quotewise/services/quotes/service.py`). For authoritative platforms (X/Twitter) it then **returns early** with `recommendation="duplicate"` — **without comparing the submitted text**. The Step 3 loop that would append *all* sightings is dead code once Step 0 has populated one entry. Net: **at most one** entry is ever returned.
+2. `_format_sighting_info()` returns `sighting_id, quote_id, sighting_url, platform_code, likes_count, originator, created_at` — **no quote text and no link** (`short_code`/`web_url`).
 
 Because of (1) and (2), the extension cannot:
 
 - **(US1)** distinguish *"the submitted selection exactly matches a passage already captured here"* (→ block as already-captured) from *"this URL has other, different passages, but this selection is new"* (→ allow the capture). Today any prior sighting at the URL collapses to `recommendation="duplicate"` regardless of the submitted text.
 - **(US2)** render an accurate *"N passages captured from this post"* panel (snippet + link per quote) or a passage **count** on the toolbar badge.
 
-The response serializer already types `existing_sightings_for_url` as an untyped `ListField(child=DictField())` (`quotewise/serializers/quote.py:511`), so **adding fields and entries is non-breaking**.
+The response serializer already types `existing_sightings_for_url` as an untyped `ListField(child=DictField())` (`quotewise/serializers/quote.py`), so **adding fields and entries is non-breaking**.
 
 ## Decision (proposed)
 
@@ -55,8 +55,8 @@ Extend `existing_sightings_for_url` on the **existing** `check_duplicate` respon
 
 ## What we need from the backend
 
-1. `existing_sightings_for_url` returns **every distinct quote** sighted at the submitted `source_url` (dedupe by quote) — fixing the `.first()`/`clear()` truncation (`service.py:269,274-275`) and populating the full set even on the authoritative fast path that returns early (`service.py:314`). Guard against N+1 (single `select_related`/`prefetch` query across sightings).
-2. Each entry adds **`text`** (verbatim quote text) and a **link** (`short_code` and/or `web_url`), alongside the existing fields (`_format_sighting_info`, `service.py:1052`).
+1. `existing_sightings_for_url` returns **every distinct quote** sighted at the submitted `source_url` (dedupe by quote) — fixing the `.first()`/`clear()` truncation and populating the full set even on the authoritative fast path that returns early. Guard against N+1 (single `select_related`/`prefetch` query across sightings).
+2. Each entry adds **`text`** (verbatim quote text) and a **link** (`short_code` and/or `web_url`), alongside the existing fields (`_format_sighting_info`).
 3. Additive, **v1**, back-compat: no change to `recommendation`, `matches`, or the single-sighting case; older extension builds that read only `existing_sightings_for_url.length` keep working.
 4. **Bound** the list (documented cap) and add `existing_sightings_total`.
 5. Confirm quote `text` is safe to include here (it is public quote content, already exposed via `matches[].text` and the quote pages) and that this list keeps its current scope (sightings of the URL, not user-scoped).
