@@ -25,7 +25,8 @@ read your feed or any other page content.
 
 1. **Browse normally.** When you see a post worth quoting, click into the post
    itself (its permalink page), then click the Quotewise icon. An overlay
-   appears over the post.
+   appears over the post. For a quote within a longer article, select the text
+   you want to quote before clicking the Quotewise icon.
 2. **Review and confirm.** The extension reads the quote text, the author name or
    handle, and the source URL from the page. You confirm the author before
    anything is saved.
