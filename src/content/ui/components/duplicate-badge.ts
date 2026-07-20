@@ -10,6 +10,7 @@ import {
   primaryMatch,
 } from '../../../utils/duplicate-status';
 import { buildSimilarMatchView, renderSimilarDiff, type ResolutionDecision } from './similar-diff';
+import { normalizeQuoteText } from '../../../utils/quote-text';
 import { safeHref, safeHttpsUrl } from './dom-utils';
 
 interface DefaultSubmitDirective {
@@ -17,6 +18,8 @@ interface DefaultSubmitDirective {
   enabled: boolean;
   text?: string;
   style?: 'success';
+  /** Caption-line explanation of what would make a disabled action available. */
+  hint?: string;
 }
 
 interface WarningSubmitDirective {
@@ -24,6 +27,7 @@ interface WarningSubmitDirective {
   enabled: boolean;
   text: string;
   style: 'warning';
+  hint?: string;
 }
 
 interface ViewQuoteDirective {
@@ -41,10 +45,22 @@ export interface DuplicateBadgeCallbacks {
   onResolveConflict?: (existingQuoteUrl: string | null) => void;
 }
 
+/**
+ * Optional full-width rows below the quote row. When provided, the word diff
+ * and the captured-passages panel render there instead of inflating the inline
+ * badge — async results must not resize the quote row. When absent (unit
+ * tests), both fall back to rendering inside the badge container.
+ */
+export interface DuplicateBadgeSlots {
+  diff?: HTMLElement;
+  passages?: HTMLElement;
+}
+
 export class DuplicateBadge {
   constructor(
     private container: HTMLElement,
-    private callbacks: DuplicateBadgeCallbacks
+    private callbacks: DuplicateBadgeCallbacks,
+    private slots: DuplicateBadgeSlots = {},
   ) {}
 
   /**
@@ -53,34 +69,42 @@ export class DuplicateBadge {
    * whether there is anyone to attribute it to, and without one no link
    * decision can be carried out. Defaults to true — the sole production caller
    * always supplies it, and the default keeps focused unit tests terse.
+   *
+   * `options.postText` is the post's full text. When the capture target IS the
+   * whole post, "already captured" talks about the quote, not a passage —
+   * "passage" is reserved for partial captures of longer text.
    */
   update(
     state: { checking: true } | { result: DuplicateCheckResult } | null,
     capturedText?: string,
     postDate?: string | null,
-    options: { hasOriginator?: boolean } = {},
+    options: { hasOriginator?: boolean; postText?: string | null } = {},
   ): void {
     const hasOriginator = options.hasOriginator !== false;
+    const wholePostTarget = !!capturedText && !!options.postText &&
+      normalizeQuoteText(capturedText) === normalizeQuoteText(options.postText);
+    const noun = wholePostTarget ? 'quote' as const : 'passage' as const;
     this.container.innerHTML = '';
     this.container.className = 'duplicate-badge';
     this.container.style.marginLeft = '';
     this.container.title = '';
     this.container.removeAttribute('aria-live');
+    this.clearSlot(this.slots.diff);
+    this.clearSlot(this.slots.passages);
 
     if (!state) return;
 
-    if ('checking' in state) {
-      this.container.innerHTML = '<div class="spinner" style="width:12px;height:12px;" role="status" aria-label="Checking Quotewise for duplicates" title="Checking Quotewise for duplicates…"></div>';
-      this.container.title = 'Checking Quotewise for duplicates…';
-      return;
-    }
+    // Checking renders nothing here — the action caption under the Submit
+    // button carries "Checking for duplicates…" in a reserved line, so the
+    // quote row never gains or loses a spinner.
+    if ('checking' in state) return;
 
     const { result } = state;
     const resolution = classifyMatchResolution(result, capturedText);
 
     if (resolution === 'couldnt_verify') {
       this.renderCouldntVerify();
-      this.renderPassagesPanel(result);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
@@ -92,15 +116,15 @@ export class DuplicateBadge {
         : undefined;
       this.renderExactSighting(matchedSighting?.web_url
         ? safeHref(matchedSighting.web_url) ?? undefined
-        : undefined, match);
-      this.renderPassagesPanel(result);
+        : undefined, match, noun);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
     if (resolution === 'conflict') {
       const match = primaryMatch(result.matches);
       this.renderConflict(match, this.getSafeQuotePageUrl(match));
-      this.renderPassagesPanel(result);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
@@ -110,8 +134,8 @@ export class DuplicateBadge {
         : null;
 
       if (!similarView) {
-        this.renderLegacyStatus(result, capturedText, hasOriginator);
-        this.renderPassagesPanel(result);
+        this.renderLegacyStatus(result, capturedText, hasOriginator, noun);
+        this.renderPassagesPanel(result, capturedText);
         return;
       }
 
@@ -124,7 +148,7 @@ export class DuplicateBadge {
       const decisionable = hasOriginator && !conflicted;
 
       renderSimilarDiff(
-        this.container,
+        this.diffTarget(),
         decisionable
           ? similarView
           : { ...similarView, sightingAvailable: false, variantAvailable: false },
@@ -147,33 +171,90 @@ export class DuplicateBadge {
       } else {
         this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Choose Action' });
       }
-      this.renderPassagesPanel(result);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
     if (Array.isArray(result.existing_sightings_for_url) && result.existing_sightings_for_url.length > 0) {
       this.renderBadge('info', 'ℹ️', 'This post already has a captured quote');
       this.container.title = 'This post already has a captured quote; this passage is new';
-      this.callbacks.onSubmitStateChange({
-        type: 'submit',
-        enabled: true,
-        text: 'Capture another passage',
-      });
-      this.renderPassagesPanel(result);
+      // With no selection the capture target is the entire post — capturing
+      // "another passage" must not default to swallowing the whole thing.
+      // Require a fresh selection before enabling.
+      this.callbacks.onSubmitStateChange(wholePostTarget
+        ? {
+            type: 'submit',
+            enabled: false,
+            text: 'Capture another passage',
+            hint: 'Select a new passage to capture another',
+          }
+        : {
+            type: 'submit',
+            enabled: true,
+            text: 'Capture another passage',
+          });
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
-    this.renderLegacyStatus(result, capturedText, hasOriginator);
-    this.renderPassagesPanel(result);
+    this.renderLegacyStatus(result, capturedText, hasOriginator, noun);
+    this.renderPassagesPanel(result, capturedText);
   }
 
-  private renderPassagesPanel(result: DuplicateCheckResult): void {
+  /**
+   * Empty a full-width slot and re-hide it. Each update() starts from hidden
+   * slots so a state change never leaves a stale row behind.
+   */
+  private clearSlot(slot?: HTMLElement): void {
+    if (!slot) return;
+    slot.innerHTML = '';
+    slot.hidden = true;
+  }
+
+  /**
+   * Where the word diff renders: an inner wrapper inside the dedicated row when
+   * one is provided (renderSimilarDiff overwrites the target's className, so it
+   * must not be handed the slot itself), else the badge container.
+   */
+  private diffTarget(): HTMLElement {
+    const slot = this.slots.diff;
+    if (!slot) return this.container;
+    slot.hidden = false;
+    const inner = document.createElement('div');
+    slot.appendChild(inner);
+    return inner;
+  }
+
+  private renderPassagesPanel(result: DuplicateCheckResult, capturedText?: string): void {
     const count = passageCountForUrl(result);
     // null is "the check told us nothing" — render no panel rather than assert
     // captures. This path runs on the couldnt_verify branch too.
     if (count === 0 || count === null) return;
 
-    this.container.classList.add('has-passages');
+    const sightings = Array.isArray(result.existing_sightings_for_url)
+      ? result.existing_sightings_for_url
+      : [];
+    const displayableSightings = sightings
+      .filter((sighting): sighting is typeof sighting & { text: string } => (
+        typeof sighting === 'object' && sighting !== null && typeof sighting.text === 'string'
+      ))
+      .slice(0, 5);
+
+    // The post's only captured passage is the very text the badge is already
+    // talking about — a one-item list repeating it says nothing new.
+    if (
+      count === 1 &&
+      capturedText &&
+      displayableSightings.length === 1 &&
+      normalizeQuoteText(displayableSightings[0].text) === normalizeQuoteText(capturedText)
+    ) {
+      return;
+    }
+
+    const slot = this.slots.passages;
+    if (slot) slot.hidden = false;
+    const target = slot ?? this.container;
+    if (!slot) this.container.classList.add('has-passages');
 
     const panel = document.createElement('section');
     panel.className = 'passages-panel';
@@ -187,15 +268,6 @@ export class DuplicateBadge {
       ? 'This post already has captures'
       : `${count} ${count === 1 ? 'passage' : 'passages'} captured from this post`;
     panel.appendChild(heading);
-
-    const sightings = Array.isArray(result.existing_sightings_for_url)
-      ? result.existing_sightings_for_url
-      : [];
-    const displayableSightings = sightings
-      .filter((sighting): sighting is typeof sighting & { text: string } => (
-        typeof sighting === 'object' && sighting !== null && typeof sighting.text === 'string'
-      ))
-      .slice(0, 5);
 
     if (displayableSightings.length > 0) {
       const list = document.createElement('ul');
@@ -235,20 +307,21 @@ export class DuplicateBadge {
       panel.appendChild(more);
     }
 
-    this.container.appendChild(panel);
+    target.appendChild(panel);
   }
 
   private renderLegacyStatus(
     result: DuplicateCheckResult,
     capturedText?: string,
     hasOriginator = true,
+    noun: 'quote' | 'passage' = 'passage',
   ): void {
     const sightingState = classifyDuplicateSighting(result, capturedText);
     const match = getMatchForDuplicateSightingState(result, sightingState);
     const quotePageUrl = this.getQuotePageUrl(match);
 
     if (sightingState === 'exact_sighting') {
-      this.renderExactSighting(quotePageUrl, match);
+      this.renderExactSighting(quotePageUrl, match, noun);
     } else if (sightingState === 'same_platform_sighting') {
       this.renderEarlierSighting(quotePageUrl, match);
     } else if (sightingState === 'other_platform_sighting') {
@@ -302,30 +375,6 @@ export class DuplicateBadge {
     // No badge for new_quote — that's the expected case
   }
 
-  /**
-   * Small spinner appended NEXT TO the currently displayed badge while the live
-   * duplicate check refines a preloaded result. Tooltip-only explanation — the
-   * action is trainable, so it earns no permanent text. Any subsequent update()
-   * re-render clears it implicitly.
-   */
-  setRefining(refining: boolean): void {
-    const existing = this.container.querySelector('.refine-spinner');
-    if (!refining) {
-      existing?.remove();
-      return;
-    }
-    if (existing) return;
-    const spinner = document.createElement('div');
-    spinner.className = 'spinner refine-spinner';
-    spinner.style.width = '12px';
-    spinner.style.height = '12px';
-    spinner.style.flexShrink = '0';
-    spinner.setAttribute('role', 'status');
-    spinner.setAttribute('aria-label', 'Verifying against the full Quotewise library');
-    spinner.title = 'Verifying against the full Quotewise library…';
-    this.container.appendChild(spinner);
-  }
-
   private renderCouldntVerify(): void {
     this.container.className = 'duplicate-badge badge warning';
     this.container.style.marginLeft = '8px';
@@ -350,13 +399,14 @@ export class DuplicateBadge {
   private renderExactSighting(
     quotePageUrl?: string,
     match?: DuplicateCheckResult['matches'][number],
+    noun: 'quote' | 'passage' = 'passage',
   ): void {
-    this.renderBadge('success', '✓', this.membershipText(match) || 'Already captured this passage', quotePageUrl);
-    this.container.title = this.membershipText(match) || 'This passage is already in Quotewise';
+    this.renderBadge('success', '✓', this.membershipText(match) || `Already captured this ${noun}`, quotePageUrl);
+    this.container.title = this.membershipText(match) || `This ${noun} is already in Quotewise`;
     if (quotePageUrl) {
       this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
     } else {
-      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Already captured this passage' });
+      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: `Already captured this ${noun}` });
     }
   }
 

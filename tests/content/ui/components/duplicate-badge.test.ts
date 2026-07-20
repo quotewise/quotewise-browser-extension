@@ -76,10 +76,10 @@ describe('DuplicateBadge', () => {
     expect(directives).toHaveLength(0);
   });
 
-  it('shows spinner when checking', () => {
+  it('renders nothing while checking (status lives in the action caption)', () => {
     badge.update({ checking: true });
-    expect(container.querySelector('.spinner')).toBeTruthy();
-    expect(container.title).toBe('Checking Quotewise for duplicates…');
+    expect(container.innerHTML).toBe('');
+    expect(directives).toHaveLength(0);
   });
 
   it('shows "Already captured" link for exact_url with url', () => {
@@ -353,8 +353,10 @@ describe('DuplicateBadge', () => {
   });
 
   it('clears previous content on update', () => {
-    badge.update({ checking: true });
-    expect(container.querySelector('.spinner')).toBeTruthy();
+    badge.update({
+      result: makeResult({ recommendation: 'duplicate', matches: [makeMatch({})] }),
+    });
+    expect(container.innerHTML).not.toBe('');
     badge.update(null);
     expect(container.innerHTML).toBe('');
   });
@@ -647,32 +649,116 @@ describe('DuplicateBadge', () => {
   });
 });
 
-describe('DuplicateBadge refining spinner + tooltips', () => {
-  it('labels the bare checking spinner with a tooltip', () => {
+describe('DuplicateBadge whole-post capture wording and redundancy', () => {
+  function exactUrlResult(text: string): ReturnType<typeof makeResult> {
+    return makeResult({
+      recommendation: 'duplicate',
+      in_quotewise: true,
+      matches: [makeMatch({ quote_id: 'q1', text })],
+      existing_sightings_total: 1,
+      existing_sightings_for_url: [makeUrlSighting(text, 'https://quotewise.io/q/q1/')],
+    });
+  }
+
+  it('says "quote" and omits the one-passage panel when the capture is the whole post', () => {
     const container = document.createElement('div');
-    const badge = new DuplicateBadge(container, {} as ConstructorParameters<typeof DuplicateBadge>[1]);
-    badge.update({ checking: true });
-    const spinner = container.querySelector('.spinner') as HTMLElement;
-    expect(spinner).toBeTruthy();
-    expect(spinner.title).toBe('Checking Quotewise for duplicates…');
-    expect(spinner.getAttribute('role')).toBe('status');
+    const badge = new DuplicateBadge(container, { onSubmitStateChange: () => {} });
+    const postText = 'The whole post text';
+
+    badge.update({ result: exactUrlResult(postText) }, postText, null, { postText });
+
+    expect(container.textContent).toContain('Already captured this quote');
+    expect(container.querySelector('.passages-panel')).toBeNull();
   });
 
-  it('setRefining appends a tooltip spinner beside existing content and removes it cleanly', () => {
+  it('keeps "passage" for a partial capture and still omits the redundant one-item panel', () => {
     const container = document.createElement('div');
-    container.innerHTML = '<span class="badge">existing</span>';
-    const badge = new DuplicateBadge(container, {} as ConstructorParameters<typeof DuplicateBadge>[1]);
+    const badge = new DuplicateBadge(container, { onSubmitStateChange: () => {} });
 
-    badge.setRefining(true);
-    badge.setRefining(true); // idempotent — no duplicate spinners
-    expect(container.querySelectorAll('.refine-spinner').length).toBe(1);
-    expect(container.querySelector('.badge')?.textContent).toBe('existing');
-    const spinner = container.querySelector('.refine-spinner') as HTMLElement;
-    expect(spinner.title).toBe('Verifying against the full Quotewise library…');
-    expect(spinner.getAttribute('role')).toBe('status');
+    badge.update(
+      { result: exactUrlResult('a captured excerpt') },
+      'a captured excerpt',
+      null,
+      { postText: 'A much longer post containing a captured excerpt and more' },
+    );
 
-    badge.setRefining(false);
-    expect(container.querySelector('.refine-spinner')).toBeNull();
-    expect(container.querySelector('.badge')?.textContent).toBe('existing');
+    expect(container.textContent).toContain('Already captured this passage');
+    expect(container.querySelector('.passages-panel')).toBeNull();
+  });
+
+  it('keeps the panel when the post has other captured passages', () => {
+    const container = document.createElement('div');
+    const badge = new DuplicateBadge(container, { onSubmitStateChange: () => {} });
+    const postText = 'The whole post text';
+    const result = makeResult({
+      recommendation: 'duplicate',
+      in_quotewise: true,
+      matches: [makeMatch({ quote_id: 'q1', text: postText })],
+      existing_sightings_total: 2,
+      existing_sightings_for_url: [
+        makeUrlSighting(postText, 'https://quotewise.io/q/q1/'),
+        { ...makeUrlSighting('Another captured passage', 'https://quotewise.io/q/q2/'), id: 2, quote_id: 'q2' },
+      ],
+    });
+
+    badge.update({ result }, postText, null, { postText });
+
+    expect(container.querySelector('.passages-panel')).toBeTruthy();
+    expect(container.textContent).toContain('2 passages captured from this post');
+  });
+});
+
+describe('DuplicateBadge slot rendering', () => {
+  it('renders passages into the dedicated slot and clears it on update', () => {
+    const container = document.createElement('div');
+    const passages = document.createElement('div');
+    passages.hidden = true;
+    const badge = new DuplicateBadge(
+      container,
+      { onSubmitStateChange: () => {} },
+      { passages },
+    );
+
+    badge.update({
+      result: makeResult({
+        existing_sightings_total: 1,
+        existing_sightings_for_url: [makeUrlSighting('a passage')],
+      }),
+    }, 'A new passage');
+
+    expect(passages.hidden).toBe(false);
+    expect(passages.querySelector('.passages-panel')).toBeTruthy();
+    expect(container.querySelector('.passages-panel')).toBeNull();
+    expect(container.classList.contains('has-passages')).toBe(false);
+
+    badge.update(null);
+    expect(passages.hidden).toBe(true);
+    expect(passages.innerHTML).toBe('');
+  });
+
+  it('renders the similar word diff into the dedicated slot, not the badge', () => {
+    const container = document.createElement('div');
+    const diff = document.createElement('div');
+    diff.hidden = true;
+    const badge = new DuplicateBadge(
+      container,
+      { onSubmitStateChange: () => {} },
+      { diff },
+    );
+
+    badge.update({
+      result: makeResult({
+        recommendation: 'new_version',
+        matches: [makeMatch({ match_class: 'similar', text: 'hello there world' })],
+      }),
+    }, 'hello world');
+
+    expect(diff.hidden).toBe(false);
+    expect(diff.querySelector('.similar-diff')).toBeTruthy();
+    expect(container.querySelector('.similar-diff')).toBeNull();
+
+    badge.update(null);
+    expect(diff.hidden).toBe(true);
+    expect(diff.innerHTML).toBe('');
   });
 });

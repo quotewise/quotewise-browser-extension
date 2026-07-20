@@ -118,6 +118,22 @@ export function resolveIconPresentation(
     }
 
     if (quoteStatus !== 'None' && quoteStatus !== 'New') {
+      // With no originator resolved, a same-originator claim ("yours") cannot
+      // be supported — the match is by definition somebody else's quote.
+      // `InCollection` and `Conflict` pass through unchanged: InCollection is
+      // genuinely the user's collection regardless of this post's originator,
+      // and Conflict is already the strongest signal and must never be
+      // weakened.
+      if (tab.isOriginatorMissing) {
+        if (quoteStatus === 'Exact') {
+          return ICON_STATES.ExactElsewhere;
+        }
+        // Defensive symmetry: new_version (Similar) can't occur unscoped per
+        // ADR-0009, but if it ever does, the same reasoning applies.
+        if (quoteStatus === 'Similar') {
+          return ICON_STATES.SimilarElsewhere;
+        }
+      }
       return QUOTE_STATUS_TO_STATE[quoteStatus];
     }
 

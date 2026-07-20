@@ -148,6 +148,24 @@ export const ICON_STATES = {
     title: 'Similar to a quote attributed to someone else',
     scope: 'tab',
   },
+  /**
+   * There is no originator resolved for this post, and the unscoped check
+   * still came back byte-identical to something on record — under someone
+   * else's name, necessarily, since there is no "yours" to match. Same glyph
+   * as `Exact` because it IS the same text; amber rather than green because
+   * the capture is not (yet) the user's.
+   *
+   * Distinct from `ExactAlsoElsewhere`, which means "you have it AND someone
+   * else does" and hard-blocks Submit. This state blocks nothing — there is
+   * no originator to conflict with, just an originator to add first.
+   */
+  ExactElsewhere: {
+    iconVariant: 'color',
+    badgeText: '=',
+    badgeColor: '#E69F00',
+    title: 'This exact quote is already in Quotewise, attributed to someone else',
+    scope: 'tab',
+  },
   MissingOriginator: {
     iconVariant: 'color',
     badgeText: '@',

@@ -188,7 +188,7 @@ export class OriginatorLookup {
 
   private renderNotFound(handle: string, createUrl?: string): void {
     const createLink = createUrl
-      ? ` <a href="${this.escapeHtml(createUrl)}" target="_blank" rel="noopener" class="create-link">Create on Quotewise</a>`
+      ? ` <a href="${this.escapeHtml(createUrl)}" target="_blank" rel="noopener" class="create-link">Create Originator on Quotewise</a>`
       : '';
     this.container.innerHTML =
       `<span class="badge warning">@</span>` +

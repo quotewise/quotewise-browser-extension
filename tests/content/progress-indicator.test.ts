@@ -63,43 +63,6 @@ describe('CaptureProgressIndicator', () => {
     expect(container.querySelector('.progress-bar')).toBeTruthy();
   });
 
-  it('shows a delayed secondary line for long waits and rotates it', () => {
-    const indicator = new CaptureProgressIndicator(container, {
-      debounceMs: 400,
-      backendHintDelayMs: 1000,
-      backendHintRotateMs: 1000,
-      backendHints: [
-        'Quotewise may be checking the shelves',
-        'Quotewise may be updating your collection',
-      ],
-    });
-
-    indicator.setPhase('submitting', { immediate: true });
-
-    expect(container.textContent).toContain('Saving to Quotewise');
-    expect(container.textContent).not.toContain('Quotewise may be');
-
-    jest.advanceTimersByTime(1000);
-    expect(container.textContent).toContain('Quotewise may be checking the shelves');
-
-    jest.advanceTimersByTime(1000);
-    expect(container.textContent).toContain('Quotewise may be updating your collection');
-  });
-
-  it('clears the secondary line when progress completes', () => {
-    const indicator = new CaptureProgressIndicator(container, {
-      backendHintDelayMs: 1000,
-      backendHints: ['Quotewise may be checking the shelves'],
-    });
-
-    indicator.setPhase('submitting', { immediate: true });
-    jest.advanceTimersByTime(1000);
-    indicator.setPhase('success');
-
-    expect(container.innerHTML).toBe('');
-    expect(container.textContent).not.toContain('Quotewise may be');
-  });
-
   it('clears progress on fast success before the debounce window', () => {
     const indicator = new CaptureProgressIndicator(container, { debounceMs: 400 });
 

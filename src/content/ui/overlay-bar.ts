@@ -103,6 +103,9 @@ export class OverlayBar {
   private unsubscribeSettings: (() => void) | null = null;
   private selectionChangeHandler: (() => void) | null = null;
   private selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private captionTimer: ReturnType<typeof setTimeout> | null = null;
+  private transientCaption: string | null = null;
+  private directiveHint: string | null = null;
   private duplicateCheckSequence = 0;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private captureState: CaptureState = {
@@ -151,7 +154,6 @@ export class OverlayBar {
 
   hide(): void {
     this.hidden = true;
-    this.collapseCapture();
     this.accountMenu?.closeMenu();
     if (this.root) {
       this.root.setAttribute('aria-hidden', 'true');
@@ -161,6 +163,11 @@ export class OverlayBar {
       container?.setAttribute('aria-hidden', 'true');
       container?.setAttribute('inert', '');
     }
+    // Collapse only after the 200ms slide-out completes — collapsing first
+    // snaps the tray shorter and then slides the remainder.
+    setTimeout(() => {
+      if (this.hidden) this.collapseCapture();
+    }, 250);
   }
 
   isVisible(): boolean {
@@ -496,13 +503,14 @@ export class OverlayBar {
 
     container.hidden = false;
     this.collectionPickerContainer = container;
+    this.collectionPicker?.dispose();
     this.existingQuoteTarget = null;
     this.collectionPicker = new CollectionPicker(container, {
       label: 'Add to collections',
       loadCollections: (forceRefresh = false) => this.loadCollections(forceRefresh),
       onSelectionChange: () => {
         this.updateSubmitButton(!!this.captureState.originator);
-        this.updateCollectionSummary();
+        this.refreshCaption();
       },
     });
 
@@ -517,26 +525,85 @@ export class OverlayBar {
   }
 
   private hideCollectionPicker(): void {
+    this.collectionPicker?.dispose();
     this.collectionPicker = null;
     this.existingQuoteTarget = null;
     if (this.collectionPickerContainer) {
       this.collectionPickerContainer.hidden = true;
       this.collectionPickerContainer.innerHTML = '';
     }
-    this.updateCollectionSummary();
+    this.refreshCaption();
   }
 
   /**
-   * Reflect the picked collections in a one-line caption under the Submit button,
-   * so the check-collections → submit relationship is explicit. Hidden when none.
+   * The one reserved line under the Submit button (#action-caption). Every
+   * status the right column reports — duplicate-check progress, instructions,
+   * the collection summary, submit outcomes — multiplexes through this fixed-
+   * height element so the button never moves when text appears or clears.
    */
-  private updateCollectionSummary(): void {
-    const el = this.shadow?.getElementById('collection-summary');
+  private setCaption(text: string, title = ''): void {
+    const el = this.shadow?.getElementById('action-caption');
     if (!el) return;
-    const names = this.selectedCollections().map(collection => collection.name);
-    const text = describeSelection(names);
-    el.textContent = text;
-    el.hidden = text.length === 0;
+    el.title = title;
+    el.textContent = '';
+    if (!text) return;
+    // One div per line: a multi-line caption (the ≥2 collection list) keeps
+    // every line individually ellipsis-clipped and left-aligned.
+    for (const line of text.split('\n')) {
+      const lineEl = document.createElement('div');
+      lineEl.className = 'caption-line';
+      lineEl.textContent = line;
+      el.appendChild(lineEl);
+    }
+  }
+
+  /**
+   * What the caption shows when nothing transient is in flight. On the
+   * existing-quote path the button reads "Add to Collections", so the
+   * choose-one instruction under it names that button's precondition.
+   */
+  private defaultCaption(): string {
+    if (
+      this.existingQuoteTarget &&
+      this.collectionPicker &&
+      this.selectedCollections().length === 0 &&
+      this.collectionPicker.getAvailableCollections().length > 0
+    ) {
+      return 'Choose at least one collection';
+    }
+    if (this.directiveHint) {
+      return this.directiveHint;
+    }
+    return describeSelection(this.selectedCollections().map(collection => collection.name));
+  }
+
+  private refreshCaption(): void {
+    if (this.transientCaption !== null) return;
+    this.setCaption(this.defaultCaption());
+  }
+
+  /**
+   * Transient caption text (duplicate-check status, submit outcome). Holds the
+   * line until cleared, or reverts to the default after `revertAfterMs`.
+   */
+  private setTransientCaption(text: string | null, revertAfterMs?: number, title = ''): void {
+    if (this.captionTimer) {
+      clearTimeout(this.captionTimer);
+      this.captionTimer = null;
+    }
+    this.transientCaption = text;
+    if (text === null) {
+      this.refreshCaption();
+      return;
+    }
+    this.setCaption(text, title);
+    if (revertAfterMs) {
+      this.captionTimer = setTimeout(() => {
+        this.captionTimer = null;
+        this.transientCaption = null;
+        this.refreshCaption();
+      }, revertAfterMs);
+    }
   }
 
   private async loadCollections(forceRefresh = false): Promise<Collection[]> {
@@ -577,21 +644,68 @@ export class OverlayBar {
 
     container.hidden = false;
     this.collectionPickerContainer = container;
+    this.collectionPicker?.dispose();
     this.existingQuoteTarget = { quoteId: String(match.quote_id) };
+    // The button label stays the action ("Add to Collections"); the "choose one
+    // below" instruction lives in the caption line, not the disabled button.
     this.collectionPicker = new CollectionPicker(container, {
       label: 'Add existing quote to collections',
       alreadyIn: match.member_collections || [],
       loadCollections: (forceRefresh = false) => this.loadCollections(forceRefresh),
       onSelectionChange: (selected) => {
-        this.updateSubmitButton(selected.size > 0, selected.size > 0 ? 'Add to Collections' : 'Choose collection');
-        this.updateCollectionSummary();
+        this.updateExistingQuoteButton(selected.size);
+        this.refreshCaption();
       },
     });
 
     await this.collectionPicker.mount();
-    this.updateSubmitButton(false, this.collectionPicker.getAvailableCollections().length > 0
-      ? 'Choose collection'
-      : 'No collections');
+    this.updateExistingQuoteButton(this.selectedCollections().length);
+    this.refreshCaption();
+  }
+
+  /**
+   * Routes a badge directive to the action button, applying the vetoes only the
+   * orchestrator can know about.
+   */
+  private applySubmitDirective(directive: SubmitStateDirective): void {
+    // The hint belongs to the current directive: set when it carries one,
+    // cleared by any directive that doesn't.
+    this.directiveHint = directive.type === 'submit' ? directive.hint ?? null : null;
+    this.refreshCaption();
+
+    if (directive.type === 'view_quote') {
+      // With the existing-quote picker active, the button belongs to "Add to
+      // Collections" — the badge line already links to the quote, so a View
+      // Quote button would be the same action twice.
+      if (this.existingQuoteTarget) return;
+      // Still useful without an originator — the quote exists, go read it.
+      this.updateViewQuoteButton(directive.url, directive.text);
+      return;
+    }
+
+    // The badge reasons about the quote, not the attribution, so on the
+    // no-originator path it will happily ask for an enabled Submit. Acting
+    // on that hits submitQuote's `!originator` guard, which returns in
+    // silence. Say why instead.
+    if (directive.enabled && !this.captureState.originator) {
+      this.updateSubmitButton(false, 'Add originator first');
+      return;
+    }
+
+    if (directive.style === 'warning') {
+      this.updateSubmitButtonWarning(directive.enabled, directive.text);
+    } else {
+      this.updateSubmitButton(directive.enabled, directive.text);
+    }
+  }
+
+  /**
+   * Button state for the existing-quote path: always "Add to Collections",
+   * enabled once something is selected. Viewing the quote is the badge line's
+   * job; the button offers the one action the badge can't.
+   */
+  private updateExistingQuoteButton(selectedCount: number): void {
+    this.updateSubmitButton(selectedCount > 0, 'Add to Collections');
   }
 
   private matchForExistingCollectionAdd(
@@ -622,6 +736,13 @@ export class OverlayBar {
 
     const match = this.matchForExistingCollectionAdd(state.result);
     if (match?.quote_id) {
+      // Same target quote → update membership in place. A full remount here
+      // would flash "Loading collections…" over a usable picker on every
+      // refine pass (preload result + live check land within a second).
+      if (this.existingQuoteTarget?.quoteId === String(match.quote_id) && this.collectionPicker) {
+        this.collectionPicker.setAlreadyIn(match.member_collections || []);
+        return;
+      }
       void this.mountExistingQuoteCollectionPicker(match);
       return;
     }
@@ -875,17 +996,6 @@ export class OverlayBar {
     this.syncSourcePreview();
   }
 
-  /**
-   * Update quote preview to show success state (preserves Selection label if applicable)
-   */
-  private updateQuotePreviewSuccess(): void {
-    if (!this.quotePreview) return;
-
-    const textSubmitted = this.captureState.selectedText || this.currentData?.text || '';
-    const isPartial = !!this.captureState.selectedText;
-    this.quotePreview.showSuccess(textSubmitted, isPartial);
-  }
-
   private collapseCapture(): void {
     this.stopSelectionWatcher();
     this.duplicateCheckSequence += 1;
@@ -915,6 +1025,8 @@ export class OverlayBar {
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.progressIndicator?.reset();
     this.firstRunNotice?.hide();
+    this.directiveHint = null;
+    this.setTransientCaption(null);
     this.hideCollectionPicker();
     this.updateSubmitButton(false);
     this.updateDuplicateInfo(null);
@@ -1103,11 +1215,10 @@ export class OverlayBar {
         this.captureState.submitResult = 'success';
         this.captureState.isCheckingDuplicate = false;
         this.captureState.duplicateResult = null;
+        // Invalidate any in-flight check so its completion can't overwrite the
+        // success caption or re-render the just-cleared badge.
+        this.duplicateCheckSequence += 1;
 
-        // Update quote preview to show success
-        this.updateQuotePreviewSuccess();
-
-        // Clear duplicate badge and show success in originator row
         this.updateDuplicateInfo(null);
 
         // Advisory only (ADR-0009 §5) — the capture succeeded either way. It
@@ -1117,14 +1228,14 @@ export class OverlayBar {
           : [];
         this.ensureSimilarPanel()?.showPostSubmit(attributionConflicts);
 
+        // Outcome reports in the caption line, quote preview and originator row
+        // untouched — success must not rewrap what the user is looking at.
         const successMessage = this.successMessageForSubmit(response, opts.userIntent);
         const collectionMessage = this.collectionMessage(successMessage, addSummary);
-        this.setOriginatorHtml(
-          addSummary.failed.length > 0
-            ? `<span class="badge warning">!</span>
-               <span>${this.escapeHtml(collectionMessage)}</span>`
-            : `<span class="badge success">✓</span>
-               <span>${this.escapeHtml(collectionMessage)}</span>`
+        this.setTransientCaption(
+          addSummary.failed.length > 0 ? collectionMessage : `✓ ${collectionMessage}`,
+          undefined,
+          collectionMessage,
         );
         const hasCollectionSuccess = addSummary.succeeded.length > 0;
         if (addSummary.failed.length > 0) {
@@ -1164,10 +1275,11 @@ export class OverlayBar {
     } catch (error) {
       this.captureState.submitResult = 'error';
       this.captureState.errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.ensureProgressIndicator().setError(this.captureState.errorMessage);
-      this.setOriginatorHtml(
-        `<span class="badge error">!</span>
-         <span>Submit failed: ${this.escapeHtml(this.captureState.errorMessage || '')}</span>`
+      // The progress lane (role=alert, with Retry) is the single home for the
+      // failure — mirroring it into the originator row leaves a stale error
+      // there after a successful retry.
+      this.ensureProgressIndicator().setError(
+        `Submit failed: ${this.captureState.errorMessage}`,
       );
       this.updateSubmitButton(true, 'Retry');
     } finally {
@@ -1319,7 +1431,9 @@ export class OverlayBar {
     if (this.captureState.isSubmitting || !this.existingQuoteTarget) return;
     const selectedCollections = this.selectedCollections();
     if (selectedCollections.length === 0) {
-      this.updateSubmitButton(false, 'Choose collection');
+      // Shouldn't be reachable — the button only reads "Add to Collections"
+      // while something is selected — but restore the coherent state if it is.
+      this.updateExistingQuoteButton(0);
       return;
     }
 
@@ -1344,12 +1458,14 @@ export class OverlayBar {
         }
       }
 
-      this.ensureProgressIndicator().setPhase(summary.failed.length > 0 ? 'checking' : 'success');
+      // 'idle', not 'checking' — a failed add is not a duplicate check, and the
+      // debounced "Checking quote" text would appear 400ms later, mislabelled.
+      this.ensureProgressIndicator().setPhase(summary.failed.length > 0 ? 'idle' : 'success');
       const message = this.collectionMessage('Quote already exists.', summary);
-      this.setOriginatorHtml(
-        summary.failed.length > 0
-          ? `<span class="badge warning">!</span><span>${this.escapeHtml(message)}</span>`
-          : `<span class="badge success">✓</span><span>${this.escapeHtml(message)}</span>`
+      this.setTransientCaption(
+        summary.failed.length > 0 ? message : `✓ ${message}`,
+        undefined,
+        message,
       );
 
       if (summary.succeeded.length > 0) {
@@ -1539,9 +1655,12 @@ export class OverlayBar {
     this.captureState.isCheckingDuplicate = true;
     if (!hasCurrentResult) {
       this.updateDuplicateInfo({ checking: true });
-    } else {
-      this.duplicateBadge?.setRefining(true);
     }
+    // Check status lives in the reserved caption line under the Submit button,
+    // not as a spinner in the quote row — the row must not resize per check.
+    this.setTransientCaption(hasCurrentResult
+      ? 'Verifying against the full Quotewise library…'
+      : 'Checking for duplicates…');
 
     const quoteText = this.captureState.selectedText || this.currentData.text;
     const sourceUrl = captureSourceUrl(this.currentData);
@@ -1568,19 +1687,26 @@ export class OverlayBar {
         this.captureState.duplicateResult = response.result as DuplicateCheckResult;
         this.updateDuplicateStats(this.captureState.duplicateResult, false);
         this.updateDuplicateInfo({ result: this.captureState.duplicateResult });
+        // A completed check earns a brief, perceivable "Checked ✓" before the
+        // caption reverts; a check that couldn't verify earns nothing.
+        if (this.captureState.duplicateResult.search_metadata?.error) {
+          this.setTransientCaption(null);
+        } else {
+          this.setTransientCaption('Checked ✓', 400);
+        }
       } else {
-        // Clear spinner even if no result
         this.updateDuplicateInfo(null);
+        this.setTransientCaption(null);
       }
     } catch (error) {
       if (checkSequence !== this.duplicateCheckSequence) return;
       // Silently fail - duplicate check is informational only
       console.warn('Duplicate check failed:', error);
       this.updateDuplicateInfo(null);
+      this.setTransientCaption(null);
     } finally {
       if (checkSequence === this.duplicateCheckSequence) {
         this.captureState.isCheckingDuplicate = false;
-        this.duplicateBadge?.setRefining(false);
       }
     }
   }
@@ -1603,26 +1729,7 @@ export class OverlayBar {
     if (!this.duplicateBadge) {
       this.duplicateBadge = new DuplicateBadge(this.duplicateBadgeContainer, {
         onSubmitStateChange: (directive: SubmitStateDirective) => {
-          if (directive.type === 'view_quote') {
-            // Still useful without an originator — the quote exists, go read it.
-            this.updateViewQuoteButton(directive.url, directive.text);
-            return;
-          }
-
-          // The badge reasons about the quote, not the attribution, so on the
-          // no-originator path it will happily ask for an enabled Submit. Acting
-          // on that hits submitQuote's `!originator` guard, which returns in
-          // silence. Say why instead.
-          if (directive.enabled && !this.captureState.originator) {
-            this.updateSubmitButton(false, 'Add originator first');
-            return;
-          }
-
-          if (directive.style === 'warning') {
-            this.updateSubmitButtonWarning(directive.enabled, directive.text);
-          } else {
-            this.updateSubmitButton(directive.enabled, directive.text);
-          }
+          this.applySubmitDirective(directive);
         },
         onResolveDecision: (decision) => {
           void this.submitQuote({
@@ -1641,6 +1748,9 @@ export class OverlayBar {
             window.open(existingQuoteUrl, '_blank', 'noopener,noreferrer');
           }
         },
+      }, {
+        diff: this.shadow?.getElementById('similar-diff-slot') ?? undefined,
+        passages: this.shadow?.getElementById('passages-slot') ?? undefined,
       });
     }
 
@@ -1648,7 +1758,10 @@ export class OverlayBar {
       state,
       this.captureState.selectedText || this.currentData?.text,
       this.currentData ? capturePostedAt(this.currentData) : null,
-      { hasOriginator: !!this.captureState.originator },
+      {
+        hasOriginator: !!this.captureState.originator,
+        postText: this.currentData?.text,
+      },
     );
 
     const result = state && 'result' in state ? state.result : null;

@@ -640,6 +640,112 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     expect(sendResponse).toHaveBeenCalledWith({ success: true });
   });
 
+  it('revives @ alongside the cached duplicate result after a worker restart', async () => {
+    // Both caches were written by the previous visit's preflight: the duplicate
+    // result (★-producing new_quote) AND the not-found originator record. A
+    // fresh worker that revives one without the other paints ★ over what the
+    // user last saw as @.
+    mockServiceWorkerDependencies();
+
+    chrome.storage.local.get = jest.fn().mockResolvedValue({
+      preloadedDuplicateCheck: {
+        url: 'https://x.com/test/status/123',
+        result: newQuoteResult,
+        timestamp: Date.now(),
+      },
+      preloadedOriginator: {
+        handle: 'test',
+        originator: null,
+        create_url: 'https://quotewise.io/originators/new?handle=test',
+        url: 'https://x.com/test/status/123',
+        timestamp: Date.now(),
+      },
+    });
+    chrome.tabs.get = jest.fn().mockResolvedValue({
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    await import('../../src/background/service-worker');
+
+    const onUpdatedListener = (chrome.tabs.onUpdated.addListener as jest.Mock).mock.calls[0][0];
+    await onUpdatedListener(22, { status: 'complete' }, {
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    for (let index = 0; index < 6; index++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    const paints = (chrome.action.setBadgeText as jest.Mock).mock.calls.map(call => call[0]);
+    expect(paints).not.toContainEqual({ tabId: 22, text: '★' });
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+  });
+
+  it('keeps @ through a hydration re-extraction instead of flashing ★ each round', async () => {
+    // Twitter fires POST_DATA_EXTRACTED repeatedly as the page hydrates. A
+    // re-extraction of the SAME url contradicts nothing about the originator,
+    // so the settled @ must not regress to ★ while the next round re-verifies.
+    const preflightResponders: Array<(response: Record<string, unknown>) => void> = [];
+    const handleMessage = jest.fn((message, _sender, sendResponse) => {
+      if (message.type === 'PREFLIGHT_CHECK') {
+        preflightResponders.push(sendResponse);
+      }
+      return Promise.resolve();
+    });
+    mockServiceWorkerDependencies({ handleMessage });
+
+    chrome.tabs.get = jest.fn().mockResolvedValue({
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const runtimeListener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+    const sender = { tab: { id: 22, url: 'https://x.com/test/status/123' } };
+    const notFoundPreflight = {
+      success: true,
+      originator: {
+        found: false,
+        handle: 'test',
+        platform: 'twitter',
+        create_url: 'https://quotewise.io/originators/new?handle=test',
+      },
+      duplicate_check: newQuoteResult,
+    };
+
+    const flushMacrotasks = async (count = 6): Promise<void> => {
+      for (let index = 0; index < count; index++) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    };
+
+    // Round 1: extraction → preflight answers "no originator" → settles @.
+    runtimeListener({ type: MessageType.POST_DATA_EXTRACTED, data: tweetData }, sender, jest.fn());
+    await flushMacrotasks();
+    preflightResponders[0]!(notFoundPreflight);
+    await flushMacrotasks();
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+
+    // Round 2: hydration re-fires extraction for the same post.
+    const paintsBeforeRoundTwo = (chrome.action.setBadgeText as jest.Mock).mock.calls.length;
+    runtimeListener({ type: MessageType.POST_DATA_EXTRACTED, data: tweetData }, sender, jest.fn());
+    await flushMacrotasks();
+
+    const roundTwoPaints = (chrome.action.setBadgeText as jest.Mock).mock.calls
+      .slice(paintsBeforeRoundTwo)
+      .map(call => call[0]);
+    expect(roundTwoPaints).not.toContainEqual({ tabId: 22, text: '★' });
+
+    // And after round 2's preflight answers the same way, still @.
+    preflightResponders[1]?.(notFoundPreflight);
+    await flushMacrotasks();
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+  });
+
   it('dedupes same-tweet extracted data messages before automatic preflight starts', async () => {
     let completePreflight!: (response: Record<string, unknown>) => void;
     const handleMessage = jest.fn((message, _sender, sendResponse) => {
@@ -1702,6 +1808,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         handle: 'test',
         originator: null,
         create_url: 'https://quotewise.io/originators/new?handle=test',
+        url: 'https://x.com/test/status/123',
         timestamp: expect.any(Number),
       },
     });
@@ -1814,6 +1921,163 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
 
     expect(sendResponse).toHaveBeenCalledWith({ success: true });
     expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+    expect(chrome.action.setBadgeBackgroundColor).toHaveBeenLastCalledWith({
+      tabId: 22,
+      color: '#E69F00',
+    });
+  });
+
+  it('keeps the missing-originator badge when an unscoped duplicate check answers new_quote', async () => {
+    mockServiceWorkerDependencies({
+      handleMessage: jest.fn(async (_message, _sender, sendResponse) => {
+        sendResponse({
+          success: true,
+          result: newQuoteResult,
+          ...newQuoteResult,
+        });
+      }),
+    });
+
+    chrome.tabs.get = jest.fn().mockResolvedValue({
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const runtimeListener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+
+    // At rest: the tray's originator lookup reported not-found → @ badge.
+    runtimeListener(
+      {
+        type: MessageType.ORIGINATOR_LOOKUP_STATUS,
+        data: {
+          handle: 'test',
+          platform: 'twitter',
+          source_url: 'https://x.com/test/status/123',
+          found: false,
+          create_url: 'https://quotewise.io/originators/new?handle=test',
+        },
+      },
+      { tab: { id: 22, url: 'https://x.com/test/status/123' } },
+      jest.fn(),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+
+    // Tray open: the ADR-0009 no-originator check (no originator_slug) proves
+    // nothing about the originator, so its new_quote answer must not flip the
+    // badge from @ to ★.
+    const sendResponse = jest.fn();
+    runtimeListener(
+      {
+        type: MessageType.CHECK_DUPLICATE,
+        data: {
+          text: 'Test quote',
+          source_url: 'https://x.com/test/status/123',
+          social_handle: 'test',
+        },
+      },
+      { tab: { id: 22, url: 'https://x.com/test/status/123' } },
+      sendResponse,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+  });
+
+  it('badges an unscoped exact match amber =, not green, while the originator is missing', async () => {
+    // Tray open on a missing-originator post whose exact text IS in Quotewise
+    // under someone else: the tray says "Already in Quotewise — X"; the icon
+    // must not switch from @ to a green = that claims the capture is yours.
+    const unscopedExactResult: DuplicateCheckResult = {
+      recommendation: 'duplicate',
+      confidence: 1,
+      in_quotewise: true,
+      matches: [{
+        quote_id: 'q9',
+        version_id: 1,
+        text: 'Test quote',
+        similarity: 1,
+        match_type: 'exact',
+        match_class: 'exact',
+        different_originator: false,
+        in_user_collections: false,
+        member_collections: [],
+        originator: { id: '9', full_name: 'Someone Else', sort_name: null, birth_year: null, death_year: null },
+        workflow_status: 'published',
+        likes_count: 0,
+      }],
+      reasoning: '',
+      search_metadata: { lexical_search_skipped_unscoped: true },
+    };
+    mockServiceWorkerDependencies({
+      handleMessage: jest.fn(async (_message, _sender, sendResponse) => {
+        sendResponse({
+          success: true,
+          result: unscopedExactResult,
+          ...unscopedExactResult,
+        });
+      }),
+    });
+
+    chrome.tabs.get = jest.fn().mockResolvedValue({
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const runtimeListener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+    runtimeListener(
+      {
+        type: MessageType.ORIGINATOR_LOOKUP_STATUS,
+        data: {
+          handle: 'test',
+          platform: 'twitter',
+          source_url: 'https://x.com/test/status/123',
+          found: false,
+          create_url: 'https://quotewise.io/originators/new?handle=test',
+        },
+      },
+      { tab: { id: 22, url: 'https://x.com/test/status/123' } },
+      jest.fn(),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+
+    runtimeListener(
+      {
+        type: MessageType.CHECK_DUPLICATE,
+        data: {
+          text: 'Test quote',
+          source_url: 'https://x.com/test/status/123',
+          social_handle: 'test',
+        },
+      },
+      { tab: { id: 22, url: 'https://x.com/test/status/123' } },
+      jest.fn(),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '=' });
     expect(chrome.action.setBadgeBackgroundColor).toHaveBeenLastCalledWith({
       tabId: 22,
       color: '#E69F00',
@@ -2164,6 +2428,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         handle: 'test',
         originator: null,
         create_url: 'https://quotewise.io/originators/new?handle=test',
+        url: 'https://x.com/test/status/123',
         timestamp: expect.any(Number),
       },
     });
@@ -2217,6 +2482,7 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
         handle: 'test',
         originator: null,
         create_url: 'http://quotewise.test:8000/originators/add/?suggested_handle=test&platform=twitter',
+        url: 'https://x.com/test/status/123',
         timestamp: expect.any(Number),
       },
     });

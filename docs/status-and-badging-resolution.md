@@ -112,7 +112,7 @@ flowchart TD
 
     PC2 -->|no| QS2{"quoteStatus not None/New?"}
     HASDUP -->|no| QS2
-    QS2 -->|yes| MAP["InCollection ✓<br/>Exact = · Similar ~"]
+    QS2 -->|yes| MAP["InCollection ✓<br/>Exact = · Similar ~<br/>(ExactElsewhere = amber ·<br/>SimilarElsewhere ~ if<br/>originator missing)"]
     QS2 -->|no| SEC{"secondaryConflicts non-empty<br/>OR classifyMatchResolution<br/>=== 'similar'?"}
     SEC -->|yes| SECR["SimilarElsewhere ~ amber<br/>(Similar ~ if the originator<br/>is known)"]
     SEC -->|no| MO{"originator missing?"}
@@ -139,6 +139,14 @@ Glyph says what kind of match; colour says whose it is:
 |---|---|---|
 | exact text | `=` **green** — `Exact` | `=` **amber** — `ExactAlsoElsewhere`, blocks Submit |
 | similar text | `~` amber — `Similar` | `~` amber — `SimilarElsewhere`, advisory |
+
+The "same originator" column only applies when an originator is resolved at
+all. When `tab.isOriginatorMissing` is true there is no "yours" to claim, so an
+unscoped match is cross-originator by definition — `Exact` becomes
+`ExactElsewhere` (`=` amber) and `Similar` becomes `SimilarElsewhere` (`~`
+amber), mirroring the cross-originator column above. `InCollection` and
+`Conflict` are unaffected: collection membership doesn't depend on this post's
+originator, and `Conflict` is already the strongest signal.
 
 Two deliberate choices there:
 
@@ -226,7 +234,7 @@ flowchart TD
     CV -->|yes| CVR["⚠ Couldn't verify + Retry<br/>Submit: disabled"]
 
     CV -->|no| EX{exact?}
-    EX -->|yes| EXR["✓ Already captured this passage<br/>Submit: View Quote"]
+    EX -->|yes| EXR["✓ Already captured this passage/quote<br/>Submit: View Quote"]
 
     EX -->|no| CO{conflict?}
     CO -->|yes| COR["⚠ Already attributed to X<br/>+ Resolve link<br/>Submit: disabled"]
@@ -237,7 +245,7 @@ flowchart TD
     BLK -->|no| SIMR["word diff + Add sighting /<br/>Add as variant<br/>Submit: 'Choose Action'"]
 
     SIM -->|no| URL{"existing_sightings_for_url<br/>non-empty?"}
-    URL -->|yes| URLR["ℹ️ post already has a captured quote<br/>Submit: 'Capture another passage'"]
+    URL -->|yes| URLR["ℹ️ post already has a captured quote<br/>Submit: 'Capture another passage'<br/>disabled + caption hint until a fresh<br/>selection when the target is the whole post"]
     URL -->|no| LEG["renderLegacyStatus()"]
 
     CVR & EXR & COR & BLKR & SIMR & URLR & LEG --> PANEL["+ passages panel<br/>if passageCountForUrl != 0"]
@@ -267,7 +275,7 @@ Reached when resolution is `none` and the URL has no recorded passages. Uses
 
 | sighting state / recommendation | badge | Submit |
 |---|---|---|
-| `exact_sighting` | ✓ Already captured this passage | View Quote |
+| `exact_sighting` | ✓ Already captured this passage/quote | View Quote |
 | `same_platform_sighting` | 🟢 Earlier Sighting saved | View Sighting |
 | `other_platform_sighting` | 🔵 Add sighting | Add Sighting |
 | `recommendation: duplicate` | ⚠ Duplicate | View Quote |
@@ -396,6 +404,7 @@ flowchart TD
 | `~` | Similar / SimilarElsewhere | `#E69F00` |
 | `=` | Exact / HasCaptures | `#009E73` |
 | `=` | ExactAlsoElsewhere | `#E69F00` |
+| `=` | ExactElsewhere | `#E69F00` |
 | `2`…`9+` | Count (passages on this post) | `#009E73` |
 | `✓` | InCollection | `#009E73` |
 | `⚠` | Conflict | `#D55E00` |

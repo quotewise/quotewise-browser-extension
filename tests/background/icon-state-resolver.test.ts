@@ -215,6 +215,39 @@ describe('resolveIconPresentation', () => {
       });
     });
 
+    it('reports an unscoped exact match as exact-elsewhere while the originator is missing', () => {
+      // The unscoped check answers `duplicate` for byte-identical text, but with
+      // no originator resolved the match is by definition somebody else's quote.
+      // Green `=` (Exact) would claim "you captured this" — amber `=` carries
+      // the same glyph with the not-yours colour, mirroring SimilarElsewhere.
+      const unscopedExact = duplicate('duplicate', {
+        matches: [duplicateMatch({
+          primary: true,
+          match_class: 'exact',
+          match_type: 'exact',
+          different_originator: false,
+          originator: {
+            id: '9',
+            full_name: 'Someone Else',
+            sort_name: null,
+            birth_year: null,
+            death_year: null,
+          },
+        })],
+        search_metadata: { lexical_search_skipped_unscoped: true },
+      });
+
+      const presentation = resolveIconPresentation(
+        AuthState.AUTHENTICATED,
+        unscopedExact,
+        { ...tweetTab, isOriginatorMissing: true },
+      );
+
+      expect(presentation.badgeText).toBe('=');
+      expect(presentation.badgeColor).toBe('#E69F00');
+      expect(presentation.badgeColor).not.toBe('#009E73');
+    });
+
     it('still reports a missing originator when nothing matched', () => {
       expect(resolveIconPresentation(
         AuthState.AUTHENTICATED,
@@ -363,13 +396,16 @@ describe('resolveIconPresentation', () => {
       title: 'Originator not in Quotewise — add them first',
     });
 
+    // An exact answer still outranks the plain @ — but with no originator
+    // resolved it is somebody else's quote, so the = carries the not-yours
+    // amber (ExactElsewhere), never the green that claims "you captured this".
     expect(resolveIconPresentation(
       AuthState.AUTHENTICATED,
       duplicate('duplicate'),
       { ...tweetTab, isOriginatorMissing: true },
     )).toMatchObject({
       badgeText: '=',
-      badgeColor: '#009E73',
+      badgeColor: '#E69F00',
     });
   });
 

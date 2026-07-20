@@ -80,7 +80,7 @@ describe('OriginatorLookup', () => {
     expect(container.innerHTML).toContain('badge warning');
     expect(container.innerHTML).toContain('>@</span>');
     expect(container.innerHTML).toContain('No originator found for @nobody');
-    expect(container.innerHTML).toContain('Create on Quotewise');
+    expect(container.innerHTML).toContain('Create Originator on Quotewise');
     expect(container.innerHTML).toContain('href="https://quotewise.io/create?handle=nobody"');
   });
 
@@ -94,7 +94,7 @@ describe('OriginatorLookup', () => {
     await lookup.lookup('eviluser', 'https://x.com/eviluser/status/1');
 
     expect(container.innerHTML).not.toContain('javascript:');
-    expect(container.innerHTML).toContain('Create on Quotewise');
+    expect(container.innerHTML).toContain('Create Originator on Quotewise');
   });
 
   it('renders a fallback create link when API not-found omits create_url', async () => {
@@ -109,7 +109,7 @@ describe('OriginatorLookup', () => {
     expect(outcome.createUrl).toBe(
       'http://quotewise.test:8000/originators/add/?suggested_handle=EricJorgenson&platform=twitter'
     );
-    expect(container.innerHTML).toContain('Create on Quotewise');
+    expect(container.innerHTML).toContain('Create Originator on Quotewise');
     expect(container.innerHTML).toContain(
       'href="http://quotewise.test:8000/originators/add/?suggested_handle=EricJorgenson&amp;platform=twitter"'
     );
@@ -412,7 +412,7 @@ describe('OriginatorLookup', () => {
     expect(outcome.createUrl).toBe(
       'http://quotewise.test:8000/originators/add/?suggested_handle=EricJorgenson&platform=twitter'
     );
-    expect(container.innerHTML).toContain('Create on Quotewise');
+    expect(container.innerHTML).toContain('Create Originator on Quotewise');
   });
 
   it('notifies the toolbar when a preloaded not-found result is used for the current tweet', async () => {
