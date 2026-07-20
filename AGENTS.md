@@ -1,18 +1,20 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- Source lives in `src` with feature folders: `api/`, `auth/` (OAuth 2.0 Authorization Code + PKCE), `background/` (service worker), `content/` (entry + adapter orchestrator + Shadow-DOM overlay UI), `platforms/` (platform adapters like Twitter), `config/`, `settings/`, `types/`, and `utils/`.
+- Source lives in `src` with feature folders: `api/`, `auth/` (OAuth 2.0 Authorization Code + PKCE), `background/` (service worker), `content/` (entry + adapter orchestrator + Shadow-DOM overlay UI), `platforms/` (adapter registry + one adapter per supported platform), `config/`, `settings/`, `types/`, and `utils/`.
 - Tests mirror the source in `tests/` with `*.test.ts` files and shared mocks in `tests/setup.ts`. Built assets land in `dist/`.
-- The shipped Chrome manifest is `manifest.prod.json` (webpack copies it to `dist/manifest.json`); static assets reside in `public/`; `webpack.config.js` drives bundling and aliases. (The root `manifest.json` is unused by webpack.)
+- The shipped Chrome manifest is `manifest.prod.json` (webpack copies it to `dist/manifest.json`); static assets reside in `public/`; `webpack.config.js` drives bundling and aliases.
+- Webpack code splitting stays disabled (`splitChunks: false`): MV3 service workers and content scripts must each bundle to a single file — Chrome cannot load extra chunk files, and enabling splitting crashes the service worker on startup.
 
 ## Build, Test, and Development Commands
+- Always use **Bun** (`bun run …`, `bun install`) — never npm/npx/yarn; the lockfile is `bun.lock`.
 - `bun run dev` — webpack watch build to `dist/`; reload the unpacked extension in `chrome://extensions`.
 - `bun run build` — production bundle (minified, cleaned `dist/`); `dist/manifest.json` is generated from `manifest.prod.json`.
 - `bun run lint` — ESLint for TypeScript sources; run before committing.
 - `bun run type-check` — `tsc --noEmit` for static typing.
 - `bun run test` — Jest + ts-jest in `jsdom`; use `bun run test -- --coverage` to generate `coverage/`.
 - `bun run clean` — remove `dist/`.
-- `bun run bump-version <version|major|minor|patch>` — update `package.json`, `package-lock.json`, `manifest.json`, `manifest.dev.json`, and `manifest.prod.json` together. Do not edit version fields by hand.
+- `bun run bump-version <version|major|minor|patch>` — update `package.json`, `manifest.dev.json`, and `manifest.prod.json` together. Do not edit version fields by hand.
 - `bun run version:check` — verify all project version declarations are in sync.
 
 ## Release Build Verification
@@ -55,9 +57,3 @@
 - Auth uses OAuth 2.0 Authorization Code + PKCE with `Authorization: Bearer <token>` (no session cookies/CSRF); never log or persist tokens or user credentials in code or tests.
 - Platform data flags protected tweets (`is_protected`); backend support pending—note rationale in PRs when touching submission flows.
 - The in-page overlay bar is injected by `src/content/index.ts` and shown on demand via toolbar click (`SHOW_OVERLAY`); popup is disabled in the manifest to favor the page bar.
-
-<!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
-at specs/007-extension-feedback-link/plan.md
-<!-- SPECKIT END -->
