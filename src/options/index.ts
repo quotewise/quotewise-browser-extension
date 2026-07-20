@@ -2,6 +2,7 @@ import { MessageType, type Settings, type ExtensionMessage } from '../types';
 import { AuthState } from '../auth/auth-state-machine';
 import type { Collection } from '../types/api';
 import { getSettings, onSettingsChanged, updateSettings } from '../settings/settings-store';
+import { getWebBaseUrl } from '../config/environment';
 
 type MessageResponse = {
   success?: boolean;
@@ -27,6 +28,7 @@ function sendMessage(type: MessageType, data?: unknown): Promise<MessageResponse
 }
 
 export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
+  const webBaseUrl = getWebBaseUrl().replace(/\/+$/, '');
   root.innerHTML = `
     <style>
       :root { color-scheme: light; }
@@ -99,6 +101,9 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
         min-height: 20px;
         color: #475569;
       }
+      .hint a {
+        color: #1d4ed8;
+      }
       #account-identity, #logout-btn {
         transition: opacity 0.22s ease;
       }
@@ -115,46 +120,12 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
           <button type="button" id="logout-btn">Log out</button>
         </div>
       </section>
-      <section aria-labelledby="support-title">
-        <h2 id="support-title">Support</h2>
-        <div class="row">
-          <span class="label">
-            <span>Send feedback</span>
-            <span class="hint">Opens a Quotewise feedback form. No quote text or account details are attached.</span>
-          </span>
-          <button type="button" id="send-feedback-btn">Send feedback</button>
-        </div>
-      </section>
-      <section aria-labelledby="privacy-title">
-        <h2 id="privacy-title">Privacy</h2>
-        <label class="row">
-          <span class="label">
-            <span>Private mode</span>
-            <span class="hint">Pause automatic quote checks until you choose Check now.</span>
-          </span>
-          <input type="checkbox" id="private-mode-toggle" aria-label="Private mode">
-        </label>
-        <label class="row">
-          <span class="label">
-            <span>Statistics for nerds</span>
-            <span class="hint">Show timing/performance stats on the capture tray</span>
-          </span>
-          <input type="checkbox" id="stats-for-nerds-toggle" aria-label="Statistics for nerds">
-        </label>
-        <div class="row">
-          <span class="label">
-            <span>Clear my data</span>
-            <span class="hint">Clears cached tweet/originator data. Login stays active.</span>
-          </span>
-          <button type="button" class="warning" id="clear-data-btn">Clear my data</button>
-        </div>
-      </section>
       <section aria-labelledby="collections-title">
         <h2 id="collections-title">Collections</h2>
         <label class="row">
           <span class="label">
             <span>Auto-add captures</span>
-            <span class="hint">Attach new captures to the selected collection.</span>
+            <span class="hint">Attach new captures to your default collection.</span>
           </span>
           <input type="checkbox" id="auto-add-toggle" aria-label="Auto-add captures to collection">
         </label>
@@ -165,6 +136,56 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
           </span>
           <select id="default-collection-select" aria-label="Default collection"></select>
         </label>
+      </section>
+      <section aria-labelledby="privacy-title">
+        <h2 id="privacy-title">Privacy</h2>
+        <label class="row">
+          <span class="label">
+            <span>Private mode</span>
+            <span class="hint">Pause automatic quote checks until you choose Check now.</span>
+          </span>
+          <input type="checkbox" id="private-mode-toggle" aria-label="Private mode">
+        </label>
+        <div class="row">
+          <span class="label">
+            <span>Clear my data</span>
+            <span class="hint">Clears cached tweet/originator data. Login stays active.</span>
+          </span>
+          <button type="button" class="warning" id="clear-data-btn">Clear my data</button>
+        </div>
+      </section>
+      <section aria-labelledby="advanced-title">
+        <h2 id="advanced-title">Advanced</h2>
+        <label class="row">
+          <span class="label">
+            <span>Statistics for nerds</span>
+            <span class="hint">Show timing and performance stats on the capture tray.</span>
+          </span>
+          <input type="checkbox" id="stats-for-nerds-toggle" aria-label="Statistics for nerds">
+        </label>
+      </section>
+      <section aria-labelledby="support-title">
+        <h2 id="support-title">Support</h2>
+        <div class="row">
+          <span class="label">
+            <span>Send feedback</span>
+            <span class="hint">Opens a Quotewise feedback form. No quote text or account details are attached.</span>
+          </span>
+          <button type="button" id="send-feedback-btn">Send feedback</button>
+        </div>
+      </section>
+      <section aria-labelledby="about-title">
+        <h2 id="about-title">About</h2>
+        <div class="row">
+          <span class="label">
+            <span id="about-version">Quotewise Quote Capture</span>
+            <span class="hint">
+              <a href="${webBaseUrl}/about/what-to-collect/" target="_blank" rel="noopener noreferrer">What to collect</a>
+              ·
+              <a href="${webBaseUrl}/privacy/" target="_blank" rel="noopener noreferrer">Privacy policy</a>
+            </span>
+          </span>
+        </div>
       </section>
       <p class="status" id="status" role="status" aria-live="polite"></p>
     </div>
@@ -181,6 +202,11 @@ export async function initializeOptionsPage(root: HTMLElement): Promise<void> {
   const clearDataButton = root.querySelector('#clear-data-btn') as HTMLButtonElement;
   const feedbackButton = root.querySelector('#send-feedback-btn') as HTMLButtonElement;
   let authState = AuthState.UNKNOWN;
+
+  const version = chrome.runtime.getManifest?.().version;
+  if (version) {
+    (root.querySelector('#about-version') as HTMLElement).textContent = `Quotewise Quote Capture v${version}`;
+  }
 
   function applySettings(settings: Settings): void {
     privateToggle.checked = settings.privateMode;

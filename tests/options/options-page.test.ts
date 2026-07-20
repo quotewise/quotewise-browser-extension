@@ -74,7 +74,7 @@ describe('options page', () => {
     expect(root.textContent).toContain('Signed in as chris');
     expect(root.querySelector('#private-mode-toggle')?.getAttribute('aria-label')).toBe('Private mode');
     expect(root.querySelector('#stats-for-nerds-toggle')?.getAttribute('aria-label')).toBe('Statistics for nerds');
-    expect(root.textContent).toContain('Show timing/performance stats on the capture tray');
+    expect(root.textContent).toContain('Show timing and performance stats on the capture tray.');
     expect((root.querySelector('#logout-btn') as HTMLButtonElement).textContent).toBe('Log out');
 
     (root.querySelector('#logout-btn') as HTMLButtonElement).click();

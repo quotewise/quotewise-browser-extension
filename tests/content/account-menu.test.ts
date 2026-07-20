@@ -44,6 +44,29 @@ describe('AccountMenu', () => {
     jest.useRealTimers();
   });
 
+  it('shows collection controls disabled with a reason while in private mode', async () => {
+    (chrome.storage.sync.get as jest.Mock).mockResolvedValue({
+      settings: {
+        privateMode: true,
+        autoAddToCollection: false,
+        defaultCollectionSlug: null,
+        lastUsedCollectionSlugs: [],
+        firstRunNoticeShown: false,
+      },
+    });
+    const menu = new AccountMenu(container, sendMessage);
+    await menu.mount();
+
+    (container.querySelector('#account-menu-btn') as HTMLButtonElement).click();
+    await flushPromises();
+
+    const autoAdd = container.querySelector('#account-auto-add-toggle') as HTMLInputElement;
+    const select = container.querySelector('#account-default-collection-select') as HTMLSelectElement;
+    expect(autoAdd.disabled).toBe(true);
+    expect(select.disabled).toBe(true);
+    expect(container.textContent).toContain('Paused in private mode.');
+  });
+
   it('opens a keyboard-labelled menu and sends settings/logout messages', async () => {
     const menu = new AccountMenu(container, sendMessage);
     await menu.mount();
@@ -133,7 +156,7 @@ describe('AccountMenu', () => {
     const feedbackButton = container.querySelector('#account-send-feedback') as HTMLButtonElement;
     expect(feedbackButton).not.toBeNull();
     expect(feedbackButton.textContent).toBe('Send feedback');
-    expect(feedbackButton.getAttribute('role')).toBe('menuitem');
+    expect(feedbackButton.getAttribute('role')).toBeNull();
     expect(feedbackButton.disabled).toBe(false);
 
     feedbackButton.focus();
