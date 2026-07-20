@@ -237,7 +237,7 @@ flowchart TD
     BLK -->|no| SIMR["word diff + Add sighting /<br/>Add as variant<br/>Submit: 'Choose Action'"]
 
     SIM -->|no| URL{"existing_sightings_for_url<br/>non-empty?"}
-    URL -->|yes| URLR["ℹ️ post already has a captured quote<br/>Submit: 'Capture another passage'"]
+    URL -->|yes| URLR["ℹ️ post already has a captured quote<br/>Submit: 'Capture another passage'<br/>disabled + caption hint until a fresh<br/>selection when the target is the whole post"]
     URL -->|no| LEG["renderLegacyStatus()"]
 
     CVR & EXR & COR & BLKR & SIMR & URLR & LEG --> PANEL["+ passages panel<br/>if passageCountForUrl != 0"]

@@ -18,6 +18,8 @@ interface DefaultSubmitDirective {
   enabled: boolean;
   text?: string;
   style?: 'success';
+  /** Caption-line explanation of what would make a disabled action available. */
+  hint?: string;
 }
 
 interface WarningSubmitDirective {
@@ -25,6 +27,7 @@ interface WarningSubmitDirective {
   enabled: boolean;
   text: string;
   style: 'warning';
+  hint?: string;
 }
 
 interface ViewQuoteDirective {
@@ -78,10 +81,9 @@ export class DuplicateBadge {
     options: { hasOriginator?: boolean; postText?: string | null } = {},
   ): void {
     const hasOriginator = options.hasOriginator !== false;
-    const noun = capturedText && options.postText &&
-      normalizeQuoteText(capturedText) === normalizeQuoteText(options.postText)
-      ? 'quote' as const
-      : 'passage' as const;
+    const wholePostTarget = !!capturedText && !!options.postText &&
+      normalizeQuoteText(capturedText) === normalizeQuoteText(options.postText);
+    const noun = wholePostTarget ? 'quote' as const : 'passage' as const;
     this.container.innerHTML = '';
     this.container.className = 'duplicate-badge';
     this.container.style.marginLeft = '';
@@ -176,11 +178,21 @@ export class DuplicateBadge {
     if (Array.isArray(result.existing_sightings_for_url) && result.existing_sightings_for_url.length > 0) {
       this.renderBadge('info', 'ℹ️', 'This post already has a captured quote');
       this.container.title = 'This post already has a captured quote; this passage is new';
-      this.callbacks.onSubmitStateChange({
-        type: 'submit',
-        enabled: true,
-        text: 'Capture another passage',
-      });
+      // With no selection the capture target is the entire post — capturing
+      // "another passage" must not default to swallowing the whole thing.
+      // Require a fresh selection before enabling.
+      this.callbacks.onSubmitStateChange(wholePostTarget
+        ? {
+            type: 'submit',
+            enabled: false,
+            text: 'Capture another passage',
+            hint: 'Select a new passage to capture another',
+          }
+        : {
+            type: 'submit',
+            enabled: true,
+            text: 'Capture another passage',
+          });
       this.renderPassagesPanel(result, capturedText);
       return;
     }

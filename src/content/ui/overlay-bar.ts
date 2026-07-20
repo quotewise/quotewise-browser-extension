@@ -105,6 +105,7 @@ export class OverlayBar {
   private selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private captionTimer: ReturnType<typeof setTimeout> | null = null;
   private transientCaption: string | null = null;
+  private directiveHint: string | null = null;
   private duplicateCheckSequence = 0;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private captureState: CaptureState = {
@@ -570,6 +571,9 @@ export class OverlayBar {
     ) {
       return 'Choose at least one collection';
     }
+    if (this.directiveHint) {
+      return this.directiveHint;
+    }
     return describeSelection(this.selectedCollections().map(collection => collection.name));
   }
 
@@ -664,6 +668,11 @@ export class OverlayBar {
    * orchestrator can know about.
    */
   private applySubmitDirective(directive: SubmitStateDirective): void {
+    // The hint belongs to the current directive: set when it carries one,
+    // cleared by any directive that doesn't.
+    this.directiveHint = directive.type === 'submit' ? directive.hint ?? null : null;
+    this.refreshCaption();
+
     if (directive.type === 'view_quote') {
       // With the existing-quote picker active, the button belongs to "Add to
       // Collections" — the badge line already links to the quote, so a View
@@ -1016,6 +1025,7 @@ export class OverlayBar {
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.progressIndicator?.reset();
     this.firstRunNotice?.hide();
+    this.directiveHint = null;
     this.setTransientCaption(null);
     this.hideCollectionPicker();
     this.updateSubmitButton(false);

@@ -1140,6 +1140,40 @@ describe('OverlayBar', () => {
     expect(shadow.getElementById('view-quote-btn')).toBeNull();
   });
 
+  it('requires a fresh selection to capture another passage when the target is the whole post', () => {
+    const overlay = setupReadyOverlay();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+    const result = duplicateResult({
+      recommendation: 'new_quote',
+      in_quotewise: false,
+      matches: [],
+      existing_sightings_for_url: [{
+        id: 1,
+        quote_id: 'other',
+        source_url: tweetData.url,
+        text: 'An earlier excerpt',
+        web_url: 'https://quotewise.io/q/other/',
+      }],
+      existing_sightings_total: 1,
+    });
+
+    // No selection: the capture target is the entire post, so the action is
+    // inhibited with the hint in the caption line.
+    (overlay as any).updateDuplicateInfo({ result });
+    const button = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(button.textContent).toBe('Capture another passage');
+    expect(button.disabled).toBe(true);
+    expect(shadow.getElementById('action-caption')?.textContent)
+      .toBe('Select a new passage to capture another');
+
+    // A fresh selection makes the action available and clears the hint.
+    (overlay as any).captureState.selectedText = 'A new passage';
+    (overlay as any).updateDuplicateInfo({ result });
+    expect(button.textContent).toBe('Capture another passage');
+    expect(button.disabled).toBe(false);
+    expect(shadow.getElementById('action-caption')?.textContent).toBe('');
+  });
+
   it('defaults the existing-quote action to Add to Collections, gated on a selection', async () => {
     (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
       if (message.type === MessageType.LIST_COLLECTIONS) {
