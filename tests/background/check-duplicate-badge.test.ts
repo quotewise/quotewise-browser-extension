@@ -1820,6 +1820,74 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     });
   });
 
+  it('keeps the missing-originator badge when an unscoped duplicate check answers new_quote', async () => {
+    mockServiceWorkerDependencies({
+      handleMessage: jest.fn(async (_message, _sender, sendResponse) => {
+        sendResponse({
+          success: true,
+          result: newQuoteResult,
+          ...newQuoteResult,
+        });
+      }),
+    });
+
+    chrome.tabs.get = jest.fn().mockResolvedValue({
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const runtimeListener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+
+    // At rest: the tray's originator lookup reported not-found → @ badge.
+    runtimeListener(
+      {
+        type: MessageType.ORIGINATOR_LOOKUP_STATUS,
+        data: {
+          handle: 'test',
+          platform: 'twitter',
+          source_url: 'https://x.com/test/status/123',
+          found: false,
+          create_url: 'https://quotewise.io/originators/new?handle=test',
+        },
+      },
+      { tab: { id: 22, url: 'https://x.com/test/status/123' } },
+      jest.fn(),
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+
+    // Tray open: the ADR-0009 no-originator check (no originator_slug) proves
+    // nothing about the originator, so its new_quote answer must not flip the
+    // badge from @ to ★.
+    const sendResponse = jest.fn();
+    runtimeListener(
+      {
+        type: MessageType.CHECK_DUPLICATE,
+        data: {
+          text: 'Test quote',
+          source_url: 'https://x.com/test/status/123',
+          social_handle: 'test',
+        },
+      },
+      { tab: { id: 22, url: 'https://x.com/test/status/123' } },
+      sendResponse,
+    );
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+  });
+
   it('ignores a tray originator status message after navigating away from the source tweet', async () => {
     mockServiceWorkerDependencies();
 

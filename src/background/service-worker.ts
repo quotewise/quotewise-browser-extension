@@ -2065,6 +2065,7 @@ async function updateIconAfterDuplicateCheckResponse(
   response: unknown,
   tabId: number | undefined,
   sourceUrl: string | undefined,
+  originatorScoped: boolean,
 ): Promise<void> {
   if (!tabId) {
     return;
@@ -2099,7 +2100,13 @@ async function updateIconAfterDuplicateCheckResponse(
   // `duplicateResult` directly, so the kept result actually reaches the icon/cache.
   const effectiveDuplicateResult = setTabDuplicateResult(tabId, duplicateResult, sourceUrl);
   clearPostDataExtractionRetry(tabId);
-  tabMissingOriginators.delete(tabId);
+  if (originatorScoped) {
+    // Only an originator-scoped check (originator_slug present) says anything about the
+    // originator. Since ADR-0009 the tray also fires an unscoped CHECK_DUPLICATE (no
+    // originator_slug) for the missing-originator path; its answer proves nothing about
+    // the originator, so it must not clear the tab's missing-originator (@) record.
+    tabMissingOriginators.delete(tabId);
+  }
   await clearInFlightOperation(tabId, {
     url: sourceUrl,
     triggers: ['explicit-duplicate-check'],
@@ -2439,9 +2446,12 @@ async function handleCheckDuplicate(
     }
   }
 
+  const originatorScoped = typeof message.data?.originator_slug === 'string'
+    && message.data.originator_slug.length > 0;
+
   try {
     await apiHandler!.handleMessage(message, sender, (response) => {
-      updateIconAfterDuplicateCheckResponse(response, tabId, sourceUrl)
+      updateIconAfterDuplicateCheckResponse(response, tabId, sourceUrl, originatorScoped)
         .catch(error => {
           debugLog('Error applying duplicate-check result icon:', error);
         })
