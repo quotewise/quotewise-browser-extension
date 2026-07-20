@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.7.7] - 2026-07-20
+
+First release published to the extension stores (Chrome Web Store, Firefox
+Add-ons); AMO previously carried 1.6.4.
+
 ### Added
 - Firefox support: the WebExtension is built from the same source as Chrome
   (`bun run build:firefox`), with a browser-correct OAuth redirect (ADR-0008).
@@ -34,5 +39,6 @@ All notable changes to this project are documented here. The format is based on
 This is the first release tracked in this changelog; earlier history is in the
 git log.
 
-[Unreleased]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.6.4...HEAD
+[Unreleased]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.7.7...HEAD
+[1.7.7]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.6.4...v1.7.7
 [1.6.4]: https://github.com/quotewise/quotewise-chrome-extension/releases/tag/v1.6.4
