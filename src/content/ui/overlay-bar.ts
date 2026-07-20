@@ -105,7 +105,6 @@ export class OverlayBar {
   private selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private captionTimer: ReturnType<typeof setTimeout> | null = null;
   private transientCaption: string | null = null;
-  private lastSubmitDirective: SubmitStateDirective | null = null;
   private duplicateCheckSequence = 0;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private captureState: CaptureState = {
@@ -549,13 +548,19 @@ export class OverlayBar {
   }
 
   /**
-   * What the caption shows when nothing transient is in flight: the collection
-   * summary, or nothing. No instructions here — with zero collections selected
-   * the button reads View Quote, and an imperative about collections floating
-   * under it reads as a precondition for the wrong action. The picker's own
-   * header is the instruction.
+   * What the caption shows when nothing transient is in flight. On the
+   * existing-quote path the button reads "Add to Collections", so the
+   * choose-one instruction under it names that button's precondition.
    */
   private defaultCaption(): string {
+    if (
+      this.existingQuoteTarget &&
+      this.collectionPicker &&
+      this.selectedCollections().length === 0 &&
+      this.collectionPicker.getAvailableCollections().length > 0
+    ) {
+      return 'Choose at least one collection';
+    }
     return describeSelection(this.selectedCollections().map(collection => collection.name));
   }
 
@@ -651,6 +656,10 @@ export class OverlayBar {
    */
   private applySubmitDirective(directive: SubmitStateDirective): void {
     if (directive.type === 'view_quote') {
+      // With the existing-quote picker active, the button belongs to "Add to
+      // Collections" — the badge line already links to the quote, so a View
+      // Quote button would be the same action twice.
+      if (this.existingQuoteTarget) return;
       // Still useful without an originator — the quote exists, go read it.
       this.updateViewQuoteButton(directive.url, directive.text);
       return;
@@ -673,19 +682,12 @@ export class OverlayBar {
   }
 
   /**
-   * Button state for the existing-quote path. The badge's directive (usually
-   * View Quote) owns the button while nothing is selected; checking a
-   * collection converts it into "Add to Collections", and unchecking the last
-   * one converts it back. One slot, two actions, selection decides.
+   * Button state for the existing-quote path: always "Add to Collections",
+   * enabled once something is selected. Viewing the quote is the badge line's
+   * job; the button offers the one action the badge can't.
    */
   private updateExistingQuoteButton(selectedCount: number): void {
-    if (selectedCount > 0) {
-      this.updateSubmitButton(true, 'Add to Collections');
-      return;
-    }
-    if (this.lastSubmitDirective) {
-      this.applySubmitDirective(this.lastSubmitDirective);
-    }
+    this.updateSubmitButton(selectedCount > 0, 'Add to Collections');
   }
 
   private matchForExistingCollectionAdd(
@@ -1005,7 +1007,6 @@ export class OverlayBar {
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.progressIndicator?.reset();
     this.firstRunNotice?.hide();
-    this.lastSubmitDirective = null;
     this.setTransientCaption(null);
     this.hideCollectionPicker();
     this.updateSubmitButton(false);
@@ -1709,10 +1710,6 @@ export class OverlayBar {
     if (!this.duplicateBadge) {
       this.duplicateBadge = new DuplicateBadge(this.duplicateBadgeContainer, {
         onSubmitStateChange: (directive: SubmitStateDirective) => {
-          // Remembered so the existing-quote picker can restore it when the
-          // selection drops back to zero (checking a collection converts the
-          // button to "Add to Collections"; unchecking converts it back).
-          this.lastSubmitDirective = directive;
           this.applySubmitDirective(directive);
         },
         onResolveDecision: (decision) => {
@@ -1752,12 +1749,6 @@ export class OverlayBar {
     // and will happily enable Submit when the primary is a benign same-originator
     // hit, even though an exact cross-originator match sits behind it.
     if (blockingExactConflict(result)) {
-      this.lastSubmitDirective = {
-        type: 'submit',
-        enabled: false,
-        text: 'Resolve Attribution',
-        style: 'warning',
-      };
       this.updateSubmitButtonWarning(false, 'Resolve Attribution');
     }
 

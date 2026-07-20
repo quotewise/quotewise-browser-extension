@@ -1134,11 +1134,13 @@ describe('OverlayBar', () => {
     (overlay as any).updateDuplicateInfo({ result });
 
     expect(shadow.textContent).toContain('Already captured this passage');
-    expect(shadow.getElementById('submit-btn')).toBeNull();
-    expect(shadow.getElementById('view-quote-btn')).toBeTruthy();
+    const addButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(addButton.textContent).toBe('Add to Collections');
+    expect(addButton.disabled).toBe(true);
+    expect(shadow.getElementById('view-quote-btn')).toBeNull();
   });
 
-  it('converts the button between View Quote and Add to Collections as the selection toggles', async () => {
+  it('defaults the existing-quote action to Add to Collections, gated on a selection', async () => {
     (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
       if (message.type === MessageType.LIST_COLLECTIONS) {
         callback({
@@ -1160,25 +1162,27 @@ describe('OverlayBar', () => {
     await flushPromises();
     await flushPromises();
 
-    // Zero selected: the badge's View Quote directive owns the button, and no
-    // instruction caption floats under it.
-    expect(shadow.getElementById('view-quote-btn')).toBeTruthy();
-    expect(shadow.getElementById('submit-btn')).toBeNull();
-    expect(shadow.getElementById('action-caption')?.textContent).toBe('');
+    // Zero selected: the button is the add action, disabled, with the
+    // choose-one instruction under it. Viewing the quote is the badge link's
+    // job — no separate View Quote button.
+    expect(shadow.getElementById('view-quote-btn')).toBeNull();
+    const addButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(addButton.textContent).toBe('Add to Collections');
+    expect(addButton.disabled).toBe(true);
+    expect(shadow.getElementById('action-caption')?.textContent).toBe('Choose at least one collection');
+    expect(shadow.querySelector('.duplicate-badge a')).toBeTruthy();
 
     const checkbox = shadow.querySelector('.collection-picker-option input') as HTMLInputElement;
     expect(checkbox).toBeTruthy();
     checkbox.click();
 
-    const addButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
     expect(addButton.textContent).toBe('Add to Collections');
     expect(addButton.disabled).toBe(false);
     expect(shadow.getElementById('action-caption')?.textContent).toBe('Adding to: Favorites');
 
     checkbox.click();
-    expect(shadow.getElementById('submit-btn')).toBeNull();
-    expect(shadow.getElementById('view-quote-btn')).toBeTruthy();
-    expect(shadow.getElementById('action-caption')?.textContent).toBe('');
+    expect(addButton.disabled).toBe(true);
+    expect(shadow.getElementById('action-caption')?.textContent).toBe('Choose at least one collection');
   });
 
   it('reclassifies from cached URL data immediately while the selection lookup stays non-blocking', () => {
