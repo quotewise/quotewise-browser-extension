@@ -105,6 +105,7 @@ export class OverlayBar {
   private selectionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private captionTimer: ReturnType<typeof setTimeout> | null = null;
   private transientCaption: string | null = null;
+  private lastSubmitDirective: SubmitStateDirective | null = null;
   private duplicateCheckSequence = 0;
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private captureState: CaptureState = {
@@ -547,16 +548,14 @@ export class OverlayBar {
     el.title = title;
   }
 
-  /** What the caption shows when nothing transient is in flight. */
+  /**
+   * What the caption shows when nothing transient is in flight: the collection
+   * summary, or nothing. No instructions here — with zero collections selected
+   * the button reads View Quote, and an imperative about collections floating
+   * under it reads as a precondition for the wrong action. The picker's own
+   * header is the instruction.
+   */
   private defaultCaption(): string {
-    if (
-      this.existingQuoteTarget &&
-      this.collectionPicker &&
-      this.selectedCollections().length === 0 &&
-      this.collectionPicker.getAvailableCollections().length > 0
-    ) {
-      return 'Choose at least one collection';
-    }
     return describeSelection(this.selectedCollections().map(collection => collection.name));
   }
 
@@ -635,32 +634,58 @@ export class OverlayBar {
       label: 'Add existing quote to collections',
       alreadyIn: match.member_collections || [],
       loadCollections: (forceRefresh = false) => this.loadCollections(forceRefresh),
-      onSelectionChange: (selected, available) => {
-        this.updateExistingQuoteButton(selected.size, available.length);
+      onSelectionChange: (selected) => {
+        this.updateExistingQuoteButton(selected.size);
         this.refreshCaption();
       },
     });
 
     await this.collectionPicker.mount();
-    this.updateExistingQuoteButton(
-      this.selectedCollections().length,
-      this.collectionPicker.getAvailableCollections().length,
-    );
+    this.updateExistingQuoteButton(this.selectedCollections().length);
     this.refreshCaption();
   }
 
   /**
-   * Button state for the existing-quote path. With nothing selected, a View
-   * Quote directive from the badge owns the button — picking a collection is
-   * what converts it into the add action, per the doc's exact_sighting row.
+   * Routes a badge directive to the action button, applying the vetoes only the
+   * orchestrator can know about.
    */
-  private updateExistingQuoteButton(selectedCount: number, availableCount: number): void {
+  private applySubmitDirective(directive: SubmitStateDirective): void {
+    if (directive.type === 'view_quote') {
+      // Still useful without an originator — the quote exists, go read it.
+      this.updateViewQuoteButton(directive.url, directive.text);
+      return;
+    }
+
+    // The badge reasons about the quote, not the attribution, so on the
+    // no-originator path it will happily ask for an enabled Submit. Acting
+    // on that hits submitQuote's `!originator` guard, which returns in
+    // silence. Say why instead.
+    if (directive.enabled && !this.captureState.originator) {
+      this.updateSubmitButton(false, 'Add originator first');
+      return;
+    }
+
+    if (directive.style === 'warning') {
+      this.updateSubmitButtonWarning(directive.enabled, directive.text);
+    } else {
+      this.updateSubmitButton(directive.enabled, directive.text);
+    }
+  }
+
+  /**
+   * Button state for the existing-quote path. The badge's directive (usually
+   * View Quote) owns the button while nothing is selected; checking a
+   * collection converts it into "Add to Collections", and unchecking the last
+   * one converts it back. One slot, two actions, selection decides.
+   */
+  private updateExistingQuoteButton(selectedCount: number): void {
     if (selectedCount > 0) {
       this.updateSubmitButton(true, 'Add to Collections');
       return;
     }
-    if (this.actionButton?.getMode() === 'view_quote') return;
-    this.updateSubmitButton(false, availableCount > 0 ? 'Add to Collections' : 'No collections');
+    if (this.lastSubmitDirective) {
+      this.applySubmitDirective(this.lastSubmitDirective);
+    }
   }
 
   private matchForExistingCollectionAdd(
@@ -980,6 +1005,7 @@ export class OverlayBar {
     this.setOriginatorHtml('<span class="status-text">Looking up originator...</span>');
     this.progressIndicator?.reset();
     this.firstRunNotice?.hide();
+    this.lastSubmitDirective = null;
     this.setTransientCaption(null);
     this.hideCollectionPicker();
     this.updateSubmitButton(false);
@@ -1385,7 +1411,9 @@ export class OverlayBar {
     if (this.captureState.isSubmitting || !this.existingQuoteTarget) return;
     const selectedCollections = this.selectedCollections();
     if (selectedCollections.length === 0) {
-      this.updateSubmitButton(false, 'Choose collection');
+      // Shouldn't be reachable — the button only reads "Add to Collections"
+      // while something is selected — but restore the coherent state if it is.
+      this.updateExistingQuoteButton(0);
       return;
     }
 
@@ -1681,26 +1709,11 @@ export class OverlayBar {
     if (!this.duplicateBadge) {
       this.duplicateBadge = new DuplicateBadge(this.duplicateBadgeContainer, {
         onSubmitStateChange: (directive: SubmitStateDirective) => {
-          if (directive.type === 'view_quote') {
-            // Still useful without an originator — the quote exists, go read it.
-            this.updateViewQuoteButton(directive.url, directive.text);
-            return;
-          }
-
-          // The badge reasons about the quote, not the attribution, so on the
-          // no-originator path it will happily ask for an enabled Submit. Acting
-          // on that hits submitQuote's `!originator` guard, which returns in
-          // silence. Say why instead.
-          if (directive.enabled && !this.captureState.originator) {
-            this.updateSubmitButton(false, 'Add originator first');
-            return;
-          }
-
-          if (directive.style === 'warning') {
-            this.updateSubmitButtonWarning(directive.enabled, directive.text);
-          } else {
-            this.updateSubmitButton(directive.enabled, directive.text);
-          }
+          // Remembered so the existing-quote picker can restore it when the
+          // selection drops back to zero (checking a collection converts the
+          // button to "Add to Collections"; unchecking converts it back).
+          this.lastSubmitDirective = directive;
+          this.applySubmitDirective(directive);
         },
         onResolveDecision: (decision) => {
           void this.submitQuote({
@@ -1739,6 +1752,12 @@ export class OverlayBar {
     // and will happily enable Submit when the primary is a benign same-originator
     // hit, even though an exact cross-originator match sits behind it.
     if (blockingExactConflict(result)) {
+      this.lastSubmitDirective = {
+        type: 'submit',
+        enabled: false,
+        text: 'Resolve Attribution',
+        style: 'warning',
+      };
       this.updateSubmitButtonWarning(false, 'Resolve Attribution');
     }
 

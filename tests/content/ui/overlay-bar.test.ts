@@ -1138,6 +1138,49 @@ describe('OverlayBar', () => {
     expect(shadow.getElementById('view-quote-btn')).toBeTruthy();
   });
 
+  it('converts the button between View Quote and Add to Collections as the selection toggles', async () => {
+    (chrome.runtime.sendMessage as jest.Mock).mockImplementation((message, callback) => {
+      if (message.type === MessageType.LIST_COLLECTIONS) {
+        callback({
+          success: true,
+          collections: [{
+            id: 'c1', slug: 'favorites', name: 'Favorites', description: '',
+            is_default: false, quote_count: 0, created_at: '', updated_at: '',
+          }],
+        });
+        return;
+      }
+      callback({ success: true });
+    });
+    const overlay = setupReadyOverlay();
+    const shadow = (overlay as any).shadow as ShadowRoot;
+
+    (overlay as any).captureState.selectedText = 'An existing passage';
+    (overlay as any).updateDuplicateInfo({ result: knownUrlResult() });
+    await flushPromises();
+    await flushPromises();
+
+    // Zero selected: the badge's View Quote directive owns the button, and no
+    // instruction caption floats under it.
+    expect(shadow.getElementById('view-quote-btn')).toBeTruthy();
+    expect(shadow.getElementById('submit-btn')).toBeNull();
+    expect(shadow.getElementById('action-caption')?.textContent).toBe('');
+
+    const checkbox = shadow.querySelector('.collection-picker-option input') as HTMLInputElement;
+    expect(checkbox).toBeTruthy();
+    checkbox.click();
+
+    const addButton = shadow.getElementById('submit-btn') as HTMLButtonElement;
+    expect(addButton.textContent).toBe('Add to Collections');
+    expect(addButton.disabled).toBe(false);
+    expect(shadow.getElementById('action-caption')?.textContent).toBe('Adding to: Favorites');
+
+    checkbox.click();
+    expect(shadow.getElementById('submit-btn')).toBeNull();
+    expect(shadow.getElementById('view-quote-btn')).toBeTruthy();
+    expect(shadow.getElementById('action-caption')?.textContent).toBe('');
+  });
+
   it('reclassifies from cached URL data immediately while the selection lookup stays non-blocking', () => {
     const overlay = setupReadyOverlay();
     const result = knownUrlResult();
