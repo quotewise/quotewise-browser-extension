@@ -76,10 +76,10 @@ describe('DuplicateBadge', () => {
     expect(directives).toHaveLength(0);
   });
 
-  it('shows spinner when checking', () => {
+  it('renders nothing while checking (status lives in the action caption)', () => {
     badge.update({ checking: true });
-    expect(container.querySelector('.spinner')).toBeTruthy();
-    expect(container.title).toBe('Checking Quotewise for duplicates…');
+    expect(container.innerHTML).toBe('');
+    expect(directives).toHaveLength(0);
   });
 
   it('shows "Already captured" link for exact_url with url', () => {
@@ -353,8 +353,10 @@ describe('DuplicateBadge', () => {
   });
 
   it('clears previous content on update', () => {
-    badge.update({ checking: true });
-    expect(container.querySelector('.spinner')).toBeTruthy();
+    badge.update({
+      result: makeResult({ recommendation: 'duplicate', matches: [makeMatch({})] }),
+    });
+    expect(container.innerHTML).not.toBe('');
     badge.update(null);
     expect(container.innerHTML).toBe('');
   });
@@ -647,32 +649,57 @@ describe('DuplicateBadge', () => {
   });
 });
 
-describe('DuplicateBadge refining spinner + tooltips', () => {
-  it('labels the bare checking spinner with a tooltip', () => {
+describe('DuplicateBadge slot rendering', () => {
+  it('renders passages into the dedicated slot and clears it on update', () => {
     const container = document.createElement('div');
-    const badge = new DuplicateBadge(container, {} as ConstructorParameters<typeof DuplicateBadge>[1]);
-    badge.update({ checking: true });
-    const spinner = container.querySelector('.spinner') as HTMLElement;
-    expect(spinner).toBeTruthy();
-    expect(spinner.title).toBe('Checking Quotewise for duplicates…');
-    expect(spinner.getAttribute('role')).toBe('status');
+    const passages = document.createElement('div');
+    passages.hidden = true;
+    const badge = new DuplicateBadge(
+      container,
+      { onSubmitStateChange: () => {} },
+      { passages },
+    );
+
+    badge.update({
+      result: makeResult({
+        existing_sightings_total: 1,
+        existing_sightings_for_url: [makeUrlSighting('a passage')],
+      }),
+    }, 'A new passage');
+
+    expect(passages.hidden).toBe(false);
+    expect(passages.querySelector('.passages-panel')).toBeTruthy();
+    expect(container.querySelector('.passages-panel')).toBeNull();
+    expect(container.classList.contains('has-passages')).toBe(false);
+
+    badge.update(null);
+    expect(passages.hidden).toBe(true);
+    expect(passages.innerHTML).toBe('');
   });
 
-  it('setRefining appends a tooltip spinner beside existing content and removes it cleanly', () => {
+  it('renders the similar word diff into the dedicated slot, not the badge', () => {
     const container = document.createElement('div');
-    container.innerHTML = '<span class="badge">existing</span>';
-    const badge = new DuplicateBadge(container, {} as ConstructorParameters<typeof DuplicateBadge>[1]);
+    const diff = document.createElement('div');
+    diff.hidden = true;
+    const badge = new DuplicateBadge(
+      container,
+      { onSubmitStateChange: () => {} },
+      { diff },
+    );
 
-    badge.setRefining(true);
-    badge.setRefining(true); // idempotent — no duplicate spinners
-    expect(container.querySelectorAll('.refine-spinner').length).toBe(1);
-    expect(container.querySelector('.badge')?.textContent).toBe('existing');
-    const spinner = container.querySelector('.refine-spinner') as HTMLElement;
-    expect(spinner.title).toBe('Verifying against the full Quotewise library…');
-    expect(spinner.getAttribute('role')).toBe('status');
+    badge.update({
+      result: makeResult({
+        recommendation: 'new_version',
+        matches: [makeMatch({ match_class: 'similar', text: 'hello there world' })],
+      }),
+    }, 'hello world');
 
-    badge.setRefining(false);
-    expect(container.querySelector('.refine-spinner')).toBeNull();
-    expect(container.querySelector('.badge')?.textContent).toBe('existing');
+    expect(diff.hidden).toBe(false);
+    expect(diff.querySelector('.similar-diff')).toBeTruthy();
+    expect(container.querySelector('.similar-diff')).toBeNull();
+
+    badge.update(null);
+    expect(diff.hidden).toBe(true);
+    expect(diff.innerHTML).toBe('');
   });
 });

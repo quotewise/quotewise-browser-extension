@@ -14,6 +14,7 @@ export class CollectionPicker {
   private selected = new Set<string>();
   private alreadyIn: MemberCollection[];
   private label: string;
+  private disposed = false;
 
   constructor(
     private readonly container: HTMLElement,
@@ -26,6 +27,15 @@ export class CollectionPicker {
 
   async mount(): Promise<void> {
     await this.load(false);
+  }
+
+  /**
+   * Mounts are fire-and-forget, so a superseded picker's load can resolve after
+   * its replacement has rendered. Disposing makes every later render a no-op,
+   * preventing the stale instance from overwriting the live one.
+   */
+  dispose(): void {
+    this.disposed = true;
   }
 
   async refresh(): Promise<void> {
@@ -59,7 +69,9 @@ export class CollectionPicker {
   }
 
   private async load(forceRefresh: boolean): Promise<void> {
-    this.renderLoading();
+    // Keep an already-rendered list on screen while refreshing — flashing
+    // "Loading collections…" over a usable list is churn, not information.
+    if (!this.container.firstChild) this.renderLoading();
     try {
       const collections = await this.options.loadCollections(forceRefresh);
       this.available = partitionMembership({ member_collections: this.alreadyIn }, collections).addable;
@@ -77,6 +89,7 @@ export class CollectionPicker {
   }
 
   private renderLoading(): void {
+    if (this.disposed) return;
     this.container.innerHTML = `
       <div class="collection-picker" aria-live="polite">
         <span class="collection-picker-status">Loading collections...</span>
@@ -85,6 +98,7 @@ export class CollectionPicker {
   }
 
   private renderError(): void {
+    if (this.disposed) return;
     this.container.innerHTML = '';
     const wrapper = this.createWrapper();
     const status = document.createElement('span');
@@ -95,6 +109,7 @@ export class CollectionPicker {
   }
 
   private renderReady(): void {
+    if (this.disposed) return;
     this.container.innerHTML = '';
     const wrapper = this.createWrapper();
 

@@ -9,6 +9,10 @@ export class ActionButton {
   private mode: 'submit' | 'login' | 'view_quote' = 'submit';
   private viewQuoteUrl: string | null = null;
 
+  getMode(): 'submit' | 'login' | 'view_quote' {
+    return this.mode;
+  }
+
   constructor(
     private container: HTMLElement,
     private callbacks: ActionButtonCallbacks

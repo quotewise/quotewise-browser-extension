@@ -41,10 +41,22 @@ export interface DuplicateBadgeCallbacks {
   onResolveConflict?: (existingQuoteUrl: string | null) => void;
 }
 
+/**
+ * Optional full-width rows below the quote row. When provided, the word diff
+ * and the captured-passages panel render there instead of inflating the inline
+ * badge — async results must not resize the quote row. When absent (unit
+ * tests), both fall back to rendering inside the badge container.
+ */
+export interface DuplicateBadgeSlots {
+  diff?: HTMLElement;
+  passages?: HTMLElement;
+}
+
 export class DuplicateBadge {
   constructor(
     private container: HTMLElement,
-    private callbacks: DuplicateBadgeCallbacks
+    private callbacks: DuplicateBadgeCallbacks,
+    private slots: DuplicateBadgeSlots = {},
   ) {}
 
   /**
@@ -66,14 +78,15 @@ export class DuplicateBadge {
     this.container.style.marginLeft = '';
     this.container.title = '';
     this.container.removeAttribute('aria-live');
+    this.clearSlot(this.slots.diff);
+    this.clearSlot(this.slots.passages);
 
     if (!state) return;
 
-    if ('checking' in state) {
-      this.container.innerHTML = '<div class="spinner" style="width:12px;height:12px;" role="status" aria-label="Checking Quotewise for duplicates" title="Checking Quotewise for duplicates…"></div>';
-      this.container.title = 'Checking Quotewise for duplicates…';
-      return;
-    }
+    // Checking renders nothing here — the action caption under the Submit
+    // button carries "Checking for duplicates…" in a reserved line, so the
+    // quote row never gains or loses a spinner.
+    if ('checking' in state) return;
 
     const { result } = state;
     const resolution = classifyMatchResolution(result, capturedText);
@@ -124,7 +137,7 @@ export class DuplicateBadge {
       const decisionable = hasOriginator && !conflicted;
 
       renderSimilarDiff(
-        this.container,
+        this.diffTarget(),
         decisionable
           ? similarView
           : { ...similarView, sightingAvailable: false, variantAvailable: false },
@@ -167,13 +180,40 @@ export class DuplicateBadge {
     this.renderPassagesPanel(result);
   }
 
+  /**
+   * Empty a full-width slot and re-hide it. Each update() starts from hidden
+   * slots so a state change never leaves a stale row behind.
+   */
+  private clearSlot(slot?: HTMLElement): void {
+    if (!slot) return;
+    slot.innerHTML = '';
+    slot.hidden = true;
+  }
+
+  /**
+   * Where the word diff renders: an inner wrapper inside the dedicated row when
+   * one is provided (renderSimilarDiff overwrites the target's className, so it
+   * must not be handed the slot itself), else the badge container.
+   */
+  private diffTarget(): HTMLElement {
+    const slot = this.slots.diff;
+    if (!slot) return this.container;
+    slot.hidden = false;
+    const inner = document.createElement('div');
+    slot.appendChild(inner);
+    return inner;
+  }
+
   private renderPassagesPanel(result: DuplicateCheckResult): void {
     const count = passageCountForUrl(result);
     // null is "the check told us nothing" — render no panel rather than assert
     // captures. This path runs on the couldnt_verify branch too.
     if (count === 0 || count === null) return;
 
-    this.container.classList.add('has-passages');
+    const slot = this.slots.passages;
+    if (slot) slot.hidden = false;
+    const target = slot ?? this.container;
+    if (!slot) this.container.classList.add('has-passages');
 
     const panel = document.createElement('section');
     panel.className = 'passages-panel';
@@ -235,7 +275,7 @@ export class DuplicateBadge {
       panel.appendChild(more);
     }
 
-    this.container.appendChild(panel);
+    target.appendChild(panel);
   }
 
   private renderLegacyStatus(
@@ -300,30 +340,6 @@ export class DuplicateBadge {
       this.callbacks.onSubmitStateChange({ type: 'submit', enabled: true });
     }
     // No badge for new_quote — that's the expected case
-  }
-
-  /**
-   * Small spinner appended NEXT TO the currently displayed badge while the live
-   * duplicate check refines a preloaded result. Tooltip-only explanation — the
-   * action is trainable, so it earns no permanent text. Any subsequent update()
-   * re-render clears it implicitly.
-   */
-  setRefining(refining: boolean): void {
-    const existing = this.container.querySelector('.refine-spinner');
-    if (!refining) {
-      existing?.remove();
-      return;
-    }
-    if (existing) return;
-    const spinner = document.createElement('div');
-    spinner.className = 'spinner refine-spinner';
-    spinner.style.width = '12px';
-    spinner.style.height = '12px';
-    spinner.style.flexShrink = '0';
-    spinner.setAttribute('role', 'status');
-    spinner.setAttribute('aria-label', 'Verifying against the full Quotewise library');
-    spinner.title = 'Verifying against the full Quotewise library…';
-    this.container.appendChild(spinner);
   }
 
   private renderCouldntVerify(): void {

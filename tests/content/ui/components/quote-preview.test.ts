@@ -48,27 +48,6 @@ describe('QuotePreview', () => {
     expect(container.querySelector('.clear-selection')).toBeNull();
   });
 
-  it('shows success state with Full source badge when no selection was used', () => {
-    preview.showSuccess('submitted text', false);
-    expect(container.querySelector('.badge.success')?.textContent).toBe('✓ Submitted');
-    expect(container.querySelector('.badge.info')?.textContent).toBe('Full source');
-    expect(container.querySelector('.quote-text')?.textContent).toContain('submitted text');
-    expect(container.querySelector('.clear-selection')).toBeNull();
-  });
-
-  it('shows success state with Selection badge when wasPartial', () => {
-    preview.showSuccess('partial text', true);
-    expect(container.querySelector('.badge.info')?.textContent).toBe('Selection');
-    expect(container.querySelector('.badge.success')?.textContent).toBe('✓ Submitted');
-  });
-
-  it('shows exact success text for long submissions', () => {
-    const longText = 'b'.repeat(100);
-    preview.showSuccess(longText, false);
-    const displayed = container.querySelector('.quote-text')?.textContent;
-    expect(displayed).toBe(longText);
-  });
-
   it('escapes HTML in text display', () => {
     preview.update('<script>alert("xss")</script>', null);
     expect(container.innerHTML).not.toContain('<script>');

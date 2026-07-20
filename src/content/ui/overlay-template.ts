@@ -70,8 +70,20 @@ export function buildOverlayMarkup(platformLabel: string): string {
         .quote-preview-row .section.center {
           flex-wrap: wrap;
         }
-        .quote-preview-row .section.center > .similar-diff {
-          flex-basis: 100%;
+        /* Full-width result rows (similar diff, captured passages) below the
+           quote row — they arrive async and must not resize the quote row. */
+        .result-row {
+          margin: 0 12px 8px;
+          padding: 6px 10px;
+          border-radius: 8px;
+          border-left: 3px solid #60a5fa;
+          background: rgba(59,130,246,0.1);
+          color: #dbeafe;
+          font-size: 12px;
+          line-height: 16px;
+        }
+        .result-row[hidden] {
+          display: none;
         }
         .quote-preview {
           display: flex;
@@ -170,15 +182,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
           color: #94a3b8;
           font-weight: 600;
         }
-        .duplicate-badge.has-passages {
-          display: flex;
-          flex-wrap: wrap;
-          max-width: min(520px, 48vw);
-          border-radius: 8px;
-          white-space: normal;
-        }
         .passages-panel {
-          flex: 1 0 100%;
           min-width: 0;
           color: #dbeafe;
           font-size: 11px;
@@ -207,12 +211,16 @@ export function buildOverlayMarkup(platformLabel: string): string {
           color: #bfdbfe;
           font-weight: 600;
         }
+        /* Top-bar source preview is context, not payload (the full text lives in
+           the quote box) — clamp to 2 lines so selection/expansion toggles move
+           the bar by a bounded amount instead of up to 8 lines. */
         .text {
           min-width: 0;
           white-space: pre-line;
-          max-height: calc(1.35em * 8);
-          overflow-y: auto;
-          overflow-x: hidden;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
         }
         .source-text {
           color: #cbd5e1;
@@ -273,6 +281,15 @@ export function buildOverlayMarkup(platformLabel: string): string {
           border-radius: 50%;
           animation: spin 0.8s linear infinite;
         }
+        /* Reserved lane: always occupies its height so submit-phase text and the
+           progress track never move the button when they appear. Error states
+           (message + Retry) may exceed it — rare, and errors earn the motion. */
+        .progress-indicator {
+          min-height: 24px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
         .capture-progress {
           display: flex;
           flex-direction: column;
@@ -306,11 +323,9 @@ export function buildOverlayMarkup(platformLabel: string): string {
         .progress-text {
           color: #e2e8f0;
           font-weight: 600;
-        }
-        .progress-secondary {
-          color: #94a3b8;
-          font-size: 11px;
-          line-height: 15px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .progress-bar {
           position: absolute;
@@ -356,12 +371,21 @@ export function buildOverlayMarkup(platformLabel: string): string {
         .originator-cluster[hidden] {
           display: none;
         }
+        /* One bounded line: lookup states, errors, and originator names replace
+           this content repeatedly — truncate instead of rewrapping the bar. */
         .originator-info {
           display: flex;
           align-items: center;
           gap: 8px;
           flex: 1;
           min-width: 0;
+          flex-wrap: nowrap;
+          white-space: nowrap;
+        }
+        .originator-info > span:not(.badge) {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         .originator-name {
           font-weight: 500;
@@ -406,11 +430,16 @@ export function buildOverlayMarkup(platformLabel: string): string {
         .account-menu-wrap {
           position: relative;
         }
+        /* Fixed width: the default-collection select would otherwise size the
+           right-anchored menu to the longest collection name, widening it
+           leftward when collections load (jiggle). */
         .account-menu {
           position: absolute;
           top: 34px;
           right: 0;
-          min-width: 190px;
+          width: 280px;
+          max-width: min(320px, 90vw);
+          box-sizing: border-box;
           display: flex;
           flex-direction: column;
           gap: 4px;
@@ -446,6 +475,11 @@ export function buildOverlayMarkup(platformLabel: string): string {
         .account-menu button:hover,
         .account-menu .menu-row:hover {
           background: rgba(255,255,255,0.10);
+        }
+        .account-menu .collection-select-row select {
+          flex: 1;
+          min-width: 0;
+          max-width: 100%;
         }
         .similar-diff {
           display: inline-flex;
@@ -597,14 +631,19 @@ export function buildOverlayMarkup(platformLabel: string): string {
           text-overflow: ellipsis;
           white-space: nowrap;
         }
-        .collection-summary {
+        /* Always-present one-line caption under the button. Fixed height so the
+           text multiplexed through it (checking status, instructions, collection
+           summary, success message) swaps without moving the button. */
+        .action-caption {
           order: 2;
+          height: 15px;
           color: #94a3b8;
           font-size: 11px;
           line-height: 15px;
-        }
-        .collection-summary[hidden] {
-          display: none;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          min-width: 0;
         }
         .collection-picker-empty,
         .collection-picker-status,
@@ -654,9 +693,11 @@ export function buildOverlayMarkup(platformLabel: string): string {
               <div class="section right">
                 <div class="progress-indicator" id="progress-indicator"></div>
                 <!-- Action button inserted dynamically by updateActionButton() -->
-                <div id="collection-summary" class="collection-summary" aria-live="polite" hidden></div>
+                <div id="action-caption" class="action-caption" aria-live="polite"></div>
               </div>
             </div>
+            <div class="result-row" id="similar-diff-slot" hidden></div>
+            <div class="result-row" id="passages-slot" hidden></div>
             <div class="similar-panel" id="similar-panel" hidden></div>
             <div class="collection-picker-slot" id="collection-picker-slot" hidden></div>
             <div class="stats-row" id="stats-row" hidden></div>

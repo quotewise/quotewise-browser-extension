@@ -195,6 +195,7 @@ describe('OverlayBar', () => {
     expect(row.textContent).toBe('⚡ dup — · srv — · — · orig — · pre —');
 
     overlay.hide();
+    jest.advanceTimersByTime(250); // hide() collapses after the slide-out completes
     expect(row.hidden).toBe(true);
     expect(row.textContent).toBe('');
   });
@@ -514,21 +515,23 @@ describe('OverlayBar', () => {
       .find(c => c[0]?.type === MessageType.SUBMIT_QUOTE);
     expect(submitCall?.[0].data.link_to_quote_id).toBe(101);
     expect(submitCall?.[0].data.user_intent).toBe('sighting');
-    expect(shadow.getElementById('originator-info')?.textContent).toContain('Sighting added');
+    expect(shadow.getElementById('action-caption')?.textContent).toContain('Sighting added');
   });
 
-  it('keeps the full-source preview intact beside a similar-match diff', () => {
+  it('keeps the full-source preview intact and renders the diff in its own row', () => {
     const overlay = setupReadyOverlay();
     (overlay as any).updateQuotePreview();
     (overlay as any).updateDuplicateInfo({ result: similarResult() });
 
     const shadow = (overlay as any).shadow as ShadowRoot;
-    const center = shadow.querySelector('.quote-preview-row .section.center') as HTMLElement;
     const preview = shadow.getElementById('quote-preview') as HTMLElement;
-    const diff = center.querySelector(':scope > .similar-diff') as HTMLElement;
+    const diffSlot = shadow.getElementById('similar-diff-slot') as HTMLElement;
+    const diff = diffSlot.querySelector('.similar-diff') as HTMLElement;
 
-    expect([...center.children]).toEqual(expect.arrayContaining([preview, diff]));
+    expect(diffSlot.hidden).toBe(false);
+    expect(diff).toBeTruthy();
     expect(preview.contains(diff)).toBe(false);
+    expect(shadow.querySelector('.quote-preview-row .similar-diff')).toBeNull();
     expect(preview.querySelector('.quote-text')?.textContent).toBe(tweetData.text);
   });
 
@@ -555,7 +558,7 @@ describe('OverlayBar', () => {
       .find(c => c[0]?.type === MessageType.SUBMIT_QUOTE);
     expect(submitCall?.[0].data.link_to_quote_id).toBe(101);
     expect(submitCall?.[0].data.user_intent).toBe('variant');
-    expect(shadow.getElementById('originator-info')?.textContent).toContain('Added as variant');
+    expect(shadow.getElementById('action-caption')?.textContent).toContain('Added as variant');
   });
 
   it('double-clicking a similar-match decision submits exactly once', async () => {
@@ -704,7 +707,7 @@ describe('OverlayBar', () => {
     await submitPromise;
 
     expect((shadow.getElementById('submit-btn') as HTMLButtonElement).textContent).toBe('Done!');
-    expect(shadow.getElementById('originator-info')?.textContent).toContain('Quote added successfully!');
+    expect(shadow.getElementById('action-caption')?.textContent).toContain('Quote added successfully!');
   });
 
   it('shows submit failure and successfully retries', async () => {
@@ -727,7 +730,7 @@ describe('OverlayBar', () => {
     submitButton.click();
     await flushSubmitTimers();
 
-    expect(shadow.getElementById('originator-info')?.textContent)
+    expect(shadow.querySelector('.capture-progress.error')?.textContent)
       .toContain('Submit failed: Service unavailable');
     expect(submitButton.textContent).toBe('Retry');
     expect(submitButton.disabled).toBe(false);
@@ -736,7 +739,9 @@ describe('OverlayBar', () => {
     await flushSubmitTimers();
 
     expect(submitAttempts).toBe(2);
-    expect(shadow.getElementById('originator-info')?.textContent)
+    // The stale failure must be gone and the outcome reported in the caption.
+    expect(shadow.querySelector('.capture-progress.error')).toBeNull();
+    expect(shadow.getElementById('action-caption')?.textContent)
       .toContain('Quote added successfully!');
   });
 
@@ -901,7 +906,7 @@ describe('OverlayBar', () => {
   it('forces a fresh duplicate check on tray refresh so collection membership is updated', async () => {
     const overlay = setupReadyOverlay();
     (overlay as any).captureState.expanded = true;
-    (overlay as any).collectionPicker = { refresh: jest.fn().mockResolvedValue(undefined) };
+    (overlay as any).collectionPicker = { refresh: jest.fn().mockResolvedValue(undefined), dispose: jest.fn() };
 
     const collectedResult = makeDuplicateResult('exact_url');
     collectedResult.matches[0].in_user_collections = true;
@@ -1355,7 +1360,7 @@ describe('OverlayBar tray layout (originator in top bar, actions on quote row)',
     expect(submitBtn?.closest('.quote-preview-row .section.right')).toBeTruthy();
     const right = shadow.querySelector('.quote-preview-row .section.right') as HTMLElement;
     expect(right.querySelector('#progress-indicator')).toBeTruthy();
-    expect(right.querySelector('#collection-summary')).toBeTruthy();
+    expect(right.querySelector('#action-caption')).toBeTruthy();
   });
 });
 

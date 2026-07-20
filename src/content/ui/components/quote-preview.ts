@@ -38,22 +38,6 @@ export class QuotePreview {
     `;
   }
 
-  showSuccess(text: string, wasPartial: boolean): void {
-    if (wasPartial) {
-      this.container.innerHTML = `
-        <span class="badge info">Selection</span>
-        <span class="badge success">✓ Submitted</span>
-        <span class="quote-text">${this.escapeHtml(text)}</span>
-      `;
-    } else {
-      this.container.innerHTML = `
-        <span class="badge info">Full source</span>
-        <span class="badge success">✓ Submitted</span>
-        <span class="quote-text">${this.escapeHtml(text)}</span>
-      `;
-    }
-  }
-
   static getPageSelection(postText: string | undefined): string | null {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) return null;
