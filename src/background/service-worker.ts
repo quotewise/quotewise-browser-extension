@@ -2002,7 +2002,10 @@ async function handlePostDataExtracted(
     });
     if (tabId) {
       clearPostDataExtractionRetry(tabId);
-      tabMissingOriginators.delete(tabId);
+      // Do NOT clear tabMissingOriginators here: hydration re-fires this
+      // extraction repeatedly for the same post, and getMissingOriginatorForTab
+      // already URL-validates the record via isSamePostPageUrl, so a same-URL
+      // re-extraction contradicts nothing and must not wipe the settled @.
     }
 
     const cacheKey = automaticPreflightCacheKey(tabId, sourceUrl);

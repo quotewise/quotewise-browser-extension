@@ -640,6 +640,69 @@ describe('CHECK_DUPLICATE toolbar badge updates', () => {
     expect(sendResponse).toHaveBeenCalledWith({ success: true });
   });
 
+  it('keeps @ through a hydration re-extraction instead of flashing ★ each round', async () => {
+    // Twitter fires POST_DATA_EXTRACTED repeatedly as the page hydrates. A
+    // re-extraction of the SAME url contradicts nothing about the originator,
+    // so the settled @ must not regress to ★ while the next round re-verifies.
+    const preflightResponders: Array<(response: Record<string, unknown>) => void> = [];
+    const handleMessage = jest.fn((message, _sender, sendResponse) => {
+      if (message.type === 'PREFLIGHT_CHECK') {
+        preflightResponders.push(sendResponse);
+      }
+      return Promise.resolve();
+    });
+    mockServiceWorkerDependencies({ handleMessage });
+
+    chrome.tabs.get = jest.fn().mockResolvedValue({
+      id: 22,
+      url: 'https://x.com/test/status/123',
+    });
+
+    const { MessageType } = await import('../../src/types/chrome');
+    await import('../../src/background/service-worker');
+
+    const runtimeListener = (chrome.runtime.onMessage.addListener as jest.Mock).mock.calls[0][0];
+    const sender = { tab: { id: 22, url: 'https://x.com/test/status/123' } };
+    const notFoundPreflight = {
+      success: true,
+      originator: {
+        found: false,
+        handle: 'test',
+        platform: 'twitter',
+        create_url: 'https://quotewise.io/originators/new?handle=test',
+      },
+      duplicate_check: newQuoteResult,
+    };
+
+    const flushMacrotasks = async (count = 6): Promise<void> => {
+      for (let index = 0; index < count; index++) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    };
+
+    // Round 1: extraction → preflight answers "no originator" → settles @.
+    runtimeListener({ type: MessageType.POST_DATA_EXTRACTED, data: tweetData }, sender, jest.fn());
+    await flushMacrotasks();
+    preflightResponders[0]!(notFoundPreflight);
+    await flushMacrotasks();
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+
+    // Round 2: hydration re-fires extraction for the same post.
+    const paintsBeforeRoundTwo = (chrome.action.setBadgeText as jest.Mock).mock.calls.length;
+    runtimeListener({ type: MessageType.POST_DATA_EXTRACTED, data: tweetData }, sender, jest.fn());
+    await flushMacrotasks();
+
+    const roundTwoPaints = (chrome.action.setBadgeText as jest.Mock).mock.calls
+      .slice(paintsBeforeRoundTwo)
+      .map(call => call[0]);
+    expect(roundTwoPaints).not.toContainEqual({ tabId: 22, text: '★' });
+
+    // And after round 2's preflight answers the same way, still @.
+    preflightResponders[1]?.(notFoundPreflight);
+    await flushMacrotasks();
+    expect(chrome.action.setBadgeText).toHaveBeenLastCalledWith({ tabId: 22, text: '@' });
+  });
+
   it('dedupes same-tweet extracted data messages before automatic preflight starts', async () => {
     let completePreflight!: (response: Record<string, unknown>) => void;
     const handleMessage = jest.fn((message, _sender, sendResponse) => {
