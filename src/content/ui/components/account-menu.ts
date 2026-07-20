@@ -76,8 +76,8 @@ export class AccountMenu {
 
   private render(): void {
     this.container.innerHTML = `
-      <button type="button" class="toggle" id="account-menu-btn" aria-label="Account menu" aria-haspopup="menu" aria-expanded="false"><span class="gear-glyph">⚙</span></button>
-      <div class="account-menu" id="account-menu" role="menu" hidden></div>
+      <button type="button" class="toggle" id="account-menu-btn" aria-label="Account menu" aria-expanded="false"><span class="gear-glyph">⚙</span></button>
+      <div class="account-menu" id="account-menu" role="group" aria-label="Account menu" hidden></div>
     `;
     this.button = this.container.querySelector('#account-menu-btn') as HTMLButtonElement;
     this.menu = this.container.querySelector('#account-menu') as HTMLElement;
@@ -111,23 +111,22 @@ export class AccountMenu {
     const isAuthenticated = this.authState === AuthState.AUTHENTICATED;
     const authActionText = isAuthenticated ? 'Log out' : 'Log in';
     const accountLabel = this.statusMessage || this.accountLabel();
-    const collectionControls = isAuthenticated && !this.settings.privateMode
-      ? this.collectionControlsHtml()
-      : '';
+    const collectionControls = isAuthenticated ? this.collectionControlsHtml() : '';
     this.menu.innerHTML = `
       <div class="menu-status" role="status">${this.escapeHtml(accountLabel)}</div>
-      <label class="menu-row" role="menuitemcheckbox" aria-checked="${this.settings.privateMode ? 'true' : 'false'}">
+      ${collectionControls}
+      <label class="menu-row">
         <input type="checkbox" id="account-private-toggle" ${this.settings.privateMode ? 'checked' : ''}>
         <span>Private mode</span>
       </label>
-      ${collectionControls}
-      <button type="button" role="menuitem" id="account-open-settings">Open settings</button>
-      <button type="button" role="menuitem" id="account-send-feedback">Send feedback</button>
-      <button type="button" role="menuitem" id="account-auth-action">${authActionText}</button>
+      <button type="button" id="account-open-settings">Open settings</button>
+      <button type="button" id="account-send-feedback">Send feedback</button>
+      <button type="button" id="account-auth-action">${authActionText}</button>
     `;
     this.menu.querySelector('#account-private-toggle')?.addEventListener('change', event => {
       const target = event.target as HTMLInputElement;
-      void updateSettings({ privateMode: target.checked });
+      // Reload collections when leaving private mode; the load guard no-ops otherwise.
+      void updateSettings({ privateMode: target.checked }).then(() => this.loadCollectionsForMenu());
     });
     this.menu.querySelector('#account-auto-add-toggle')?.addEventListener('change', event => {
       const target = event.target as HTMLInputElement;
@@ -150,25 +149,28 @@ export class AccountMenu {
   }
 
   private collectionControlsHtml(): string {
-    const selectDisabled = this.collectionsLoading || this.collections.length === 0;
+    const paused = !!this.settings?.privateMode;
+    const selectDisabled = paused || this.collectionsLoading || this.collections.length === 0;
     const options = [
       `<option value="">No default collection</option>`,
       ...this.collections.map(collection => (
         `<option value="${this.escapeHtml(collection.slug)}" ${collection.slug === this.settings?.defaultCollectionSlug ? 'selected' : ''}>${this.escapeHtml(collection.name)}</option>`
       )),
     ].join('');
-    const hint = this.collectionsError
-      ? this.collectionsError
-      : this.collectionsLoading || !this.collectionsLoaded
-        ? 'Loading collections...'
-        : this.collections.length === 0
-          ? 'No collections found.'
-          : 'Default collection';
+    const hint = paused
+      ? 'Paused in private mode.'
+      : this.collectionsError
+        ? this.collectionsError
+        : this.collectionsLoading || !this.collectionsLoaded
+          ? 'Loading collections...'
+          : this.collections.length === 0
+            ? 'No collections found.'
+            : 'Default collection';
 
     return `
-      <label class="menu-row" role="menuitemcheckbox" aria-checked="${this.settings?.autoAddToCollection ? 'true' : 'false'}">
-        <input type="checkbox" id="account-auto-add-toggle" ${this.settings?.autoAddToCollection ? 'checked' : ''}>
-        <span>Auto-add Captures</span>
+      <label class="menu-row">
+        <input type="checkbox" id="account-auto-add-toggle" ${this.settings?.autoAddToCollection ? 'checked' : ''} ${paused ? 'disabled' : ''}>
+        <span>Auto-add captures</span>
       </label>
       <label class="menu-row collection-select-row">
         <span>${this.escapeHtml(hint)}</span>
