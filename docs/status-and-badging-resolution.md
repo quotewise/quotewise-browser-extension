@@ -226,7 +226,7 @@ flowchart TD
     CV -->|yes| CVR["⚠ Couldn't verify + Retry<br/>Submit: disabled"]
 
     CV -->|no| EX{exact?}
-    EX -->|yes| EXR["✓ Already captured this passage<br/>Submit: View Quote"]
+    EX -->|yes| EXR["✓ Already captured this passage/quote<br/>Submit: View Quote"]
 
     EX -->|no| CO{conflict?}
     CO -->|yes| COR["⚠ Already attributed to X<br/>+ Resolve link<br/>Submit: disabled"]
@@ -267,7 +267,7 @@ Reached when resolution is `none` and the URL has no recorded passages. Uses
 
 | sighting state / recommendation | badge | Submit |
 |---|---|---|
-| `exact_sighting` | ✓ Already captured this passage | View Quote |
+| `exact_sighting` | ✓ Already captured this passage/quote | View Quote |
 | `same_platform_sighting` | 🟢 Earlier Sighting saved | View Sighting |
 | `other_platform_sighting` | 🔵 Add sighting | Add Sighting |
 | `recommendation: duplicate` | ⚠ Duplicate | View Quote |

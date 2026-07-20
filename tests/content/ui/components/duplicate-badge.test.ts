@@ -649,6 +649,65 @@ describe('DuplicateBadge', () => {
   });
 });
 
+describe('DuplicateBadge whole-post capture wording and redundancy', () => {
+  function exactUrlResult(text: string): ReturnType<typeof makeResult> {
+    return makeResult({
+      recommendation: 'duplicate',
+      in_quotewise: true,
+      matches: [makeMatch({ quote_id: 'q1', text })],
+      existing_sightings_total: 1,
+      existing_sightings_for_url: [makeUrlSighting(text, 'https://quotewise.io/q/q1/')],
+    });
+  }
+
+  it('says "quote" and omits the one-passage panel when the capture is the whole post', () => {
+    const container = document.createElement('div');
+    const badge = new DuplicateBadge(container, { onSubmitStateChange: () => {} });
+    const postText = 'The whole post text';
+
+    badge.update({ result: exactUrlResult(postText) }, postText, null, { postText });
+
+    expect(container.textContent).toContain('Already captured this quote');
+    expect(container.querySelector('.passages-panel')).toBeNull();
+  });
+
+  it('keeps "passage" for a partial capture and still omits the redundant one-item panel', () => {
+    const container = document.createElement('div');
+    const badge = new DuplicateBadge(container, { onSubmitStateChange: () => {} });
+
+    badge.update(
+      { result: exactUrlResult('a captured excerpt') },
+      'a captured excerpt',
+      null,
+      { postText: 'A much longer post containing a captured excerpt and more' },
+    );
+
+    expect(container.textContent).toContain('Already captured this passage');
+    expect(container.querySelector('.passages-panel')).toBeNull();
+  });
+
+  it('keeps the panel when the post has other captured passages', () => {
+    const container = document.createElement('div');
+    const badge = new DuplicateBadge(container, { onSubmitStateChange: () => {} });
+    const postText = 'The whole post text';
+    const result = makeResult({
+      recommendation: 'duplicate',
+      in_quotewise: true,
+      matches: [makeMatch({ quote_id: 'q1', text: postText })],
+      existing_sightings_total: 2,
+      existing_sightings_for_url: [
+        makeUrlSighting(postText, 'https://quotewise.io/q/q1/'),
+        { ...makeUrlSighting('Another captured passage', 'https://quotewise.io/q/q2/'), id: 2, quote_id: 'q2' },
+      ],
+    });
+
+    badge.update({ result }, postText, null, { postText });
+
+    expect(container.querySelector('.passages-panel')).toBeTruthy();
+    expect(container.textContent).toContain('2 passages captured from this post');
+  });
+});
+
 describe('DuplicateBadge slot rendering', () => {
   it('renders passages into the dedicated slot and clears it on update', () => {
     const container = document.createElement('div');

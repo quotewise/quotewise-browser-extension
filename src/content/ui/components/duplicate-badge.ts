@@ -10,6 +10,7 @@ import {
   primaryMatch,
 } from '../../../utils/duplicate-status';
 import { buildSimilarMatchView, renderSimilarDiff, type ResolutionDecision } from './similar-diff';
+import { normalizeQuoteText } from '../../../utils/quote-text';
 import { safeHref, safeHttpsUrl } from './dom-utils';
 
 interface DefaultSubmitDirective {
@@ -65,14 +66,22 @@ export class DuplicateBadge {
    * whether there is anyone to attribute it to, and without one no link
    * decision can be carried out. Defaults to true — the sole production caller
    * always supplies it, and the default keeps focused unit tests terse.
+   *
+   * `options.postText` is the post's full text. When the capture target IS the
+   * whole post, "already captured" talks about the quote, not a passage —
+   * "passage" is reserved for partial captures of longer text.
    */
   update(
     state: { checking: true } | { result: DuplicateCheckResult } | null,
     capturedText?: string,
     postDate?: string | null,
-    options: { hasOriginator?: boolean } = {},
+    options: { hasOriginator?: boolean; postText?: string | null } = {},
   ): void {
     const hasOriginator = options.hasOriginator !== false;
+    const noun = capturedText && options.postText &&
+      normalizeQuoteText(capturedText) === normalizeQuoteText(options.postText)
+      ? 'quote' as const
+      : 'passage' as const;
     this.container.innerHTML = '';
     this.container.className = 'duplicate-badge';
     this.container.style.marginLeft = '';
@@ -93,7 +102,7 @@ export class DuplicateBadge {
 
     if (resolution === 'couldnt_verify') {
       this.renderCouldntVerify();
-      this.renderPassagesPanel(result);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
@@ -105,15 +114,15 @@ export class DuplicateBadge {
         : undefined;
       this.renderExactSighting(matchedSighting?.web_url
         ? safeHref(matchedSighting.web_url) ?? undefined
-        : undefined, match);
-      this.renderPassagesPanel(result);
+        : undefined, match, noun);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
     if (resolution === 'conflict') {
       const match = primaryMatch(result.matches);
       this.renderConflict(match, this.getSafeQuotePageUrl(match));
-      this.renderPassagesPanel(result);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
@@ -123,8 +132,8 @@ export class DuplicateBadge {
         : null;
 
       if (!similarView) {
-        this.renderLegacyStatus(result, capturedText, hasOriginator);
-        this.renderPassagesPanel(result);
+        this.renderLegacyStatus(result, capturedText, hasOriginator, noun);
+        this.renderPassagesPanel(result, capturedText);
         return;
       }
 
@@ -160,7 +169,7 @@ export class DuplicateBadge {
       } else {
         this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Choose Action' });
       }
-      this.renderPassagesPanel(result);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
@@ -172,12 +181,12 @@ export class DuplicateBadge {
         enabled: true,
         text: 'Capture another passage',
       });
-      this.renderPassagesPanel(result);
+      this.renderPassagesPanel(result, capturedText);
       return;
     }
 
-    this.renderLegacyStatus(result, capturedText, hasOriginator);
-    this.renderPassagesPanel(result);
+    this.renderLegacyStatus(result, capturedText, hasOriginator, noun);
+    this.renderPassagesPanel(result, capturedText);
   }
 
   /**
@@ -204,11 +213,31 @@ export class DuplicateBadge {
     return inner;
   }
 
-  private renderPassagesPanel(result: DuplicateCheckResult): void {
+  private renderPassagesPanel(result: DuplicateCheckResult, capturedText?: string): void {
     const count = passageCountForUrl(result);
     // null is "the check told us nothing" — render no panel rather than assert
     // captures. This path runs on the couldnt_verify branch too.
     if (count === 0 || count === null) return;
+
+    const sightings = Array.isArray(result.existing_sightings_for_url)
+      ? result.existing_sightings_for_url
+      : [];
+    const displayableSightings = sightings
+      .filter((sighting): sighting is typeof sighting & { text: string } => (
+        typeof sighting === 'object' && sighting !== null && typeof sighting.text === 'string'
+      ))
+      .slice(0, 5);
+
+    // The post's only captured passage is the very text the badge is already
+    // talking about — a one-item list repeating it says nothing new.
+    if (
+      count === 1 &&
+      capturedText &&
+      displayableSightings.length === 1 &&
+      normalizeQuoteText(displayableSightings[0].text) === normalizeQuoteText(capturedText)
+    ) {
+      return;
+    }
 
     const slot = this.slots.passages;
     if (slot) slot.hidden = false;
@@ -227,15 +256,6 @@ export class DuplicateBadge {
       ? 'This post already has captures'
       : `${count} ${count === 1 ? 'passage' : 'passages'} captured from this post`;
     panel.appendChild(heading);
-
-    const sightings = Array.isArray(result.existing_sightings_for_url)
-      ? result.existing_sightings_for_url
-      : [];
-    const displayableSightings = sightings
-      .filter((sighting): sighting is typeof sighting & { text: string } => (
-        typeof sighting === 'object' && sighting !== null && typeof sighting.text === 'string'
-      ))
-      .slice(0, 5);
 
     if (displayableSightings.length > 0) {
       const list = document.createElement('ul');
@@ -282,13 +302,14 @@ export class DuplicateBadge {
     result: DuplicateCheckResult,
     capturedText?: string,
     hasOriginator = true,
+    noun: 'quote' | 'passage' = 'passage',
   ): void {
     const sightingState = classifyDuplicateSighting(result, capturedText);
     const match = getMatchForDuplicateSightingState(result, sightingState);
     const quotePageUrl = this.getQuotePageUrl(match);
 
     if (sightingState === 'exact_sighting') {
-      this.renderExactSighting(quotePageUrl, match);
+      this.renderExactSighting(quotePageUrl, match, noun);
     } else if (sightingState === 'same_platform_sighting') {
       this.renderEarlierSighting(quotePageUrl, match);
     } else if (sightingState === 'other_platform_sighting') {
@@ -366,13 +387,14 @@ export class DuplicateBadge {
   private renderExactSighting(
     quotePageUrl?: string,
     match?: DuplicateCheckResult['matches'][number],
+    noun: 'quote' | 'passage' = 'passage',
   ): void {
-    this.renderBadge('success', '✓', this.membershipText(match) || 'Already captured this passage', quotePageUrl);
-    this.container.title = this.membershipText(match) || 'This passage is already in Quotewise';
+    this.renderBadge('success', '✓', this.membershipText(match) || `Already captured this ${noun}`, quotePageUrl);
+    this.container.title = this.membershipText(match) || `This ${noun} is already in Quotewise`;
     if (quotePageUrl) {
       this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
     } else {
-      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: 'Already captured this passage' });
+      this.callbacks.onSubmitStateChange({ type: 'submit', enabled: false, text: `Already captured this ${noun}` });
     }
   }
 

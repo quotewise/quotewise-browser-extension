@@ -1748,7 +1748,10 @@ export class OverlayBar {
       state,
       this.captureState.selectedText || this.currentData?.text,
       this.currentData ? capturePostedAt(this.currentData) : null,
-      { hasOriginator: !!this.captureState.originator },
+      {
+        hasOriginator: !!this.captureState.originator,
+        postText: this.currentData?.text,
+      },
     );
 
     const result = state && 'result' in state ? state.result : null;
