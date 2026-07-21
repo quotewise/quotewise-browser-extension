@@ -1,7 +1,7 @@
 # Chrome Web Store — Permission Justifications
 
 Paste-ready justifications for the CWS Developer Dashboard ("Privacy practices" → permission
-justifications). Mirrors `manifest.prod.json` exactly as of v1.6.2. Keep this file in sync with
+justifications). Mirrors `manifest.prod.json` exactly as of v1.7.7. Keep this file in sync with
 the manifest; the narrowest-necessary set is enforced by `tests/manifest-icon-runtime.test.ts`.
 
 Relates: pre-ship review item #2 (`README-pre-ship-review.md`), beads `qw-o6aj`, `qw-0psq.17`.
@@ -23,7 +23,30 @@ tweet ID is contained in `source_url`) and sends no quote text or other post con
 | `webNavigation` | Detect in-page (SPA) route changes on the supported social hosts so the overlay knows when a new post is in view. |
 | `scripting` | Re-inject the content script after SPA navigation via `chrome.scripting.executeScript({files})`. |
 
+## Remote code (Dashboard "Are you using remote code?")
+
+Select **"No, I am not using remote code."** All JavaScript ships inside the extension package:
+webpack bundles with `splitChunks: false`, there is no `eval`/`new Function`, no `<script>` tags
+pointing at external sources, no code fetched or executed at runtime, and no
+`web_accessible_resources`. Network requests carry only data (JSON to the Quotewise API), never code.
+If the dashboard still demands a justification text, paste:
+
+> The extension does not execute remote code. All scripts are bundled into the package at build
+> time; it fetches only JSON data from the Quotewise API and never evaluates downloaded content.
+
 ## Host permission justifications
+
+Dashboard has a **single** "host permission" box — paste this combined text:
+
+> quotewise.io: call the Quotewise API to authenticate the user (OAuth) and to run duplicate
+> checks and submit the captured quote. The social hosts (twitter.com/x.com, threads.com/threads.net
+> and subdomains, bsky.app, substack.com and subdomains) are the supported capture platforms: the
+> content script reads only the single post the user is viewing — quote text, author name/handle,
+> source URL, and public engagement counts — so the user can review and save it with attribution
+> after explicit confirmation. On X post pages an automatic duplicate-status preload sends only the
+> public author handle and post URL (no quote text). No other page content is read or transmitted.
+
+Per-host breakdown (for this doc / reviewer follow-ups):
 
 | Host pattern | Justification |
 |---|---|
