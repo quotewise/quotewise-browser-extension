@@ -24,7 +24,7 @@ if (!existsSync(distDir)) {
 
 // Version comes from the production manifest (the artifact that ships).
 const { version } = JSON.parse(readFileSync(resolve(root, 'manifest.prod.json'), 'utf8'));
-const zipName = `quotewise-extension-v${version}.zip`;
+const zipName = `quotewise-extension-v${version}-chrome.zip`;
 const zipPath = resolve(root, zipName);
 
 // Overwrite any prior artifact for the same version.

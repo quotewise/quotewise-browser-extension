@@ -78,6 +78,10 @@ console.log(`  data_collection_permissions.required=[${DATA_COLLECTION_PERMISSIO
 
 console.log('▶ web-ext lint + build');
 run(`npx web-ext lint --source-dir="${FF_DIR}"`);
-run(`npx web-ext build --source-dir="${FF_DIR}" --artifacts-dir="${ARTIFACTS}" --overwrite-dest`);
+// Match the Chrome artifact's naming: quotewise-extension-v<version>-<target>.zip
+run(
+  `npx web-ext build --source-dir="${FF_DIR}" --artifacts-dir="${ARTIFACTS}" --overwrite-dest` +
+    ' --filename="quotewise-extension-v{version}-firefox.zip"',
+);
 
 console.log('✔ Firefox package ready in web-ext-artifacts/ — upload to addons.mozilla.org');

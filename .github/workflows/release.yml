@@ -24,10 +24,10 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Build Chrome package
-        run: bun run package        # -> quotewise-extension-v<version>.zip
+        run: bun run package        # -> quotewise-extension-v<version>-chrome.zip
 
       - name: Build Firefox package
-        run: bun run build:firefox   # -> web-ext-artifacts/*.zip
+        run: bun run build:firefox   # -> web-ext-artifacts/quotewise-extension-v<version>-firefox.zip
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
