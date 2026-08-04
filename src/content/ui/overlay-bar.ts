@@ -372,7 +372,6 @@ export class OverlayBar {
   ): void {
     this.updateStats({
       dupRttMs: result.search_metadata?.client_rtt_ms,
-      srvMs: result.search_metadata?.query_time_ms,
       cacheHit,
       ...(preMs !== undefined ? { preMs } : {}),
     });

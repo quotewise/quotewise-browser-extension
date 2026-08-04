@@ -184,6 +184,7 @@ describe('OverlayBar', () => {
     const overlay = setupReadyOverlay();
     const shadow = (overlay as any).shadow as ShadowRoot;
     const row = shadow.getElementById('stats-row') as HTMLElement;
+    (overlay as any).stats = { preMs: 780, dupRttMs: 412, cacheHit: true };
 
     (overlay as any).settings = { ...DEFAULT_SETTINGS, statsForNerds: false };
     (overlay as any).syncStatsRow();
@@ -192,7 +193,7 @@ describe('OverlayBar', () => {
     (overlay as any).settings = { ...DEFAULT_SETTINGS, statsForNerds: true };
     (overlay as any).syncStatsRow();
     expect(row.hidden).toBe(false);
-    expect(row.textContent).toBe('⚡ dup — · srv — · — · orig — · pre —');
+    expect(row.textContent).toBe('⚡ pre 780ms · dup 412ms · dup cache hit');
 
     overlay.hide();
     jest.advanceTimersByTime(250); // hide() collapses after the slide-out completes
