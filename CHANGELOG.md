@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+## [1.7.8] - 2026-08-04
+
+### Fixed
+- Reordered “Statistics for nerds” metrics to match the capture pipeline, removed
+  the unused server-timing field, hid unmeasured values, and labeled duplicate-cache status.
+
 ## [1.7.7] - 2026-07-20
 
 First release published to the extension stores (Chrome Web Store, Firefox
@@ -39,6 +45,7 @@ Add-ons); AMO previously carried 1.6.4.
 This is the first release tracked in this changelog; earlier history is in the
 git log.
 
-[Unreleased]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.7.7...HEAD
+[Unreleased]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.7.8...HEAD
+[1.7.8]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.7.7...v1.7.8
 [1.7.7]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.6.4...v1.7.7
 [1.6.4]: https://github.com/quotewise/quotewise-chrome-extension/releases/tag/v1.6.4
