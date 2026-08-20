@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
+### Fixed
+- Handle the server's new `inconclusive_unscoped` duplicate-check verdict. A check run
+  without an originator skips the trigram pass, so the server no longer claims `new_quote`
+  for it. The extension previously fell through to a `default` branch and badged such
+  answers as "New" — asserting an absence that was never checked (ADR-0009).
+
 ## [1.7.8] - 2026-08-04
 
 ### Fixed

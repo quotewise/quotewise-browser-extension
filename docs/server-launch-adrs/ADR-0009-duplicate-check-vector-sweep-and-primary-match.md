@@ -185,6 +185,14 @@ are still caught. This was accepted deliberately because a capture cannot be sub
 originator, so the no-originator check is advisory. Do **not** treat an empty result here as proof
 the quote is new; re-check once the originator is chosen.
 
+> **Update — the server now says this out loud.** Rather than relying on clients to remember the
+> caveat above, an unscoped check that finds nothing returns `recommendation: "inconclusive_unscoped"`
+> at confidence `0.0` instead of `new_quote`. `search_metadata.lexical_search_skipped_unscoped`
+> stays `true`. Treat it as *"not checked"*, never *"not present"*: `mapRecommendationToQuoteStatus`
+> maps it to `None`, and the capture tray leaves Submit enabled because the real gate is choosing an
+> originator, not this advisory answer. Positive verdicts on this path (`duplicate`, `attribution_conflict`)
+> are unaffected — only the create-verdict was downgraded.
+
 ### Server owns thresholds and precedence
 
 The client performs **no** similarity math and **no** precedence inference. Bands are calibrated
