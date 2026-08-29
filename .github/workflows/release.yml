@@ -36,3 +36,46 @@ jobs:
             quotewise-extension-*.zip
             web-ext-artifacts/*.zip
           generate_release_notes: true
+
+      # --- Store submission ---------------------------------------------------
+      # Both stores submit for REVIEW; neither goes live instantly. Each step
+      # no-ops when its credentials aren't configured, so tagging still works.
+      # Setup (Google Cloud project, refresh token, AMO keys): docs/store-publishing.md
+      - name: Submit to Chrome Web Store
+        env:
+          CLIENT_ID: ${{ secrets.CWS_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CWS_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.CWS_REFRESH_TOKEN }}
+          PUBLISHER_ID: ${{ secrets.CWS_PUBLISHER_ID }}
+          ITEM_ID: mkdijeljnpdejecbaogcjkkpbjfeakhn
+        run: |
+          set -euo pipefail
+          if [ -z "${CLIENT_ID:-}" ]; then echo "CWS secrets unset — skipping"; exit 0; fi
+
+          token=$(curl -sS --fail-with-body https://oauth2.googleapis.com/token \
+            -d "grant_type=refresh_token&client_id=$CLIENT_ID&client_secret=$CLIENT_SECRET&refresh_token=$REFRESH_TOKEN" \
+            | jq -r .access_token)
+
+          # v2 API; v1 is sunset 2026-10-15. Both calls answer 200 with any
+          # failure in the body, so the body is what gets checked.
+          api="https://chromewebstore.googleapis.com"
+          item="publishers/$PUBLISHER_ID/items/$ITEM_ID"
+          check() {
+            echo "$1"
+            echo "$1" | jq -e '(.error | not) and ((.itemError // []) | length == 0)
+              and ((.uploadState // "SUCCESS") == "SUCCESS")' > /dev/null
+          }
+
+          zip=$(ls quotewise-extension-v*-chrome.zip)
+          check "$(curl -sS --fail-with-body -X POST -T "$zip" \
+            -H "Authorization: Bearer $token" "$api/upload/v2/$item:upload")"
+          check "$(curl -sS --fail-with-body -X POST -H 'Content-Length: 0' \
+            -H "Authorization: Bearer $token" "$api/v2/$item:publish")"
+
+      - name: Submit to addons.mozilla.org
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          if [ -z "${WEB_EXT_API_KEY:-}" ]; then echo "AMO secrets unset — skipping"; exit 0; fi
+          bun run sign:firefox

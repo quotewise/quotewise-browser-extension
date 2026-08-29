@@ -45,7 +45,7 @@ Add-ons); AMO previously carried 1.6.4.
 This is the first release tracked in this changelog; earlier history is in the
 git log.
 
-[Unreleased]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.7.8...HEAD
-[1.7.8]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.7.7...v1.7.8
-[1.7.7]: https://github.com/quotewise/quotewise-chrome-extension/compare/v1.6.4...v1.7.7
-[1.6.4]: https://github.com/quotewise/quotewise-chrome-extension/releases/tag/v1.6.4
+[Unreleased]: https://github.com/quotewise/quotewise-browser-extension/compare/v1.7.8...HEAD
+[1.7.8]: https://github.com/quotewise/quotewise-browser-extension/compare/v1.7.7...v1.7.8
+[1.7.7]: https://github.com/quotewise/quotewise-browser-extension/compare/v1.6.4...v1.7.7
+[1.6.4]: https://github.com/quotewise/quotewise-browser-extension/releases/tag/v1.6.4

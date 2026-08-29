@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "quotewise-chrome-extension",
+      "name": "quotewise-browser-extension",
       "devDependencies": {
         "@resvg/resvg-js": "^2.6.2",
         "@types/chrome": "^0.0.254",
