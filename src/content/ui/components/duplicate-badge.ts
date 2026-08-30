@@ -369,10 +369,14 @@ export class DuplicateBadge {
       if (quotePageUrl) {
         this.callbacks.onSubmitStateChange({ type: 'view_quote', url: quotePageUrl, text: 'View Quote' });
       }
-    } else if (result.recommendation === 'new_quote') {
+    } else if (result.recommendation === 'new_quote' || result.recommendation === 'inconclusive_unscoped') {
+      // `inconclusive_unscoped` means the check ran with no originator and skipped the
+      // trigram pass, so it found nothing to show. Submit stays enabled because that check
+      // is advisory (ADR-0009) and the real gate is choosing an originator — but it is not
+      // evidence of absence, so it earns no "new quote" badge either.
       this.callbacks.onSubmitStateChange({ type: 'submit', enabled: true });
     }
-    // No badge for new_quote — that's the expected case
+    // No badge for new_quote or inconclusive_unscoped — nothing was found to report
   }
 
   private renderCouldntVerify(): void {

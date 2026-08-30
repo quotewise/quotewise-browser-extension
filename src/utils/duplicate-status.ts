@@ -260,6 +260,11 @@ export function mapRecommendationToQuoteStatus(result: DuplicateCheckResult | nu
     case 'new_quote':
     case 'new_quote_known_author':
       return 'New';
+    case 'inconclusive_unscoped':
+      // The server skipped the trigram pass because no originator was supplied, so it
+      // cannot claim the quote is absent. 'None' is the existing "the check told us
+      // nothing" state; 'New' would assert a fact we do not have.
+      return 'None';
     default:
       return 'New';
   }

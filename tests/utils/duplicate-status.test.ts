@@ -308,6 +308,29 @@ describe('quote-status recommendation mapping', () => {
     )).toBe('None');
   });
 
+  it('never maps an unscoped inconclusive check to New', () => {
+    // The server skipped the trigram pass because no originator was supplied. Claiming
+    // 'New' would assert absence it never checked for (ADR-0009), and 'New' is what the
+    // icon badges and what isStalePreSubmitDuplicateResult keys on.
+    expect(mapRecommendationToQuoteStatus(duplicate('inconclusive_unscoped'))).toBe('None');
+  });
+
+  it('still reports a collection hit even when the check was inconclusive', () => {
+    expect(mapRecommendationToQuoteStatus(duplicate('inconclusive_unscoped', {
+      matches: [{
+        quote_id: 'q1',
+        version_id: 1,
+        text: 'a quote',
+        similarity: 100,
+        match_type: 'exact_same_originator',
+        match_class: 'exact',
+        different_originator: false,
+        in_user_collections: true,
+      }],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any))).toBe('InCollection');
+  });
+
   it('maps new recommendations and weak similar matches to New', () => {
     expect(mapRecommendationToQuoteStatus(duplicate('new_quote'))).toBe('New');
     expect(mapRecommendationToQuoteStatus(duplicate('new_quote_known_author'))).toBe('New');

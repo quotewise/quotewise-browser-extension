@@ -117,8 +117,12 @@ export interface QuoteRelation {
 }
 
 export interface DuplicateCheckResult {
+  // `inconclusive_unscoped`: the check ran without an originator, so the server skipped the
+  // trigram pass and is telling us it did not actually look. Never treat it as "not found" —
+  // see ADR-0009, "Do not treat an empty result here as proof the quote is new".
   recommendation: 'duplicate' | 'new_version' | 'new_quote' | 'attribution_conflict' |
-                  'new_quote_known_author' | 'duplicate_known_author' | 'new_version_known_author' | 'attribution_conflict_resolved';
+                  'new_quote_known_author' | 'duplicate_known_author' | 'new_version_known_author' |
+                  'attribution_conflict_resolved' | 'inconclusive_unscoped';
   confidence: number;
   in_quotewise: boolean;
   social_originator?: {
