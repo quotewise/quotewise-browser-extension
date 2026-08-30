@@ -1,9 +1,9 @@
 # Quotewise Quote Capture
 
-[![CI](https://github.com/quotewise/quotewise-chrome-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/quotewise/quotewise-chrome-extension/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/quotewise/quotewise-chrome-extension)](https://github.com/quotewise/quotewise-chrome-extension/releases)
+[![CI](https://github.com/quotewise/quotewise-browser-extension/actions/workflows/ci.yml/badge.svg)](https://github.com/quotewise/quotewise-browser-extension/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/quotewise/quotewise-browser-extension)](https://github.com/quotewise/quotewise-browser-extension/releases)
 [![Firefox Add-on](https://img.shields.io/amo/v/quotewise-quote-capture?label=firefox%20add-on)](https://addons.mozilla.org/addon/quotewise-quote-capture/)
-[![License](https://img.shields.io/github/license/quotewise/quotewise-chrome-extension)](./LICENSE)
+[![License](https://img.shields.io/github/license/quotewise/quotewise-browser-extension)](./LICENSE)
 <!-- Enable at store launch:
 [![Chrome Web Store](https://img.shields.io/chrome-web-store/v/ITEM_ID)](https://chromewebstore.google.com/detail/ITEM_ID)
 [![App Store](https://img.shields.io/itunes/v/APP_ID?label=app%20store)](https://apps.apple.com/app/idAPP_ID)
