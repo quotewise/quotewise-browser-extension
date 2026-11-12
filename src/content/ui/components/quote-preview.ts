@@ -1,6 +1,6 @@
 import { quoteDocumentFromSelection } from '../../selection/dom-walk';
 import { quotePlainText } from '../../selection/quote-document';
-import { serializeQuote } from '../../selection/serialize-markdown';
+import { renderQuoteInto, serializeQuote } from '../../selection/serialize-quote';
 import { normalizeQuoteText } from '../../../utils/quote-text';
 
 export interface QuotePreviewCallbacks {
@@ -17,9 +17,11 @@ export class QuotePreview {
     if (selectedText) {
       this.container.innerHTML = `
         <span class="badge info">Selection</span>
-        <span class="quote-text">${this.escapeHtml(selectedText)}</span>
+        <span class="quote-text"></span>
         <button class="clear-selection" title="Use full source" aria-label="Use full source text">✕</button>
       `;
+      const quoteText = this.container.querySelector('.quote-text');
+      if (quoteText instanceof HTMLElement) renderQuoteInto(quoteText, selectedText);
       const clearBtn = this.container.querySelector('.clear-selection');
       clearBtn?.addEventListener('click', () => {
         this.callbacks.onClearSelection();
@@ -48,8 +50,8 @@ export class QuotePreview {
    *
    * Selection.toString() flattens the range: paragraph breaks arrive as single
    * newlines and bold/italic is dropped. Walk the range instead, then serialize
-   * the structure. The subset check uses the plain text so emphasis markers do
-   * not have to appear in the extracted post.
+   * the structure. The subset check uses the plain text so tags do not have to
+   * appear in the extracted post.
    */
   static getPageSelection(postText: string | undefined): string | null {
     const selection = window.getSelection();

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { quoteDocumentFromSelection } from '../../../src/content/selection/dom-walk';
 import type { QuoteDocument } from '../../../src/content/selection/quote-document';
-import { serializeQuote } from '../../../src/content/selection/serialize-markdown';
+import { serializeQuote } from '../../../src/content/selection/serialize-quote';
 import { QuotePreview } from '../../../src/content/ui/components/quote-preview';
 import { selectBetween, selectContents, textNodesWithin } from '../../helpers/select-text';
 
@@ -58,9 +58,9 @@ describe('formatted selection capture', () => {
     const formatted = [
       'First paragraph of the article.',
       '',
-      'Second with **bold words** inside.',
+      'Second with <b>bold words</b> inside.',
       '',
-      'Third with *italic words* here.',
+      'Third with <i>italic words</i> here.',
     ].join('\n');
     expect(serializeQuote(documentQuote)).toBe(formatted);
     expect(QuotePreview.getPageSelection('Click to Subscribe to Kpaxs')).toBe(formatted);
@@ -71,7 +71,7 @@ describe('formatted selection capture', () => {
     const post = document.getElementById('post-body') as HTMLElement;
     selectContents(post);
 
-    const formatted = 'First line with **bold** text\nSecond line of the post';
+    const formatted = 'First line with <b>bold</b> text\nSecond line of the post';
     expect(formattedSelection()).toBe(formatted);
 
     const postText = post.textContent ?? '';
@@ -84,12 +84,12 @@ describe('formatted selection capture', () => {
 
     // h1 is bold in the rendered style, so the heading run is emphasis.
     expect(formattedSelection()).toBe([
-      '**A heading**',
+      '<b>A heading</b>',
       '',
-      'A paragraph with **bold** and *italic* and a literal \\* asterisk.',
+      'A paragraph with <b>bold</b> and <i>italic</i> and a literal * asterisk.',
       '',
       'A div block',
-      'with a soft break and ***bold italic***.',
+      'with a soft break and <b><i>bold italic</i></b>.',
       '',
       'First item',
       '',
@@ -110,9 +110,9 @@ describe('formatted selection capture', () => {
     expect(formattedSelection()).toBe([
       'paragraph of the article.',
       '',
-      'Second with **bold words** inside.',
+      'Second with <b>bold words</b> inside.',
       '',
-      'Third with *italic words*',
+      'Third with <i>italic words</i>',
     ].join('\n'));
   });
 
@@ -133,21 +133,23 @@ describe('formatted selection capture', () => {
         ],
       }],
     } satisfies { paragraphs: QuoteDocument['paragraphs'] });
-    expect(serializeQuote(quote)).toBe('Hello **bold** world\n\nnext');
+    expect(serializeQuote(quote)).toBe('Hello <b>bold</b> world\n\nnext');
   });
 
-  it('escapes literal asterisks and backslashes only in the serializer', () => {
+  it('escapes <, >, and & so literal tags stay text, and leaves asterisks literal', () => {
     const quote: QuoteDocument = {
       paragraphs: [{
         inlines: [
-          run('text', 'a * b and a \\* c'),
+          run('text', 'a * b and a \\* c <b>tag</b> & 1 > 0'),
           { kind: 'soft-break' },
           run('text', 'both', true, true),
         ],
       }],
     };
 
-    expect(serializeQuote(quote)).toBe('a \\* b and a \\\\\\* c\n***both***');
+    expect(serializeQuote(quote)).toBe(
+      'a * b and a \\* c &lt;b&gt;tag&lt;/b&gt; &amp; 1 &gt; 0\n<b><i>both</i></b>',
+    );
   });
 
   it('does not split a paragraph on a div that renders inline', () => {
@@ -170,6 +172,6 @@ describe('formatted selection capture', () => {
     `;
     selectContents(document.getElementById('styled') as HTMLElement);
 
-    expect(formattedSelection()).toBe('***styled*** plain');
+    expect(formattedSelection()).toBe('<b><i>styled</i></b> plain');
   });
 });

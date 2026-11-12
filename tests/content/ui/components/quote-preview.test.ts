@@ -55,10 +55,13 @@ describe('QuotePreview', () => {
     expect(container.querySelector('.quote-text')?.textContent).toContain('<script>');
   });
 
-  it('shows paragraph breaks in the capture preview', () => {
-    const formatted = 'First paragraph.\n\nSecond with **bold** words.';
-    preview.update('full source', formatted);
-    expect(container.querySelector('.quote-text')?.textContent).toBe(formatted);
+  it('shows paragraph breaks in the capture preview without raw emphasis tags', () => {
+    preview.update('full source', 'First paragraph.\n\nSecond with <b>bold</b> &amp; &lt;i&gt;words&lt;/i&gt;.');
+    const quote = container.querySelector('.quote-text');
+    expect(quote?.textContent).toBe('First paragraph.\n\nSecond with bold & <i>words</i>.');
+    expect(quote?.querySelector('strong')?.textContent).toBe('bold');
+    expect(quote?.querySelector('b, i, script')).toBeNull();
+    expect(quote?.innerHTML).not.toContain('<b>');
   });
 
   describe('getPageSelection', () => {
