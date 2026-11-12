@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { QuotePreview } from '../../src/content/ui/components/quote-preview';
+import { selectTextWithin } from '../helpers/select-text';
 
 function loadFixture(name: string): void {
   document.body.innerHTML = fs.readFileSync(
@@ -11,11 +12,7 @@ function loadFixture(name: string): void {
 
 function selectFrom(id: string, text: string): void {
   const anchor = document.getElementById(id) as HTMLElement;
-  jest.spyOn(window, 'getSelection').mockReturnValue({
-    isCollapsed: false,
-    toString: () => text,
-    anchorNode: anchor.firstChild,
-  } as unknown as Selection);
+  selectTextWithin(anchor, text);
 }
 
 describe.each([
@@ -37,7 +34,9 @@ describe.each([
   },
 ])('$name selection guard', ({ fixture, extractedText, selectedText, focal, outside }) => {
   beforeEach(() => loadFixture(fixture));
-  afterEach(() => jest.restoreAllMocks());
+  afterEach(() => {
+    window.getSelection()?.removeAllRanges();
+  });
 
   it('accepts a selection anchored in the focal post content', () => {
     selectFrom(focal, selectedText);

@@ -1,3 +1,8 @@
+import { quoteDocumentFromSelection } from '../../selection/dom-walk';
+import { quotePlainText } from '../../selection/quote-document';
+import { renderQuoteInto, serializeQuote } from '../../selection/serialize-quote';
+import { normalizeQuoteText } from '../../../utils/quote-text';
+
 export interface QuotePreviewCallbacks {
   onClearSelection: () => void;
 }
@@ -12,9 +17,11 @@ export class QuotePreview {
     if (selectedText) {
       this.container.innerHTML = `
         <span class="badge info">Selection</span>
-        <span class="quote-text">${this.escapeHtml(selectedText)}</span>
+        <span class="quote-text"></span>
         <button class="clear-selection" title="Use full source" aria-label="Use full source text">✕</button>
       `;
+      const quoteText = this.container.querySelector('.quote-text');
+      if (quoteText instanceof HTMLElement) renderQuoteInto(quoteText, selectedText);
       const clearBtn = this.container.querySelector('.clear-selection');
       clearBtn?.addEventListener('click', () => {
         this.callbacks.onClearSelection();
@@ -38,20 +45,32 @@ export class QuotePreview {
     `;
   }
 
+  /**
+   * Read the live page selection as quote text.
+   *
+   * Selection.toString() flattens the range: paragraph breaks arrive as single
+   * newlines and bold/italic is dropped. Walk the range instead, then serialize
+   * the structure. The subset check uses the plain text so tags do not have to
+   * appear in the extracted post.
+   */
   static getPageSelection(postText: string | undefined): string | null {
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return null;
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null;
 
-    const selectedText = selection.toString().trim();
-    if (!selectedText) return null;
+    const quote = quoteDocumentFromSelection(selection);
+    const plain = normalizeQuoteText(quotePlainText(quote));
+    if (!plain) return null;
 
     const isAnchoredSelection = selection.anchorNode
       ? QuotePreview.isSelectionWithinPostContent(selection, postText)
       : null;
     if (isAnchoredSelection === false) return null;
 
-    // Fast path: the selection is a verbatim subset of the extracted text.
-    if (postText && postText.includes(selectedText)) {
+    const selectedText = serializeQuote(quote);
+    if (!selectedText) return null;
+
+    // Fast path: the selection's words appear in the extracted post text.
+    if (postText && normalizeQuoteText(postText).includes(plain)) {
       return selectedText;
     }
 

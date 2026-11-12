@@ -1,4 +1,5 @@
 import { QuotePreview } from '../../../../src/content/ui/components/quote-preview';
+import { selectTextWithin } from '../../../helpers/select-text';
 
 describe('QuotePreview', () => {
   let container: HTMLElement;
@@ -54,7 +55,21 @@ describe('QuotePreview', () => {
     expect(container.querySelector('.quote-text')?.textContent).toContain('<script>');
   });
 
+  it('shows paragraph breaks in the capture preview without raw emphasis tags', () => {
+    preview.update('full source', 'First paragraph.\n\nSecond with <b>bold</b> & Tom & Jerry <3.');
+    const quote = container.querySelector('.quote-text');
+    expect(quote?.textContent).toBe('First paragraph.\n\nSecond with bold & Tom & Jerry <3.');
+    expect(quote?.querySelector('strong')?.textContent).toBe('bold');
+    expect(quote?.querySelector('b, i, script')).toBeNull();
+    expect(quote?.innerHTML).not.toContain('<b>');
+  });
+
   describe('getPageSelection', () => {
+    afterEach(() => {
+      window.getSelection()?.removeAllRanges();
+      document.body.innerHTML = '';
+    });
+
     it('returns null when no selection', () => {
       // jsdom default: no selection or collapsed
       expect(QuotePreview.getPageSelection('some tweet')).toBeNull();
@@ -62,28 +77,17 @@ describe('QuotePreview', () => {
 
     it('returns selected text that is part of tweet text', () => {
       const tweetText = 'This is a full tweet with some content';
-      // Mock window.getSelection
-      const mockSelection = {
-        isCollapsed: false,
-        toString: () => 'full tweet with some',
-      };
-      jest.spyOn(window, 'getSelection').mockReturnValue(mockSelection as unknown as Selection);
+      document.body.innerHTML = `<div data-testid="tweetText" id="tweet">${tweetText}</div>`;
+      selectTextWithin(document.getElementById('tweet') as HTMLElement, 'full tweet with some');
 
       expect(QuotePreview.getPageSelection(tweetText)).toBe('full tweet with some');
-
-      jest.restoreAllMocks();
     });
 
     it('returns null when selected text is not part of tweet', () => {
-      const mockSelection = {
-        isCollapsed: false,
-        toString: () => 'short',
-      };
-      jest.spyOn(window, 'getSelection').mockReturnValue(mockSelection as unknown as Selection);
+      document.body.innerHTML = '<div id="sidebar">short</div>';
+      selectTextWithin(document.getElementById('sidebar') as HTMLElement, 'short');
 
       expect(QuotePreview.getPageSelection('completely different text')).toBeNull();
-
-      jest.restoreAllMocks();
     });
 
     it('returns null when tweet text is undefined', () => {
@@ -99,20 +103,11 @@ describe('QuotePreview', () => {
           <div dir="auto" lang="en" id="body">The actual long-form article passage that the reader highlighted.</div>
         </article>
       `;
-      const bodyEl = document.getElementById('body') as HTMLElement;
       const selectedText = 'long-form article passage that the reader highlighted';
-
-      const mockSelection = {
-        isCollapsed: false,
-        toString: () => selectedText,
-        anchorNode: bodyEl.firstChild, // text node inside the article body
-      };
-      jest.spyOn(window, 'getSelection').mockReturnValue(mockSelection as unknown as Selection);
+      selectTextWithin(document.getElementById('body') as HTMLElement, selectedText);
 
       // The mis-extracted "tweet text" is the CTA, which does not contain the selection.
       expect(QuotePreview.getPageSelection('Click to Subscribe to Kpaxs')).toBe(selectedText);
-
-      jest.restoreAllMocks();
     });
 
     it('honors a selection inside the X Article read-view even when not wrapped in an <article>', () => {
@@ -123,33 +118,17 @@ describe('QuotePreview', () => {
           </div>
         </div>
       `;
-      const span = document.querySelector('#lf span') as HTMLElement;
       const selectedText = 'highlighted long-form passage';
-      const mockSelection = {
-        isCollapsed: false,
-        toString: () => selectedText,
-        anchorNode: span.firstChild,
-      };
-      jest.spyOn(window, 'getSelection').mockReturnValue(mockSelection as unknown as Selection);
+      selectTextWithin(document.querySelector('#lf span') as HTMLElement, selectedText);
 
       expect(QuotePreview.getPageSelection('Click to Subscribe to Kpaxs')).toBe(selectedText);
-
-      jest.restoreAllMocks();
     });
 
     it('ignores a selection that is outside any article/tweet content', () => {
       document.body.innerHTML = `<div id="sidebar">Trending: something unrelated and long enough</div>`;
-      const sidebar = document.getElementById('sidebar') as HTMLElement;
-      const mockSelection = {
-        isCollapsed: false,
-        toString: () => 'something unrelated and long enough',
-        anchorNode: sidebar.firstChild,
-      };
-      jest.spyOn(window, 'getSelection').mockReturnValue(mockSelection as unknown as Selection);
+      selectTextWithin(document.getElementById('sidebar') as HTMLElement, 'something unrelated and long enough');
 
       expect(QuotePreview.getPageSelection('Click to Subscribe to Kpaxs')).toBeNull();
-
-      jest.restoreAllMocks();
     });
   });
 });

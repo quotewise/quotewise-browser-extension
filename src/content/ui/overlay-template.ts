@@ -108,6 +108,7 @@ export function buildOverlayMarkup(platformLabel: string): string {
           overflow-y: auto;
           overflow-x: hidden;
           overflow-wrap: anywhere;
+          /* Blank lines are paragraph breaks; a single newline is a soft break. */
           white-space: pre-line;
         }
         .quote-text-muted {
