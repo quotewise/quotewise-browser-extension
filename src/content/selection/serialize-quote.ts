@@ -5,10 +5,14 @@ import type { Inline, QuoteDocument, TextRun } from './quote-document';
  * model: a blank line separates paragraphs, one newline is a soft break, and
  * the only markup is <b>, <i>, and nested <b><i> for bold italic.
  *
- * The kernel treats those tags as markup and renders the rest as text. `&`,
- * `<`, and `>` in the source are escaped so a page that literally says "<b>"
- * does not become bold, and so those characters come back out as themselves.
- * Asterisks and backslashes are ordinary characters.
+ * The kernel stores this text raw. On render it html-escapes the string, then
+ * turns only the escaped emphasis tags (&lt;b&gt; and so on) back into markup.
+ * `&`, `<`, and `>` are therefore sent as themselves. Pre-escaping them would
+ * show the entity names on the page ("Tom &amp; Jerry").
+ *
+ * A page whose text literally contains an emphasis tag, such as "<b>", cannot
+ * be told apart from markup. The kernel model has no escape for that, so those
+ * characters are sent as-is.
  */
 export function serializeQuote(document: QuoteDocument): string {
   return document.paragraphs
@@ -25,7 +29,7 @@ export function renderQuoteInto(container: HTMLElement, wire: string): void {
   container.replaceChildren();
   const doc = container.ownerDocument;
   const stack: HTMLElement[] = [container];
-  const token = /<\/?[bi]>|&(?:amp|lt|gt);|\n/g;
+  const token = /<\/?[bi]>|\n/g;
   let cursor = 0;
 
   const appendText = (text: string) => {
@@ -63,15 +67,6 @@ export function renderQuoteInto(container: HTMLElement, wire: string): void {
       case '</i>':
         close('i');
         break;
-      case '&amp;':
-        appendText('&');
-        break;
-      case '&lt;':
-        appendText('<');
-        break;
-      case '&gt;':
-        appendText('>');
-        break;
       case '\n':
         appendText('\n');
         break;
@@ -104,17 +99,12 @@ function serializeInlines(inlines: Inline[]): string {
 }
 
 function wrapRun(run: TextRun): string {
-  const escaped = escapeText(run.text);
-  if (!escaped) return '';
-  if (run.bold && run.italic) return `<b><i>${escaped}</i></b>`;
-  if (run.bold) return `<b>${escaped}</b>`;
-  if (run.italic) return `<i>${escaped}</i>`;
-  return escaped;
-}
-
-function escapeText(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  const text = run.text;
+  if (!text) return '';
+  // Raw characters, including &, <, and >. See the file comment: a literal
+  // "<b>" in the source is indistinguishable from an emphasis tag.
+  if (run.bold && run.italic) return `<b><i>${text}</i></b>`;
+  if (run.bold) return `<b>${text}</b>`;
+  if (run.italic) return `<i>${text}</i>`;
+  return text;
 }

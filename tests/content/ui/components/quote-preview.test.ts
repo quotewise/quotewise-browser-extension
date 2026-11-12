@@ -56,9 +56,9 @@ describe('QuotePreview', () => {
   });
 
   it('shows paragraph breaks in the capture preview without raw emphasis tags', () => {
-    preview.update('full source', 'First paragraph.\n\nSecond with <b>bold</b> &amp; &lt;i&gt;words&lt;/i&gt;.');
+    preview.update('full source', 'First paragraph.\n\nSecond with <b>bold</b> & Tom & Jerry <3.');
     const quote = container.querySelector('.quote-text');
-    expect(quote?.textContent).toBe('First paragraph.\n\nSecond with bold & <i>words</i>.');
+    expect(quote?.textContent).toBe('First paragraph.\n\nSecond with bold & Tom & Jerry <3.');
     expect(quote?.querySelector('strong')?.textContent).toBe('bold');
     expect(quote?.querySelector('b, i, script')).toBeNull();
     expect(quote?.innerHTML).not.toContain('<b>');

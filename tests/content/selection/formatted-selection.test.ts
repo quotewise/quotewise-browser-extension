@@ -136,20 +136,22 @@ describe('formatted selection capture', () => {
     expect(serializeQuote(quote)).toBe('Hello <b>bold</b> world\n\nnext');
   });
 
-  it('escapes <, >, and & so literal tags stay text, and leaves asterisks literal', () => {
+  it('sends Tom & Jerry <3 as raw text, and leaves asterisks literal', () => {
+    document.body.innerHTML = '<p id="line">Tom &amp; Jerry &lt;3</p>';
+    selectContents(document.getElementById('line') as HTMLElement);
+    expect(formattedSelection()).toBe('Tom & Jerry <3');
+
     const quote: QuoteDocument = {
       paragraphs: [{
         inlines: [
-          run('text', 'a * b and a \\* c <b>tag</b> & 1 > 0'),
+          run('text', 'Tom & Jerry <3 * ** \\'),
           { kind: 'soft-break' },
           run('text', 'both', true, true),
         ],
       }],
     };
 
-    expect(serializeQuote(quote)).toBe(
-      'a * b and a \\* c &lt;b&gt;tag&lt;/b&gt; &amp; 1 &gt; 0\n<b><i>both</i></b>',
-    );
+    expect(serializeQuote(quote)).toBe('Tom & Jerry <3 * ** \\\n<b><i>both</i></b>');
   });
 
   it('does not split a paragraph on a div that renders inline', () => {
