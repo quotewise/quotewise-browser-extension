@@ -104,7 +104,7 @@ description: "Task list for Similarity Duplicate — Add Sighting vs Add Variant
 
 - [X] T021 [P] FR-013 degradation + FR-006/SC-007 regression tests in `tests/content/ui/components/duplicate-badge.test.ts`: (a) response lacking `match_class`/`match_source` → legacy recommendation rendering, no error; (b) an `exact`/URL match still renders the single-action "Already captured" behavior unchanged (FR-006); and confirm the existing spec-002 sighting-badge suite stays green (SC-007 regression guard)
 - [X] T022 [P] Consolidate the duplicate `escapeHtml` helpers and assert no `javascript:` URI survives `href` validation across the touched components (qw-0psq.6) in `src/content/ui/components/` + a focused test
-- [ ] T023 Run `bun run test` + `bun run type-check` + `bun run lint` (all green) and execute `quickstart.md` manual verification (US1–US3 + accessibility SC-006 + SC-002: confirmation appears within ~1s of the submit response — manual UX check, not auto-asserted)
+- [X] T023 Run `bun run test` + `bun run type-check` + `bun run lint` (all green) and execute `quickstart.md` manual verification (US1–US3 + accessibility SC-006 + SC-002: confirmation appears within ~1s of the submit response — manual UX check, not auto-asserted)
 - [X] T024 [P] Add a cross-reference note linking spec `002-sighting-status-ui` → this feature in `specs/002-sighting-status-ui/spec.md`
 - [X] T025 [P] FR-012 invariant guard test: assert the overlay exposes **no editable quote-text input** (only excerpt selection) in `tests/content/ui/overlay-bar.test.ts`
 
